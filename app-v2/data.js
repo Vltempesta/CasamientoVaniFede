@@ -1933,10 +1933,10 @@ window.WEDDING_APP_DATA = {
     },
     {
       "id": "leandro-kovalevski",
-      "firstName": "Leandro",
-      "lastName": "Kovalevski",
+      "firstName": "Martín",
+      "lastName": "Kohring",
       "email": "",
-      "alias": "Lean",
+      "alias": "Martín",
       "relation": "Amigo",
       "team": "viento",
       "role": "invitado",
