@@ -2126,19 +2126,19 @@ window.WEDDING_APP_DATA = {
     },
     {
       "id": "alex",
-      "firstName": "Alex",
-      "lastName": "Garramuno",
+      "firstName": "Leandro",
+      "lastName": "Kovalevski",
       "email": "",
-      "alias": "Lex",
-      "relation": "Amiga",
+      "alias": "Leandro",
+      "relation": "Amigo",
       "team": "viento",
       "role": "invitado",
       "tags": [
         "viento",
         "trabajo-vani-y-fede"
       ],
-      "roleVisible": "Amiga",
-      "displayRelation": "Amiga"
+      "roleVisible": "Amigo",
+      "displayRelation": "Amigo"
     },
     {
       "id": "felipe-uribe",
