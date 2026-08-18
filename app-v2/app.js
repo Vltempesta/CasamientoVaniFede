@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32511";
+  const CURRENT_APP_VERSION = "32512";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -42,6 +42,12 @@
     "capital-obelisco": 45,
     "wilde": 24,
     "longchamps": 19
+  };
+
+  const TRANSPORT_SCHEDULE_BY_ZONE = {
+    "capital-obelisco": { shortLabel: "Capital · Obelisco", beThere: "16:30", departure: "16:45" },
+    "wilde": { shortLabel: "Wilde", beThere: "16:15", departure: "16:30" },
+    "longchamps": { shortLabel: "Longchamps", beThere: "15:45", departure: "16:00" }
   };
 
   let currentGuest = null;
@@ -402,7 +408,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32511"
+        appVersion: CONFIG.APP_VERSION || "32512"
       })
     );
   }
@@ -979,7 +985,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32511",
+      appVersion: "32512",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -3863,6 +3869,9 @@
     const transportUndecided =
       rsvp?.attendance === "si" &&
       selectedTransport === "sin-decidir";
+    const selectedPickupZone = String(rsvp?.pickupZone || "");
+    const homeTransportSchedule =
+      TRANSPORT_SCHEDULE_BY_ZONE[selectedPickupZone] || null;
     const locationOpen = isSectionOpen("ubicacion");
     const giftsOpen = isTriviaGameOpen("gifts-section");
     const musicDone = Boolean(triviaSubmission("music-selection"));
@@ -4014,22 +4023,6 @@
         </section>
       ` : ""}
 
-      ${!rsvpDone ? `
-        <button
-          type="button"
-          class="home-pending-transport"
-          data-go="traslado">
-          <span>${uiIcon("coach")}</span>
-          <span>
-            <strong>Ya podés revisar los micros</strong>
-            <small>
-              Horarios, puntos de salida y lugares disponibles actualizados.
-            </small>
-          </span>
-          <b aria-hidden="true">›</b>
-        </button>
-      ` : ""}
-
       <section
         id="homeEssential"
         class="home-essential"
@@ -4062,8 +4055,8 @@
               </span>
               <div>
                 <small>Ubicación</small>
-                <strong>Estancia "Los Candiles"</strong>
-                <p>Consultá la información actualizada antes de salir</p>
+                <strong>Estancia Los Candiles</strong>
+                <p>Ver ubicación e indicaciones ›</p>
               </div>
             </button>
           ` : usesParticular ? `
@@ -4075,7 +4068,7 @@
               <div>
                 <small>Ubicación</small>
                 <strong>Zona Pilar</strong>
-                <p>Queda lejos de CABA · Consultá a los novios la dirección</p>
+                <p>Consultá a los novios la dirección</p>
               </div>
             </article>
           ` : usesMicro ? `
@@ -4087,7 +4080,7 @@
               <div>
                 <small>Ubicación</small>
                 <strong>Destino coordinado</strong>
-                <p>No necesitás la dirección: el micro te lleva</p>
+                <p>No necesitás la dirección</p>
               </div>
             </article>
           ` : `
@@ -4099,7 +4092,7 @@
               <div>
                 <small>Ubicación</small>
                 <strong>Zona Pilar</strong>
-                <p>Queda lejos · Revisá los micros antes de decidir</p>
+                <p>Revisá los micros antes de decidir</p>
               </div>
             </article>
           `}
@@ -4114,15 +4107,25 @@
             <div>
               <small>Traslado</small>
               <strong>${
-                usesMicro
-                  ? "Micro / Combi"
-                  : usesParticular
-                    ? "Particular"
-                    : transportUndecided
-                      ? "Aún no lo decidiste"
-                      : "Información de traslado"
+                usesMicro && homeTransportSchedule
+                  ? `Micro / Combi · ${homeTransportSchedule.shortLabel}`
+                  : usesMicro
+                    ? "Micro / Combi"
+                    : usesParticular
+                      ? "Particular"
+                      : transportUndecided
+                        ? "Aún no lo decidiste"
+                        : "Micros disponibles"
               }</strong>
-              <p>¡Click acá para la info actualizada!</p>
+              <p>${
+                usesMicro && homeTransportSchedule
+                  ? `Estar ${homeTransportSchedule.beThere} · salida ${homeTransportSchedule.departure} ›`
+                  : usesParticular
+                    ? "¿Preferís micro? Consultá lugares ›"
+                    : transportUndecided
+                      ? "Revisá horarios y lugares ›"
+                      : "Horarios y lugares disponibles ›"
+              }</p>
             </div>
           </button>
 
@@ -4147,28 +4150,10 @@
             <div>
               <small>Menú</small>
               <strong>Restricciones Alimentarias</strong>
-              <p>Confirmá en Asistencia</p>
+              <p>Ver / actualizar ›</p>
             </div>
           </button>
         </div>
-
-        ${usesMicro ? `
-          <button
-            type="button"
-            class="home-micro-update"
-            data-go="traslado">
-            <span class="home-micro-update-icon">
-              ${uiIcon("coach")}
-            </span>
-            <span>
-              <strong>Tu micro ya está confirmado</strong>
-              <small>
-                Punto de encuentro, horario y salida puntual actualizados.
-              </small>
-            </span>
-            <b aria-hidden="true">›</b>
-          </button>
-        ` : ""}
 
         ${giftsOpen ? `
           <button
@@ -4378,25 +4363,23 @@
               : "Micros y combis confirmados";
 
     const mainText = usesMicro
-      ? `Tu punto elegido es <strong>${escapeHTML(selectedZoneLabel)}</strong>. Revisá abajo la hora para estar y la salida puntual.`
+      ? `Tu salida: <strong>${escapeHTML(selectedZoneLabel)}</strong>.`
       : usesParticular
-        ? "La estancia está en <strong>zona Pilar y queda lejos de CABA</strong>. Si preferís no manejar, podés anotarte ahora en cualquiera de los micros que tenga disponibilidad."
+        ? "La estancia está en <strong>zona Pilar y queda lejos</strong>. Podés sumarte a un micro con lugar."
         : transportUndecided
-          ? `La estancia está en <strong>zona Pilar y queda lejos</strong>. ${escapeHTML(
-              availabilitySentence
-            )}. Podés reservar tu lugar directamente desde esta sección.`
+          ? "La estancia está en <strong>zona Pilar y queda lejos</strong>. Elegí abajo una salida con lugar."
           : pendingRsvp
-            ? `Tenés tiempo hasta el <strong>15 de septiembre</strong> para confirmar. La estancia queda lejos: revisá ahora horarios y disponibilidad de los micros.`
+            ? "Revisá horarios y lugares antes de confirmar. Nuevo plazo: <strong>15/09</strong>."
             : declined
-              ? "Aunque ya nos avisaste que no podés venir, podés consultar acá la información actualizada de los traslados."
-              : "Los micros ya están reservados. Abajo tenés los puntos, horarios y disponibilidad calculada con las respuestas actuales.";
+              ? "Información actualizada de los micros."
+              : "Horarios y disponibilidad actualizados.";
 
     return `
       ${transportStyles()}
       ${sectionHeader(
-        "TRASLADOS CONFIRMADOS",
+        "TRASLADOS",
         "Micros y combis",
-        "Puntos de encuentro, horarios y disponibilidad actualizados."
+        "Horarios y lugares disponibles."
       )}
 
       <section
@@ -4454,54 +4437,16 @@
         </div>
       </section>
 
-      ${
-        usesParticular || transportUndecided
-          ? `
-            <section class="transport-particular-info section-card">
-              <span>${uiIcon("pin")}</span>
-              <div>
-                <small>Antes de decidir</small>
-                <strong>La estancia queda lejos</strong>
-                <p>
-                  Está en zona Pilar. Si preferís evitar el viaje en auto,
-                  podés reservar abajo un lugar en cualquiera de los micros
-                  que todavía tenga disponibilidad.
-                </p>
-              </div>
-            </section>
-          `
-          : ""
-      }
 
-      ${
-        pendingRsvp
-          ? `
-            <section class="transport-pending-deadline section-card">
-              <span>${uiIcon("calendarCheck")}</span>
-              <div>
-                <small>NUEVO PLAZO</small>
-                <strong>Confirmá hasta el 15/09</strong>
-                <p>
-                  Podés revisar toda la información ahora.
-                  Para reservar un lugar primero confirmá que vas a asistir.
-                </p>
-                <button type="button" data-go="asistencia">
-                  Confirmar asistencia
-                </button>
-              </div>
-            </section>
-          `
-          : ""
-      }
 
       <section class="transport-compact-heading">
         <div>
-          <p class="eyebrow">SALIDAS CONFIRMADAS</p>
+          <p class="eyebrow">SALIDAS</p>
           <h3>
             ${
               canJoinMicro
-                ? "Elegí el micro que te quede mejor"
-                : "Revisá los puntos y horarios"
+                ? "Elegí tu micro"
+                : "Puntos y horarios"
             }
           </h3>
         </div>
@@ -4547,22 +4492,6 @@
         })}
       </section>
 
-      ${
-        canJoinMicro
-          ? `
-            <section class="transport-availability-note section-card">
-              <span>${uiIcon("seat")}</span>
-              <div>
-                <strong>La reserva se hace acá mismo</strong>
-                <p>
-                  Tocá “Sumarme a este micro” en una salida con lugar.
-                  Tu respuesta de traslado se actualizará automáticamente.
-                </p>
-              </div>
-            </section>
-          `
-          : ""
-      }
 
       <section class="transport-times-grid transport-return-only">
         <article class="section-card transport-time-card transport-return-card">
@@ -4902,10 +4831,10 @@
                 <em>
                   ${
                     usesParticular
-                      ? "Zona Pilar · Consultá a los novios la dirección exacta."
+                      ? "Zona Pilar · podés revisar micros con lugar."
                       : usesUndecided
-                        ? "Quedan lugares en Capital y Longchamps. Consultá Traslados y avisales a los novios."
-                        : "Tu punto y horario ya están confirmados. Consultá Traslados."
+                        ? "Revisá micros y lugares disponibles."
+                        : "Punto y horario confirmados · ver Traslados."
                   }
                 </em>
               </span>
@@ -4956,7 +4885,7 @@
                 ${
                   saved.attendance === "no"
                     ? "Tu respuesta quedó registrada. Gracias por avisarnos."
-                    : "Listo, ya tenemos tu confirmación. Podés actualizarla cuando lo necesites."
+                    : "Listo, tu asistencia quedó registrada."
                 }
               </p>
             </div>
@@ -5089,25 +5018,6 @@
             ${attendanceDeclined ? "disabled" : ""}>
             <legend>Traslado</legend>
 
-            <button
-              type="button"
-              class="transport-info-note transport-experience-note ${
-                savedTransport
-                  ? "hidden"
-                  : ""
-              }"
-              data-transport-info-note
-              data-open-rsvp-transport-modal>
-              <span>${uiIcon("transportBus")}</span>
-              <span>
-                <strong>¡VIVÍ LA EXPERIENCIA COMPLETA!</strong>
-                <small>
-                  Te sugerimos elegir Micro / Combi.
-                </small>
-              </span>
-              <b aria-hidden="true">›</b>
-            </button>
-
             <div class="choice-group transport-choice-grid">
               ${choicePillIcon(
                 "transport",
@@ -5116,7 +5026,7 @@
                 "transportBus",
                 savedTransport,
                 true,
-                "Ver Traslados para más detalles.",
+                "Elegí tu punto de salida.",
                 "is-recommended"
               )}
               ${choicePillIcon(
@@ -5126,7 +5036,7 @@
                 "transportCar",
                 savedTransport,
                 true,
-                "Zona Pilar · queda lejos. También podés sumarte a un micro con lugar."
+                "Zona Pilar · viaje largo."
               )}
               ${choicePillIcon(
                 "transport",
@@ -5135,30 +5045,21 @@
                 "transportPending",
                 savedTransport,
                 true,
-                "La estancia queda lejos. Revisá los micros disponibles antes de decidir."
+                "Revisá los micros antes de decidir."
               )}
             </div>
 
-            <div
-              class="transport-undecided-note ${
-                savedTransport === "sin-decidir"
-                  ? ""
-                  : "hidden"
-              }"
-              data-transport-undecided-note>
-              <span>${uiIcon("transportPending")}</span>
-              <div>
-                <strong>Definilo cuanto antes</strong>
-                <p>
-                  ${escapeHTML(
-                    transportAvailabilityCopy
-                  )}.
-                </p>
-                <button type="button" data-go="traslado">
-                  Ver Traslados
-                </button>
-              </div>
-            </div>
+            <button
+              type="button"
+              class="rsvp-transport-shortcut"
+              data-go="traslado">
+              <span>${uiIcon("coach")}</span>
+              <span>
+                <strong>Ver micros y horarios</strong>
+                <small>La estancia queda lejos · consultá lugares disponibles.</small>
+              </span>
+              <b aria-hidden="true">›</b>
+            </button>
 
           </fieldset>
 
@@ -5182,8 +5083,7 @@
               ¿Desde qué zona preferís salir?
             </legend>
             <p class="pickup-zone-intro">
-              Los puntos ya están confirmados. La disponibilidad
-              se calcula con las respuestas actuales.
+              Elegí tu punto de salida. Los horarios completos están en Traslados.
             </p>
 
             <div class="choice-group pickup-zone-grid">
@@ -5307,136 +5207,6 @@
         </div>
       </form>
 
-      <div
-        id="rsvpTransportModal"
-        class="rsvp-transport-modal hidden"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="rsvpTransportModalTitle"
-        tabindex="-1">
-        <section class="rsvp-transport-dialog">
-          <button
-            type="button"
-            class="rsvp-transport-modal-close"
-            data-close-rsvp-transport-modal
-            aria-label="Cerrar">
-            ×
-          </button>
-
-          <div class="rsvp-transport-modal-hero">
-            <span class="rsvp-transport-modal-icon">
-              ${uiIcon("transportBus")}
-            </span>
-            <div>
-              <p class="eyebrow">VIAJÁ SIN PREOCUPARTE</p>
-              <h3 id="rsvpTransportModalTitle">
-                ¡VIVÍ LA EXPERIENCIA COMPLETA!
-              </h3>
-              <p>
-                Elegí <strong>Micro / Combi</strong> y nosotros
-                coordinamos la ida y el regreso para que solamente
-                tengas que disfrutar.
-              </p>
-              <span class="rsvp-transport-modal-bonus">
-                ${uiIcon("star")}
-                +20 puntos para tu equipo
-              </span>
-            </div>
-          </div>
-
-          <div class="rsvp-transport-modal-times">
-            <article>
-              <span>${uiIcon("pin")}</span>
-              <div>
-                <small>Capital · Obelisco</small>
-                <strong>Estar 16:30</strong>
-                <p>
-                  Salida 16:45 · ${
-                    escapeHTML(
-                      transportSeatsLabel(
-                        capitalAvailability
-                      )
-                    )
-                  } · ${
-                    escapeHTML(
-                      transportCapacityDetail(
-                        capitalAvailability
-                      )
-                    )
-                  }.
-                </p>
-              </div>
-            </article>
-
-            <article>
-              <span>${uiIcon("pin")}</span>
-              <div>
-                <small>Longchamps · Barrio VIPLASTIC</small>
-                <strong>Estar 15:45</strong>
-                <p>
-                  Salida 16:00 · ${
-                    escapeHTML(
-                      transportSeatsLabel(
-                        longchampsAvailability
-                      )
-                    )
-                  } · ${
-                    escapeHTML(
-                      transportCapacityDetail(
-                        longchampsAvailability
-                      )
-                    )
-                  }.
-                </p>
-              </div>
-            </article>
-
-            <article>
-              <span>${uiIcon("pin")}</span>
-              <div>
-                <small>Wilde · Las Flores y Mitre</small>
-                <strong>Estar 16:15</strong>
-                <p>
-                  Salida 16:30 · ${
-                    escapeHTML(
-                      transportSeatsLabel(
-                        wildeAvailability
-                      )
-                    )
-                  } · ${
-                    escapeHTML(
-                      transportCapacityDetail(
-                        wildeAvailability
-                      )
-                    )
-                  }.
-                </p>
-              </div>
-            </article>
-
-            <article>
-              <span>${uiIcon("transportBus")}</span>
-              <div>
-                <small>Regreso</small>
-                <strong>03:00 HRS</strong>
-                <p>Volvemos al mismo punto de salida.</p>
-              </div>
-            </article>
-          </div>
-
-          <p class="rsvp-transport-modal-note">
-            Horarios y puntos confirmados. Para cambios de último
-            momento, consultá a los novios.
-          </p>
-
-          <button
-            type="button"
-            class="rsvp-transport-modal-done"
-            data-close-rsvp-transport-modal>
-            Entendido
-          </button>
-        </section>
-      </div>
     `;
   }
 
@@ -6627,8 +6397,8 @@
       ? "¡Estás al día con los desafíos!"
       : "QUE EMPIECE LA COMPETENCIA";
     const pointsText = currentGamesDone
-      ? "Ya completaste todo lo disponible. Próximamente se habilitan 2 desafíos nuevos."
-      : "Completá desafíos, sumá puntos y ayudá a tu equipo a llegar a la cima.";
+      ? "Completaste todo lo disponible."
+      : "Completá desafíos y sumá puntos para tu equipo.";
 
     return `
       ${pointsHubStyles()}
@@ -6675,10 +6445,7 @@
           <span>${uiIcon("rules")}</span>
           <div>
             <strong>¿Cómo se juega?</strong>
-            <small>
-              Conocé las reglas, los bonus y todas las formas
-              de sumar o perder puntos.
-            </small>
+            <small>Reglas, bonus y puntajes.</small>
           </div>
           <b aria-hidden="true">›</b>
         </button>
@@ -6690,8 +6457,8 @@
             icon:"✉️",
             title:"Confirmar asistencia",
             text:rsvpDone
-              ? "Tu respuesta, traslado y restricciones quedaron guardados."
-              : "Confirmá si vas a asistir, cómo viajás y tus restricciones alimentarias.",
+              ? "Tu respuesta quedó guardada."
+              : "Confirmá asistencia y tus datos.",
             done:rsvpDone,
             route:"asistencia",
             progressText:rsvpDone
@@ -6713,8 +6480,8 @@
             icon:"🎵",
             title:"Canciones favoritas",
             text:musicDone
-              ? "Tu canción para bailar y la canción para la entrada de tu equipo quedaron guardadas."
-              : "Elegí 1 canción para bailar y otra para la entrada de tu equipo.",
+              ? "Tus canciones quedaron guardadas."
+              : "Elegí tus 2 canciones.",
             done:musicDone,
             route:"musica",
             progressText:musicDone
@@ -6730,8 +6497,8 @@
             icon:"🎯",
             title:"¿Cuánto conocés a Vani y Fede?",
             text:triviaDone
-              ? "Ya respondiste las cinco preguntas sobre la historia y los gustos de Vani y Fede."
-              : "Respondé cinco preguntas sobre la historia, los viajes y los gustos de Vani y Fede.",
+              ? "Trivia completada."
+              : "Respondé 5 preguntas.",
             done:triviaDone,
             route:"trivia-pareja",
             progressText:triviaDone
@@ -6747,8 +6514,8 @@
             icon:"⚖️",
             title:"¿Vani o Fede?",
             text:whoTriviaDone
-              ? "Ya elegiste si cada una de las cinco situaciones representa a Vani o a Fede."
-              : "Descubrí si cada costumbre o situación describe mejor a Vani o a Fede.",
+              ? "Trivia completada."
+              : "Elegí: ¿Vani o Fede?",
             done:whoTriviaDone,
             route:"trivia-quien",
             progressText:whoTriviaDone
@@ -6779,25 +6546,14 @@
           <span>${uiIcon("lock")}</span>
           <div>
             <small>PRÓXIMAMENTE</small>
-            <strong>2 desafíos nuevos en camino</strong>
-            <p>
-              Todavía no se revelan. Se habilitarán más adelante
-              y pueden mover fuerte el ranking.
-            </p>
+            <strong>2 nuevos desafíos</strong>
+            <p>Pueden cambiar mucho el ranking.</p>
           </div>
         </div>
 
         <div class="points-upcoming-grid">
-          <div>
-            <span>05</span>
-            <strong>Nuevo desafío</strong>
-            <small>Bloqueado</small>
-          </div>
-          <div>
-            <span>06</span>
-            <strong>Nuevo desafío</strong>
-            <small>Bloqueado</small>
-          </div>
+          <div><span>05</span><strong>???</strong><small>Próximamente</small></div>
+          <div><span>06</span><strong>???</strong><small>Próximamente</small></div>
         </div>
       </section>
     `;
@@ -8122,33 +7878,38 @@
 
 
   function renderLocation() {
-    const mapsUrl = "https://share.google/JBRF4p4QiJy3muAa7";
+    const rsvp = state.rsvps[currentGuest.id] || {};
+    const selectedTransport = String(rsvp.transport || "");
+    const usesMicro =
+      rsvp.attendance === "si" &&
+      ["combi", "micro"].includes(selectedTransport);
+    const usesParticular =
+      rsvp.attendance === "si" &&
+      ["particular", "auto"].includes(selectedTransport);
 
     return `
       ${locationStyles()}
       ${sectionHeader(
-        "DESTINO REVELADO",
-        "Estancia Los Candiles",
-        "El destino está a aproximadamente 1 hora de Capital, en Zona Norte."
+        "UBICACIÓN",
+        usesMicro ? "Tu traslado está resuelto" : "Zona Pilar",
+        ""
       )}
 
-      <section class="location-hero section-card">
-        <span>${uiIcon("pin")}</span>
+      <section class="location-simple-card section-card">
+        <span>${uiIcon(usesMicro ? "coach" : "pin")}</span>
         <div>
-          <p class="eyebrow">Lugar</p>
-          <h3>Estancia Los Candiles</h3>
-          <p>Solís, Provincia de Buenos Aires.</p>
-          <a href="${mapsUrl}" target="_blank" rel="noopener">
-            ${uiIcon("pin")}<span>Abrir en Google Maps</span>
-          </a>
-        </div>
-      </section>
-
-      <section class="location-note section-card">
-        ${uiIcon("car")}
-        <div>
-          <strong>Viajando de forma particular</strong>
-          <p>Usá el acceso a Maps para abrir la ruta desde tu ubicación. El día del evento también compartiremos cualquier indicación adicional necesaria.</p>
+          <strong>${
+            usesMicro
+              ? "No necesitás conocer la dirección"
+              : "La estancia queda en zona Pilar"
+          }</strong>
+          <p>${
+            usesMicro
+              ? "Tu micro te lleva directo. Revisá punto y horario antes de salir."
+              : usesParticular
+                ? "Consultá a los novios para recibir la dirección exacta."
+                : "Revisá los micros antes de decidir cómo viajar."
+          }</p>
         </div>
       </section>
 
@@ -8158,11 +7919,8 @@
         data-go="traslado">
         ${uiIcon("transportBus")}
         <span>
-          <strong>¿Elegiste Micro / Combi?</strong>
-          <small>
-            No necesitás preocuparte por la ubicación:
-            revisá toda la información de Traslados.
-          </small>
+          <strong>${usesMicro ? "Ver mi micro" : "Ver micros disponibles"}</strong>
+          <small>Horarios, puntos de salida y lugares.</small>
         </span>
         <b aria-hidden="true">›</b>
       </button>`;
@@ -8461,7 +8219,6 @@
 
       <header class="gift-page-heading">
         <h2>Regalos</h2>
-        <p>Un recuerdo para acompañarnos en esta nueva etapa.</p>
       </header>
 
       <section class="gift-wish-card section-card">
@@ -8514,9 +8271,6 @@
           </label>
 
           <div class="gift-wish-actions">
-            <small>
-              No es obligatorio completar esta actividad.
-            </small>
             <button type="submit">
               ${savedWishText ? "Guardar cambios" : "Enviar regalo"}
             </button>
@@ -8539,7 +8293,6 @@
         <div class="gift-transfer-heading">
           <span>${uiIcon("download")}</span>
           <div>
-            <small>PARA NUESTRA PRÓXIMA AVENTURA</small>
             <h3>Transferencia</h3>
           </div>
           <span class="gift-currency-badge">PESOS / USD</span>
@@ -8561,10 +8314,6 @@
         </div>
       </section>
 
-      <p class="gift-thanks">
-        Gracias por acompañarnos y ser parte
-        de este momento tan especial 🤍
-      </p>
     `;
   }
 
@@ -11100,50 +10849,6 @@
 
     if (route === "asistencia") {
       const rsvpForm = $("#rsvpForm");
-      const transportModal =
-        $("#rsvpTransportModal");
-
-      const closeTransportModal = () => {
-        transportModal?.classList.add("hidden");
-        document.body.classList.remove(
-          "rsvp-transport-modal-open"
-        );
-      };
-
-      $$("[data-open-rsvp-transport-modal]")
-        .forEach(button => {
-          button.addEventListener("click", () => {
-            transportModal?.classList.remove("hidden");
-            document.body.classList.add(
-              "rsvp-transport-modal-open"
-            );
-            transportModal?.focus();
-          });
-        });
-
-      transportModal?.addEventListener(
-        "click",
-        event => {
-          if (
-            event.target === transportModal ||
-            event.target.closest(
-              "[data-close-rsvp-transport-modal]"
-            )
-          ) {
-            closeTransportModal();
-          }
-        }
-      );
-
-      transportModal?.addEventListener(
-        "keydown",
-        event => {
-          if (event.key === "Escape") {
-            closeTransportModal();
-          }
-        }
-      );
-
       const updateAttendanceDependentFields = () => {
         if (!rsvpForm) return;
 

@@ -13508,3 +13508,136 @@ summary > b {
   width:14px;
   height:14px;
 }
+
+
+/* ============================================================
+   v32512 · UX limpia + tipografía accesible
+   ============================================================ */
+#view .eyebrow{font-size:10px!important;line-height:1.2!important;letter-spacing:.09em!important}
+#view .section-head h3{font-size:clamp(29px,6vw,38px)!important;line-height:1.04!important}
+#view .section-head>p:not(.eyebrow){max-width:760px;font-size:13px!important;line-height:1.45!important}
+#view .section-card p{font-size:12px;line-height:1.42}
+#view .section-card small{font-size:10px;line-height:1.3}
+#view input,#view textarea,#view select{font-size:14px!important}
+#view textarea{line-height:1.45}
+#view legend,#view label{font-size:13px}
+
+#view .home-section-heading h3{font-size:24px!important}
+#view .home-essential-card>.home-essential-row{min-height:78px;padding:12px 11px!important}
+#view .home-essential-card .home-essential-row small{font-size:10px!important}
+#view .home-essential-card .home-essential-row strong{font-size:15px!important;line-height:1.2!important}
+#view .home-essential-card .home-essential-row p{margin-top:3px!important;font-size:12px!important;line-height:1.3!important}
+#view .home-primary-copy small{font-size:10px!important}
+#view .home-primary-copy h3{font-size:19px!important}
+#view .home-primary-copy p{font-size:12px!important}
+#view .home-primary-action button{min-height:44px!important;font-size:13px!important}
+#view .home-gifts-feature-copy strong{font-size:13px!important}
+
+#view .rsvp-form-compact legend{margin-bottom:8px;font-size:14px!important;font-weight:900}
+#view .choice-button,#view .choice-pill,#view .choice-pill-icon{min-height:48px!important;font-size:13px!important}
+#view .choice-button small,#view .choice-pill small,#view .choice-pill-icon small{font-size:10.5px!important;line-height:1.3!important}
+#view .pickup-zone-intro{font-size:11px!important;line-height:1.4!important}
+#view .rsvp-transport-shortcut{width:100%;display:grid;grid-template-columns:36px minmax(0,1fr) 12px;gap:9px;align-items:center;margin-top:9px;padding:10px 11px;border:1px solid rgba(49,83,110,.14);border-radius:12px;background:rgba(49,83,110,.045);color:#31536e;text-align:left;box-shadow:none}
+#view .rsvp-transport-shortcut>span:first-child{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:rgba(49,83,110,.08)}
+#view .rsvp-transport-shortcut .ui-icon{width:18px;height:18px}
+#view .rsvp-transport-shortcut strong{display:block;font-size:13px}
+#view .rsvp-transport-shortcut small{display:block;margin-top:2px;font-size:11px!important}
+#view .rsvp-transport-unified-copy small{font-size:10px!important}
+#view .rsvp-transport-unified-copy strong{font-size:14px!important}
+#view .rsvp-transport-unified-copy em,#view .rsvp-transport-zone{font-size:11px!important;line-height:1.35!important}
+#view .rsvp-confirmed-compact p{font-size:12px!important}
+#view .rsvp-actions-row button,#view .rsvp-form-actions button{min-height:46px!important;font-size:13px!important}
+
+#view .transport-main-copy .eyebrow{font-size:10px!important}
+#view .transport-main-copy h3{font-size:24px!important}
+#view .transport-main-copy>p:not(.eyebrow){font-size:12.5px!important;line-height:1.45!important}
+#view .transport-main-bottom button{min-height:44px!important;padding:9px 13px!important;font-size:12.5px!important}
+#view .transport-status-badge{font-size:11px!important}
+#view .transport-compact-heading h3{font-size:21px!important}
+#view .transport-compact-heading>small{font-size:10.5px!important}
+#view .transport-zone-card-head small{font-size:9.5px!important}
+#view .transport-zone-card-head strong{font-size:15px!important}
+#view .transport-zone-card-head p{font-size:11px!important}
+#view .transport-zone-times small{font-size:10px!important}
+#view .transport-zone-times strong{font-size:18px!important}
+#view .transport-zone-availability{font-size:11px!important}
+#view .transport-zone-availability small{font-size:9.5px!important}
+#view .transport-selected-chip{font-size:9px!important}
+#view .transport-zone-join{min-height:44px!important;font-size:13px!important}
+#view .transport-zone-current{min-height:40px;font-size:11px!important}
+#view .transport-time-card small{font-size:9.5px!important}
+#view .transport-time-card strong{font-size:17px!important}
+#view .transport-time-card p{font-size:11px!important}
+
+#view .location-simple-card{display:grid;grid-template-columns:46px minmax(0,1fr);gap:12px;align-items:center;padding:15px}
+#view .location-simple-card>span{width:44px;height:44px;display:grid;place-items:center;border-radius:13px;background:rgba(116,51,68,.08);color:#743344}
+#view .location-simple-card>span .ui-icon{width:23px;height:23px}
+#view .location-simple-card strong{display:block;font-size:17px}
+#view .location-simple-card p{margin:4px 0 0;font-size:12px!important}
+#view .location-transport-link{min-height:56px}
+#view .location-transport-link strong{font-size:14px!important}
+#view .location-transport-link small{font-size:11px!important}
+
+#view .points-compact-head h3{font-size:24px!important}
+#view .points-compact-head p:not(.eyebrow){font-size:12px!important;line-height:1.4!important}
+#view .points-personal-counter small,#view .points-personal-counter em{font-size:10px!important}
+#view .points-personal-counter b{font-size:24px!important}
+#view .points-action{min-height:82px;padding:12px!important}
+#view .points-action-copy strong{font-size:16px!important}
+#view .points-action-copy p{margin-top:3px!important;font-size:11.5px!important}
+#view .points-action-copy small,#view .points-action-points span{font-size:10.5px!important}
+#view .points-action-end button{min-height:42px!important;font-size:12px!important}
+#view .points-complete-badge{font-size:11px!important}
+#view .points-rules-entry{min-height:58px}
+#view .points-rules-entry strong{font-size:14px!important}
+#view .points-rules-entry small{font-size:11px!important}
+#view .points-upcoming-head small{font-size:9px!important}
+#view .points-upcoming-head strong{font-size:15px!important}
+#view .points-upcoming-head p{font-size:11px!important}
+#view .points-upcoming-grid>div{min-height:45px;padding:8px 10px}
+#view .points-upcoming-grid>div>span{font-size:10px!important}
+#view .points-upcoming-grid strong{font-size:13px!important}
+#view .points-upcoming-grid small{font-size:10px!important}
+
+#view .gift-page-heading h2{font-size:clamp(29px,6vw,38px)!important}
+#view .gift-wish-copy h3{font-size:19px!important}
+#view .gift-wish-copy>p{font-size:12px!important;line-height:1.4!important}
+#view .gift-wish-form label{font-size:12px!important}
+#view .gift-wish-form textarea{min-height:88px!important;font-size:13px!important}
+#view .gift-wish-actions{justify-content:flex-end}
+#view .gift-wish-actions>button{min-height:44px!important;font-size:13px!important}
+#view .gift-wish-saved small{font-size:9px!important}
+#view .gift-wish-saved p{font-size:12px!important}
+#view .gift-wish-saved button{min-height:40px!important;font-size:11px!important}
+#view .gift-hero h3{font-size:20px!important}
+#view .gift-hero p{font-size:12px!important}
+#view .gift-transfer-heading h3{font-size:20px!important}
+#view .gift-detail-row small{font-size:10px!important}
+#view .gift-detail-row strong{font-size:15px!important}
+#view .gift-detail-row button{min-height:40px!important;font-size:11px!important}
+#view .gift-currency-note p{font-size:11px!important}
+
+#view .guest-pill-copy>strong,#view .team-member-list .guest-pill-copy>strong,#view .guest-team-panel .guest-pill-copy>strong{font-size:14px!important}
+#view .captain-label,#view .declined-label,#view .guest-challenge-status{font-size:10px!important}
+#view .rank-item-compact>strong{font-size:15px!important}
+#view .rank-item-compact .rank-points small{font-size:10px!important}
+.menu-nav-clean button{min-height:46px!important;font-size:14px!important}
+.bottom-nav button{min-height:54px}
+.bottom-nav button span,.bottom-nav button small{font-size:10px!important}
+
+#view .admin-title-row .section-head h3{font-size:31px!important}
+#view .admin-sync-card strong{font-size:14px!important}
+#view .admin-sync-card p,#view .admin-section-note{font-size:10.5px!important}
+#view .admin-lock-button{min-height:40px!important;font-size:11px!important}
+#view .admin-transport-zone>small{font-size:9px!important}
+
+@media(max-width:600px){
+  #view .section-head h3{font-size:29px!important}
+  #view .section-head>p:not(.eyebrow){font-size:12.5px!important}
+  #view .home-essential-card>.home-essential-row{min-height:72px;padding:11px 12px!important}
+  #view .home-essential-card .home-essential-row strong{font-size:15px!important}
+  #view .transport-main-card{padding:12px!important}
+  #view .transport-zone-card{padding:12px!important}
+  #view .points-action{grid-template-columns:36px minmax(0,1fr)!important}
+  #view .points-action-end{grid-column:2!important}
+}
