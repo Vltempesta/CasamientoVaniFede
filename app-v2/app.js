@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32508";
+  const CURRENT_APP_VERSION = "32511";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -36,6 +36,12 @@
     noche: 15,
     agua: 13,
     viento: 11
+  };
+
+  const TRANSPORT_CAPACITY_BY_ZONE = {
+    "capital-obelisco": 45,
+    "wilde": 24,
+    "longchamps": 19
   };
 
   let currentGuest = null;
@@ -396,7 +402,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32508"
+        appVersion: CONFIG.APP_VERSION || "32511"
       })
     );
   }
@@ -973,7 +979,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32508",
+      appVersion: "32511",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -1048,7 +1054,21 @@
       saveState();
       setRemoteStatus("error", "No se pudo guardar");
       if (!options.silent) {
-        toast("No se pudo guardar. Revisá la conexión y volvé a intentar.");
+        const message = String(
+          error?.message || ""
+        );
+
+        if (
+          message.includes(
+            "ya no tiene lugares disponibles"
+          )
+        ) {
+          toast(message);
+        } else {
+          toast(
+            "No se pudo guardar. Revisá la conexión y volvé a intentar."
+          );
+        }
       }
       return null;
     }
@@ -3034,16 +3054,16 @@
         );
 
       const locationMainText = usesMicro
-        ? "Elegiste vivir la experiencia completa en micro. No necesitás conocer la ubicación: nosotros nos ocupamos del recorrido. ¡Dejate llevar!"
+        ? "Elegiste Micro / Combi. No necesitás conocer la dirección: nosotros coordinamos el recorrido hasta la estancia."
         : usesParticular
-          ? "Elegiste viajar de forma particular. Te revelaremos la ubicación exacta el mismo día de la boda."
-          : "En micro, no necesitás conocer la ubicación: solamente tenés que dejarte llevar. Si vas de forma particular, te la revelaremos el día de la boda.";
+          ? "Elegiste viajar de forma particular. La estancia está en zona Pilar: consultá a los novios para recibir la dirección exacta."
+          : "La estancia está en zona Pilar. Si viajás en Micro / Combi no necesitás la dirección; si vas particular, consultá a los novios.";
 
       const locationStatus = usesMicro
         ? "Tu traslado está resuelto"
         : usesParticular
-          ? "La dirección llegará ese día"
-          : "Elegí cómo querés llegar";
+          ? "Consultá a los novios la dirección"
+          : "Definí tu traslado";
 
       return `
         <style>
@@ -3339,7 +3359,7 @@
                 ${uiIcon("pin")}
               </span>
               <div>
-                <strong>Zona Norte</strong>
+                <strong>Zona Pilar</strong>
                 <small>${escapeHTML(locationStatus)}</small>
               </div>
             </section>
@@ -3354,7 +3374,7 @@
             </span>
             <span class="location-secret-transport-copy">
               <strong>Ver información de Traslados</strong>
-              <small>Opciones, puntos tentativos y horarios.</small>
+              <small>Puntos de encuentro y horarios confirmados.</small>
             </span>
             <b aria-hidden="true">›</b>
           </button>
@@ -3832,6 +3852,17 @@
     const team = getTeam(currentGuest.team);
     const rsvp = state.rsvps[currentGuest.id];
     const rsvpDone = hasFinalRsvp(rsvp);
+    const selectedTransport =
+      String(rsvp?.transport || "");
+    const usesMicro =
+      rsvp?.attendance === "si" &&
+      ["combi", "micro"].includes(selectedTransport);
+    const usesParticular =
+      rsvp?.attendance === "si" &&
+      ["particular", "auto"].includes(selectedTransport);
+    const transportUndecided =
+      rsvp?.attendance === "si" &&
+      selectedTransport === "sin-decidir";
     const locationOpen = isSectionOpen("ubicacion");
     const giftsOpen = isTriviaGameOpen("gifts-section");
     const musicDone = Boolean(triviaSubmission("music-selection"));
@@ -3848,7 +3879,7 @@
 
     const rank = calculateRanking();
     const deadline =
-      "15 de agosto de 2026";
+      "15 de septiembre de 2026";
 
     const now = new Date();
     const eventDate = new Date(DATA.couple.eventDate);
@@ -3873,9 +3904,9 @@
       primaryAction = {
         tone: "pending",
         icon: "calendarCheck",
-        kicker: "TU PRIMER PASO",
-        title: "CONFIRMÁ TU ASISTENCIA",
-        text: "Respondé antes del 15 de agosto de 2026.",
+        kicker: "NUEVO PLAZO",
+        title: "CONFIRMÁ ANTES DEL 15/09",
+        text: "Si todavía no respondiste, tenés tiempo hasta el 15 de septiembre.",
         button: "Confirmar asistencia",
         attr: 'data-go="asistencia"'
       };
@@ -3983,6 +4014,22 @@
         </section>
       ` : ""}
 
+      ${!rsvpDone ? `
+        <button
+          type="button"
+          class="home-pending-transport"
+          data-go="traslado">
+          <span>${uiIcon("coach")}</span>
+          <span>
+            <strong>Ya podés revisar los micros</strong>
+            <small>
+              Horarios, puntos de salida y lugares disponibles actualizados.
+            </small>
+          </span>
+          <b aria-hidden="true">›</b>
+        </button>
+      ` : ""}
+
       <section
         id="homeEssential"
         class="home-essential"
@@ -4016,23 +4063,45 @@
               <div>
                 <small>Ubicación</small>
                 <strong>Estancia "Los Candiles"</strong>
-                <p>Solís, Provincia de Buenos Aires</p>
+                <p>Consultá la información actualizada antes de salir</p>
               </div>
             </button>
-          ` : `
-            <button
-              type="button"
-              class="home-essential-row home-essential-link home-essential-location home-essential-location-locked"
-              data-go="ubicacion">
+          ` : usesParticular ? `
+            <article
+              class="home-essential-row home-essential-location home-essential-location-particular">
               <span class="home-essential-icon">
-                ${uiIcon("lock")}
+                ${uiIcon("pin")}
               </span>
               <div>
                 <small>Ubicación</small>
-                <strong>¡Lugar secreto!</strong>
-                <p>¡Próximamente se revelará!</p>
+                <strong>Zona Pilar</strong>
+                <p>Queda lejos de CABA · Consultá a los novios la dirección</p>
               </div>
-            </button>
+            </article>
+          ` : usesMicro ? `
+            <article
+              class="home-essential-row home-essential-location home-essential-location-micro">
+              <span class="home-essential-icon">
+                ${uiIcon("pin")}
+              </span>
+              <div>
+                <small>Ubicación</small>
+                <strong>Destino coordinado</strong>
+                <p>No necesitás la dirección: el micro te lleva</p>
+              </div>
+            </article>
+          ` : `
+            <article
+              class="home-essential-row home-essential-location home-essential-location-locked">
+              <span class="home-essential-icon">
+                ${uiIcon("pin")}
+              </span>
+              <div>
+                <small>Ubicación</small>
+                <strong>Zona Pilar</strong>
+                <p>Queda lejos · Revisá los micros antes de decidir</p>
+              </div>
+            </article>
           `}
 
           <button
@@ -4044,8 +4113,16 @@
             </span>
             <div>
               <small>Traslado</small>
-              <strong>Micro / Combi</strong>
-              <p>Confirmá en Asistencia · Próximamente novedades</p>
+              <strong>${
+                usesMicro
+                  ? "Micro / Combi"
+                  : usesParticular
+                    ? "Particular"
+                    : transportUndecided
+                      ? "Aún no lo decidiste"
+                      : "Información de traslado"
+              }</strong>
+              <p>¡Click acá para la info actualizada!</p>
             </div>
           </button>
 
@@ -4074,6 +4151,24 @@
             </div>
           </button>
         </div>
+
+        ${usesMicro ? `
+          <button
+            type="button"
+            class="home-micro-update"
+            data-go="traslado">
+            <span class="home-micro-update-icon">
+              ${uiIcon("coach")}
+            </span>
+            <span>
+              <strong>Tu micro ya está confirmado</strong>
+              <small>
+                Punto de encuentro, horario y salida puntual actualizados.
+              </small>
+            </span>
+            <b aria-hidden="true">›</b>
+          </button>
+        ` : ""}
 
         ${giftsOpen ? `
           <button
@@ -4123,7 +4218,7 @@
               type="button"
               data-go="puntos">
               ${uiIcon("checkCircle")}
-              <span>Desafíos completados</span>
+              <span>Desafíos al día</span>
             </button>
           ` : ""}
         </section>
@@ -4132,7 +4227,7 @@
       ${challengesDone ? `
         <div class="home-more-challenges-note">
           <span aria-hidden="true">🕒</span>
-          <strong>¡Próximamente llegarán más desafíos!</strong>
+          <strong>¡2 nuevos desafíos se habilitarán próximamente!</strong>
         </div>
       ` : ""}
     `;
@@ -4225,140 +4320,361 @@
 
   function renderTransport() {
     const rsvp = state.rsvps[currentGuest.id] || {};
+    const selectedTransport = String(rsvp.transport || "");
     const usesMicro =
       rsvp.attendance === "si" &&
-      ["combi", "micro"].includes(rsvp.transport);
+      ["combi", "micro"].includes(selectedTransport);
+    const usesParticular =
+      rsvp.attendance === "si" &&
+      ["particular", "auto"].includes(selectedTransport);
     const transportUndecided =
       rsvp.attendance === "si" &&
-      rsvp.transport === "sin-decidir";
-    const selectedZone =
-      pickupZoneLabel(rsvp.pickupZone);
+      selectedTransport === "sin-decidir";
+    const declined =
+      rsvp.attendance === "no";
+    const pendingRsvp =
+      !hasCompletedRsvp(rsvp);
+    const canJoinMicro =
+      rsvp.attendance === "si" &&
+      (usesParticular || transportUndecided);
+    const selectedZone = String(rsvp.pickupZone || "");
+    const selectedZoneLabel =
+      pickupZoneLabel(selectedZone) || "Sin definir";
+    const availability =
+      transportAvailabilitySnapshot();
+    const capital =
+      availability.zones["capital-obelisco"];
+    const wilde =
+      availability.zones.wilde;
+    const longchamps =
+      availability.zones.longchamps;
+    const availabilitySentence =
+      transportAvailabilitySentence(
+        availability
+      );
+
+    const mainEyebrow = usesMicro
+      ? "TU TRASLADO ESTÁ CONFIRMADO"
+      : usesParticular
+        ? "TODAVÍA PODÉS SUMARTE"
+        : transportUndecided
+          ? "TODAVÍA PODÉS SUMARTE"
+          : pendingRsvp
+            ? "NUEVO PLAZO · 15/09"
+            : declined
+              ? "INFORMACIÓN DE TRASLADOS"
+              : "INFORMACIÓN ACTUALIZADA";
+
+    const mainTitle = usesMicro
+      ? "¡Tu micro ya está reservado!"
+      : usesParticular
+        ? "¿Querés dejar el auto?"
+        : transportUndecided
+          ? "Elegí un micro con lugar"
+          : pendingRsvp
+            ? "Revisá los micros antes de confirmar"
+            : declined
+              ? "Micros y combis confirmados"
+              : "Micros y combis confirmados";
+
+    const mainText = usesMicro
+      ? `Tu punto elegido es <strong>${escapeHTML(selectedZoneLabel)}</strong>. Revisá abajo la hora para estar y la salida puntual.`
+      : usesParticular
+        ? "La estancia está en <strong>zona Pilar y queda lejos de CABA</strong>. Si preferís no manejar, podés anotarte ahora en cualquiera de los micros que tenga disponibilidad."
+        : transportUndecided
+          ? `La estancia está en <strong>zona Pilar y queda lejos</strong>. ${escapeHTML(
+              availabilitySentence
+            )}. Podés reservar tu lugar directamente desde esta sección.`
+          : pendingRsvp
+            ? `Tenés tiempo hasta el <strong>15 de septiembre</strong> para confirmar. La estancia queda lejos: revisá ahora horarios y disponibilidad de los micros.`
+            : declined
+              ? "Aunque ya nos avisaste que no podés venir, podés consultar acá la información actualizada de los traslados."
+              : "Los micros ya están reservados. Abajo tenés los puntos, horarios y disponibilidad calculada con las respuestas actuales.";
 
     return `
       ${transportStyles()}
       ${sectionHeader(
-        "casamiento",
-        "Traslados",
-        "Ida y regreso coordinados para disfrutar sin manejar."
+        "TRASLADOS CONFIRMADOS",
+        "Micros y combis",
+        "Puntos de encuentro, horarios y disponibilidad actualizados."
       )}
 
-      <section class="transport-main-card section-card">
+      <section
+        class="transport-main-card section-card ${
+          usesParticular ? "is-particular" : ""
+        }">
         <span class="transport-main-icon">
-          ${uiIcon("coach")}
+          ${uiIcon(usesParticular ? "carRoute" : "coach")}
         </span>
 
         <div class="transport-main-copy">
-          <p class="eyebrow">VIAJÁ SIN PREOCUPARTE</p>
-          <h3>¡VIVÍ LA EXPERIENCIA COMPLETA!</h3>
-          <p>
-            El lugar queda lejos, así que queremos ponértelo fácil:
-            elegí <strong>Micro / Combi</strong> y nosotros
-            organizamos el resto.
-          </p>
+          <p class="eyebrow">${escapeHTML(mainEyebrow)}</p>
+          <h3>${escapeHTML(mainTitle)}</h3>
+          <p>${mainText}</p>
 
           <div class="transport-main-bottom">
-            <span class="transport-bonus">
-              ${uiIcon("star")}
-              +20 puntos para tu equipo
-            </span>
-
-            <button type="button" data-go="asistencia">
-              ${
-                usesMicro
-                  ? "Revisar elección"
-                  : transportUndecided
-                    ? "Revisar opciones"
-                    : "Elegir traslado"
-              }
-            </button>
-          </div>
-
-          ${
-            usesMicro
-              ? `<small class="transport-current-choice">
-                  ✓ Micro / Combi
-                  ${
-                    rsvp.pickupZone
-                      ? ` · ${escapeHTML(selectedZone)}`
-                      : ""
-                  }
-                </small>`
-              : transportUndecided
+            ${
+              usesMicro
                 ? `
-                  <small class="transport-current-choice is-pending">
-                    ◷ Aún no lo decidiste · definilo antes del 15/08
-                  </small>
+                  <span class="transport-bonus transport-status-badge">
+                    ${uiIcon("checkCircle")}
+                    ${escapeHTML(selectedZoneLabel)}
+                  </span>
                 `
-                : ""
-          }
+                : `
+                    <span class="transport-bonus transport-status-badge">
+                      ${uiIcon("seat")}
+                      ${
+                        availability.totalRemaining
+                      } ${
+                        availability.totalRemaining === 1
+                          ? "lugar disponible"
+                          : "lugares disponibles"
+                      }
+                    </span>
+                  `
+            }
+
+            ${
+              declined
+                ? ""
+                : `
+                  <button type="button" data-go="asistencia">
+                    ${
+                      pendingRsvp
+                        ? "Confirmar asistencia"
+                        : usesMicro
+                          ? "Revisar elección"
+                          : "Ver mi respuesta"
+                    }
+                  </button>
+                `
+            }
+          </div>
         </div>
       </section>
+
+      ${
+        usesParticular || transportUndecided
+          ? `
+            <section class="transport-particular-info section-card">
+              <span>${uiIcon("pin")}</span>
+              <div>
+                <small>Antes de decidir</small>
+                <strong>La estancia queda lejos</strong>
+                <p>
+                  Está en zona Pilar. Si preferís evitar el viaje en auto,
+                  podés reservar abajo un lugar en cualquiera de los micros
+                  que todavía tenga disponibilidad.
+                </p>
+              </div>
+            </section>
+          `
+          : ""
+      }
+
+      ${
+        pendingRsvp
+          ? `
+            <section class="transport-pending-deadline section-card">
+              <span>${uiIcon("calendarCheck")}</span>
+              <div>
+                <small>NUEVO PLAZO</small>
+                <strong>Confirmá hasta el 15/09</strong>
+                <p>
+                  Podés revisar toda la información ahora.
+                  Para reservar un lugar primero confirmá que vas a asistir.
+                </p>
+                <button type="button" data-go="asistencia">
+                  Confirmar asistencia
+                </button>
+              </div>
+            </section>
+          `
+          : ""
+      }
 
       <section class="transport-compact-heading">
         <div>
-          <p class="eyebrow">POSIBLES SALIDAS</p>
-          <h3>Elegí la zona que te quede mejor</h3>
+          <p class="eyebrow">SALIDAS CONFIRMADAS</p>
+          <h3>
+            ${
+              canJoinMicro
+                ? "Elegí el micro que te quede mejor"
+                : "Revisá los puntos y horarios"
+            }
+          </h3>
         </div>
         <small>
-          Los puntos son tentativos y se confirmarán
-          según la cantidad de pasajeros.
+          El horario “Estar” es la hora en la que tenés que
+          presentarte en el punto.
         </small>
       </section>
 
-      <section class="transport-zones-grid">
+      <section class="transport-zones-grid transport-confirmed-grid">
         ${transportZoneCard({
-          area: "Capital Federal",
-          place: "Obelisco"
+          key: "capital-obelisco",
+          area: "Capital · Obelisco",
+          place: "CABA · Obelisco",
+          vehicle: "Micro 45",
+          beThere: "16:30",
+          departure: "16:45",
+          availability: capital,
+          selected: selectedZone === "capital-obelisco",
+          canJoin: canJoinMicro
         })}
         ${transportZoneCard({
-          area: "Wilde",
-          place: "Punto a confirmar"
-        })}
-        ${transportZoneCard({
+          key: "longchamps",
           area: "Longchamps",
-          place: "Punto a confirmar"
+          place: "Barrio VIPLASTIC",
+          vehicle: "Minibús 19",
+          beThere: "15:45",
+          departure: "16:00",
+          availability: longchamps,
+          selected: selectedZone === "longchamps",
+          canJoin: canJoinMicro
+        })}
+        ${transportZoneCard({
+          key: "wilde",
+          area: "Wilde",
+          place: "Las Flores y Mitre",
+          vehicle: "Minibús 24",
+          beThere: "16:15",
+          departure: "16:30",
+          availability: wilde,
+          selected: selectedZone === "wilde",
+          canJoin: canJoinMicro
         })}
       </section>
 
-      <section class="transport-times-grid">
-        <article class="section-card transport-time-card">
-          <span>${uiIcon("hourglass")}</span>
-          <div>
-            <small>Salida estimada</small>
-            <strong>Entre 15:30 y 16:30</strong>
-            <p>El horario dependerá de la zona elegida.</p>
-          </div>
-        </article>
+      ${
+        canJoinMicro
+          ? `
+            <section class="transport-availability-note section-card">
+              <span>${uiIcon("seat")}</span>
+              <div>
+                <strong>La reserva se hace acá mismo</strong>
+                <p>
+                  Tocá “Sumarme a este micro” en una salida con lugar.
+                  Tu respuesta de traslado se actualizará automáticamente.
+                </p>
+              </div>
+            </section>
+          `
+          : ""
+      }
 
+      <section class="transport-times-grid transport-return-only">
         <article class="section-card transport-time-card transport-return-card">
           <span>${uiIcon("coach")}</span>
           <div>
             <small>Regreso</small>
             <strong>03:00 HRS</strong>
-            <p>Volvemos al mismo punto de salida.</p>
+            <p>Volvemos al mismo punto desde el que saliste.</p>
           </div>
         </article>
       </section>
-
-      <p class="transport-deadline-note">
-        Los puntos y horarios definitivos se informarán
-        después del cierre del 15 de agosto.
-      </p>
     `;
   }
 
   function transportZoneCard({
+    key,
     area,
-    place
+    place,
+    vehicle,
+    beThere,
+    departure,
+    availability,
+    selected = false,
+    canJoin = false
   }) {
+    const availabilityData =
+      availability || {
+        capacity: 0,
+        booked: 0,
+        remaining: 0,
+        overbooked: 0,
+        full: false
+      };
+    const full = Boolean(
+      availabilityData.full
+    );
     return `
-      <article class="section-card transport-zone-card">
-        <span>${uiIcon("pin")}</span>
-        <div>
-          <strong>${escapeHTML(area)}</strong>
-          <small>${escapeHTML(place)}</small>
+      <article
+        class="section-card transport-zone-card transport-confirmed-card ${
+          selected ? "is-selected" : ""
+        } ${full ? "is-full" : ""}"
+        data-transport-zone="${escapeHTML(key)}">
+        <div class="transport-zone-card-head">
+          <span>${uiIcon("pin")}</span>
+          <div>
+            <small>${escapeHTML(vehicle)}</small>
+            <strong>${escapeHTML(area)}</strong>
+            <p>${escapeHTML(place)}</p>
+          </div>
+          ${
+            selected
+              ? `<em class="transport-selected-chip">Tu salida</em>`
+              : ""
+          }
         </div>
-        <em>Tentativo</em>
+
+        <div class="transport-zone-times">
+          <div>
+            <small>Estar</small>
+            <strong>${escapeHTML(beThere)}</strong>
+          </div>
+          <div>
+            <small>Salida puntual</small>
+            <strong>${escapeHTML(departure)}</strong>
+          </div>
+        </div>
+
+        <div class="transport-zone-availability ${
+          full ? "is-full" : ""
+        }">
+          ${uiIcon(full ? "lock" : "seat")}
+          <span>
+            ${escapeHTML(
+              transportSeatsLabel(
+                availabilityData
+              )
+            )}
+          </span>
+          <small>
+            ${escapeHTML(
+              transportCapacityDetail(
+                availabilityData
+              )
+            )}
+          </small>
+        </div>
+
+        ${
+          selected
+            ? `
+              <div class="transport-zone-current">
+                ${uiIcon("checkCircle")}
+                Ya estás anotado acá
+              </div>
+            `
+            : canJoin
+              ? `
+                <button
+                  type="button"
+                  class="transport-zone-join"
+                  data-join-transport-zone="${escapeHTML(key)}"
+                  data-join-transport-label="${escapeHTML(area)}"
+                  ${full ? "disabled" : ""}>
+                  ${
+                    full
+                      ? "Sin lugares"
+                      : "Sumarme a este micro"
+                  }
+                </button>
+              `
+              : ""
+        }
       </article>
     `;
   }
@@ -4366,6 +4682,7 @@
   function transportStyles() {
     return `<style>
       .transport-main-card{position:relative;overflow:hidden;display:grid;grid-template-columns:48px minmax(0,1fr);gap:11px;padding:12px;border:1px solid rgba(232,200,132,.38);background:radial-gradient(circle at 93% -12%,rgba(240,208,138,.26),transparent 38%),radial-gradient(circle at 3% 118%,rgba(44,15,27,.32),transparent 43%),linear-gradient(135deg,#8a3b51 0%,#743344 48%,#5d2537 100%);box-shadow:0 12px 24px rgba(92,38,55,.19),inset 0 1px 0 rgba(255,255,255,.08)}
+      .transport-main-card.is-particular{background:radial-gradient(circle at 93% -12%,rgba(240,208,138,.22),transparent 38%),linear-gradient(135deg,#36556f 0%,#29465d 100%);border-color:rgba(209,226,238,.26)}
       .transport-main-card::after{content:"";position:absolute;width:112px;height:112px;top:-70px;right:-36px;border:1px solid rgba(232,200,132,.22);border-radius:50%;box-shadow:0 0 0 14px rgba(232,200,132,.035),0 0 0 29px rgba(232,200,132,.022);pointer-events:none}
       .transport-main-icon{position:relative;z-index:1;width:46px;height:46px;display:grid;place-items:center;border:1px solid rgba(255,240,204,.24);border-radius:14px;background:rgba(255,248,230,.12);color:#f1d795;box-shadow:inset 0 1px 0 rgba(255,255,255,.10)}
       .transport-main-icon .ui-icon{width:25px;height:25px}
@@ -4377,20 +4694,33 @@
       .transport-main-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
       .transport-bonus{display:inline-flex;align-items:center;gap:4px;color:#f0d18c;font-size:8px;font-weight:900}
       .transport-bonus .ui-icon{width:13px;height:13px}
+      .transport-status-badge{max-width:70%;line-height:1.25}
       .transport-main-bottom button{min-height:32px;padding:6px 10px;border:1px solid rgba(255,239,197,.36);background:linear-gradient(135deg,#efd27e,#d4a849);color:#4a2a1d;font-size:8px;font-weight:950;white-space:nowrap;box-shadow:0 6px 13px rgba(47,15,25,.18)}
-      .transport-current-choice{display:block;margin-top:5px;color:#d9edcf;font-size:8px;font-weight:900}
       .transport-compact-heading{display:flex;align-items:end;justify-content:space-between;gap:10px;margin:12px 2px 6px}
       .transport-compact-heading h3{margin:1px 0 0;font-size:18px}
-      .transport-compact-heading>small{color:var(--muted);font-size:7.5px;font-weight:800}
+      .transport-compact-heading>small{max-width:290px;color:var(--muted);font-size:7.5px;font-weight:800;text-align:right;line-height:1.3}
       .transport-zones-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
-      .transport-zone-card{position:relative;display:grid;grid-template-columns:29px minmax(0,1fr);gap:7px;align-items:center;padding:8px 9px}
-      .transport-zone-card>span{width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:rgba(49,83,110,.08);color:#31536e}
-      .transport-zone-card>span .ui-icon{width:15px;height:15px}
-      .transport-zone-card strong,.transport-zone-card small{display:block}
-      .transport-zone-card strong{padding-right:42px;font-size:10.5px;line-height:1.15}
-      .transport-zone-card small{margin-top:2px;color:#31536e;font-size:7.5px;font-weight:800}
-      .transport-zone-card em{position:absolute;top:6px;right:6px;padding:2px 5px;border-radius:999px;background:rgba(201,170,114,.14);color:#8a6129;font-size:5.8px;font-style:normal;font-weight:900;text-transform:uppercase}
+      .transport-confirmed-card{display:block;padding:10px;border-color:rgba(49,83,110,.14)}
+      .transport-confirmed-card.is-selected{border:2px solid rgba(180,134,62,.62);background:linear-gradient(135deg,rgba(223,190,112,.11),rgba(255,253,248,.94));box-shadow:0 8px 18px rgba(144,103,45,.10)}
+      .transport-confirmed-card.is-full:not(.is-selected){opacity:.82}
+      .transport-zone-card-head{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:8px;align-items:center}
+      .transport-zone-card-head>span{width:31px;height:31px;display:grid;place-items:center;border-radius:10px;background:rgba(49,83,110,.08);color:#31536e}
+      .transport-zone-card-head>span .ui-icon{width:16px;height:16px}
+      .transport-zone-card-head small,.transport-zone-card-head strong{display:block}
+      .transport-zone-card-head small{color:var(--gold-deep);font-size:6.5px;font-weight:950;text-transform:uppercase;letter-spacing:.06em}
+      .transport-zone-card-head strong{font-size:11px;line-height:1.15}
+      .transport-zone-card-head p{margin:2px 0 0;color:var(--muted);font-size:7.5px;line-height:1.25}
+      .transport-selected-chip{padding:3px 6px;border-radius:999px;background:rgba(180,134,62,.14);color:#8a6129;font-size:6px;font-style:normal;font-weight:950;text-transform:uppercase}
+      .transport-zone-times{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+      .transport-zone-times>div{padding:7px 8px;border-radius:10px;background:rgba(49,83,110,.045);border:1px solid rgba(49,83,110,.09)}
+      .transport-zone-times small,.transport-zone-times strong{display:block}
+      .transport-zone-times small{color:var(--muted);font-size:6.5px;font-weight:850}
+      .transport-zone-times strong{margin-top:1px;font-size:13px}
+      .transport-zone-availability{display:flex;align-items:center;gap:5px;margin-top:7px;padding-top:7px;border-top:1px solid rgba(132,104,68,.10);color:#426f47;font-size:7.5px;font-weight:950}
+      .transport-zone-availability.is-full{color:#8b4b55}
+      .transport-zone-availability .ui-icon{width:13px;height:13px}
       .transport-times-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:8px}
+      .transport-return-only{grid-template-columns:1fr}
       .transport-time-card{display:grid;grid-template-columns:30px minmax(0,1fr);gap:8px;align-items:center;padding:9px}
       .transport-time-card>span{width:29px;height:29px;display:grid;place-items:center;border-radius:9px;background:rgba(49,83,110,.08);color:#31536e}
       .transport-time-card .ui-icon{width:16px;height:16px}
@@ -4400,22 +4730,26 @@
       .transport-time-card p{margin:0;font-size:7.5px}
       .transport-return-card{border-color:rgba(74,125,79,.19);background:linear-gradient(135deg,rgba(74,125,79,.05),rgba(255,253,248,.90))}
       .transport-return-card>span{background:rgba(74,125,79,.09);color:#426f47}
-      .transport-deadline-note{margin:7px 2px 0;color:var(--muted);font-size:7.5px;font-weight:750;text-align:center}
+      .transport-particular-info,.transport-availability-note{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:start;margin-top:8px;padding:12px}
+      .transport-particular-info>span,.transport-availability-note>span{width:36px;height:36px;display:grid;place-items:center;border-radius:11px;background:rgba(49,83,110,.08);color:#31536e}
+      .transport-particular-info .ui-icon,.transport-availability-note .ui-icon{width:19px;height:19px}
+      .transport-particular-info small{display:block;color:var(--gold-deep);font-size:6.5px;font-weight:950;text-transform:uppercase}
+      .transport-particular-info strong,.transport-availability-note strong{display:block;font-size:12px}
+      .transport-particular-info p,.transport-availability-note p{margin:3px 0 0;color:var(--muted);font-size:8.5px;line-height:1.38}
       @media(max-width:650px){
         .transport-main-card{grid-template-columns:42px minmax(0,1fr);padding:10px}
         .transport-main-icon{width:40px;height:40px;border-radius:12px}
         .transport-main-icon .ui-icon{width:22px;height:22px}
         .transport-main-bottom{align-items:flex-start;flex-direction:column}
+        .transport-status-badge{max-width:100%}
         .transport-main-bottom button{width:100%}
+        .transport-compact-heading{align-items:start;flex-direction:column}
+        .transport-compact-heading>small{text-align:left}
         .transport-zones-grid{grid-template-columns:1fr}
-        .transport-times-grid{grid-template-columns:1fr 1fr}
-      }
-      @media(max-width:430px){
         .transport-times-grid{grid-template-columns:1fr}
       }
     </style>`;
   }
-
 
   function infoStyles() {
     return `<style>
@@ -4452,7 +4786,7 @@
       !hasSaved ||
       !hasFinalSaved
     );
-    const deadlineLabel = "15 de agosto de 2026";
+    const deadlineLabel = "15 de septiembre de 2026";
     const savedTransport = ["combi", "micro"].includes(formValues.transport)
       ? "combi"
       : formValues.transport === "auto"
@@ -4462,6 +4796,20 @@
       formValues.pickupZone || "";
     const attendanceDeclined =
       formValues.attendance === "no";
+    const transportAvailability =
+      transportAvailabilitySnapshot();
+    const capitalAvailability =
+      transportAvailability.zones[
+        "capital-obelisco"
+      ];
+    const wildeAvailability =
+      transportAvailability.zones.wilde;
+    const longchampsAvailability =
+      transportAvailability.zones.longchamps;
+    const transportAvailabilityCopy =
+      transportAvailabilitySentence(
+        transportAvailability
+      );
 
     const savedDietChoice = formValues.dietChoice ||
       (
@@ -4541,7 +4889,7 @@
                   usesMicro
                     ? `
                       <span class="rsvp-transport-zone">
-                        Zona tentativa:
+                        Punto de salida:
                         ${escapeHTML(
                           pickupZoneLabel(saved.pickupZone) ||
                           "Sin definir"
@@ -4554,10 +4902,10 @@
                 <em>
                   ${
                     usesParticular
-                      ? "El destino se informará el mismo día de la boda."
+                      ? "Zona Pilar · Consultá a los novios la dirección exacta."
                       : usesUndecided
-                        ? "Volvé a editar tu respuesta y definilo antes del 15/08. Consultá Traslados para ver las opciones."
-                        : "Los horarios y puntos definitivos serán informados después del cierre de respuestas del 15 de agosto."
+                        ? "Quedan lugares en Capital y Longchamps. Consultá Traslados y avisales a los novios."
+                        : "Tu punto y horario ya están confirmados. Consultá Traslados."
                   }
                 </em>
               </span>
@@ -4605,8 +4953,11 @@
             <div>
               <h4>¡Respuesta enviada!</h4>
               <p>
-                Listo, ya tenemos tu confirmación.
-                Podés actualizarla cuando lo necesites.
+                ${
+                  saved.attendance === "no"
+                    ? "Tu respuesta quedó registrada. Gracias por avisarnos."
+                    : "Listo, ya tenemos tu confirmación. Podés actualizarla cuando lo necesites."
+                }
               </p>
             </div>
           </div>
@@ -4632,11 +4983,17 @@
           ${transportSummaryCard}
           ${accommodationNote}
 
-          <div class="rsvp-actions-row">
-            <button id="editRsvp" type="button">
-              Editar respuesta
-            </button>
-          </div>
+          ${
+            saved.attendance === "si"
+              ? `
+                <div class="rsvp-actions-row">
+                  <button id="editRsvp" type="button">
+                    Editar respuesta
+                  </button>
+                </div>
+              `
+              : ""
+          }
         </section>
 
         ${challengesDone ? "" : `
@@ -4666,7 +5023,9 @@
         hasSaved
           ? "Editar asistencia"
           : "Confirmar asistencia",
-        "Respondé antes del 15 de agosto."
+        hasSaved
+          ? "Actualizá tus datos si necesitás hacer un cambio."
+          : "Nuevo plazo para confirmar: 15 de septiembre de 2026."
       )}
 
       <form
@@ -4767,7 +5126,7 @@
                 "transportCar",
                 savedTransport,
                 true,
-                "Te informaremos el destino antes de la boda."
+                "Zona Pilar · queda lejos. También podés sumarte a un micro con lugar."
               )}
               ${choicePillIcon(
                 "transport",
@@ -4775,7 +5134,8 @@
                 "Aún no lo decido",
                 "transportPending",
                 savedTransport,
-                true
+                true,
+                "La estancia queda lejos. Revisá los micros disponibles antes de decidir."
               )}
             </div>
 
@@ -4788,10 +5148,11 @@
               data-transport-undecided-note>
               <span>${uiIcon("transportPending")}</span>
               <div>
-                <strong>Definilo antes del 15/08</strong>
+                <strong>Definilo cuanto antes</strong>
                 <p>
-                  Necesitamos tu elección antes de esa fecha
-                  para poder coordinar los traslados.
+                  ${escapeHTML(
+                    transportAvailabilityCopy
+                  )}.
                 </p>
                 <button type="button" data-go="traslado">
                   Ver Traslados
@@ -4821,29 +5182,41 @@
               ¿Desde qué zona preferís salir?
             </legend>
             <p class="pickup-zone-intro">
-              Son puntos tentativos. La opción final dependerá
-              de la cantidad de pasajeros de cada zona.
+              Los puntos ya están confirmados. La disponibilidad
+              se calcula con las respuestas actuales.
             </p>
 
             <div class="choice-group pickup-zone-grid">
               ${choicePill(
                 "pickupZone",
                 "capital-obelisco",
-                "Capital · Obelisco",
+                `Capital · Obelisco · ${
+                  transportSeatsLabel(
+                    capitalAvailability
+                  )
+                }`,
                 savedPickupZone,
                 savedTransport === "combi"
               )}
               ${choicePill(
                 "pickupZone",
                 "wilde",
-                "Wilde",
+                `Wilde · ${
+                  transportSeatsLabel(
+                    wildeAvailability
+                  )
+                }`,
                 savedPickupZone,
                 savedTransport === "combi"
               )}
               ${choicePill(
                 "pickupZone",
                 "longchamps",
-                "Longchamps",
+                `Longchamps · ${
+                  transportSeatsLabel(
+                    longchampsAvailability
+                  )
+                }`,
                 savedPickupZone,
                 savedTransport === "combi"
               )}
@@ -4973,11 +5346,71 @@
 
           <div class="rsvp-transport-modal-times">
             <article>
-              <span>${uiIcon("hourglass")}</span>
+              <span>${uiIcon("pin")}</span>
               <div>
-                <small>Salida estimada</small>
-                <strong>Entre 15:30 y 16:30</strong>
-                <p>El horario dependerá de la zona elegida.</p>
+                <small>Capital · Obelisco</small>
+                <strong>Estar 16:30</strong>
+                <p>
+                  Salida 16:45 · ${
+                    escapeHTML(
+                      transportSeatsLabel(
+                        capitalAvailability
+                      )
+                    )
+                  } · ${
+                    escapeHTML(
+                      transportCapacityDetail(
+                        capitalAvailability
+                      )
+                    )
+                  }.
+                </p>
+              </div>
+            </article>
+
+            <article>
+              <span>${uiIcon("pin")}</span>
+              <div>
+                <small>Longchamps · Barrio VIPLASTIC</small>
+                <strong>Estar 15:45</strong>
+                <p>
+                  Salida 16:00 · ${
+                    escapeHTML(
+                      transportSeatsLabel(
+                        longchampsAvailability
+                      )
+                    )
+                  } · ${
+                    escapeHTML(
+                      transportCapacityDetail(
+                        longchampsAvailability
+                      )
+                    )
+                  }.
+                </p>
+              </div>
+            </article>
+
+            <article>
+              <span>${uiIcon("pin")}</span>
+              <div>
+                <small>Wilde · Las Flores y Mitre</small>
+                <strong>Estar 16:15</strong>
+                <p>
+                  Salida 16:30 · ${
+                    escapeHTML(
+                      transportSeatsLabel(
+                        wildeAvailability
+                      )
+                    )
+                  } · ${
+                    escapeHTML(
+                      transportCapacityDetail(
+                        wildeAvailability
+                      )
+                    )
+                  }.
+                </p>
               </div>
             </article>
 
@@ -4992,8 +5425,8 @@
           </div>
 
           <p class="rsvp-transport-modal-note">
-            Los puntos y horarios definitivos se informarán
-            después del cierre del 15 de agosto.
+            Horarios y puntos confirmados. Para cambios de último
+            momento, consultá a los novios.
           </p>
 
           <button
@@ -5269,6 +5702,147 @@
     };
 
     return labels[value] || value || "";
+  }
+
+  function transportAvailabilitySnapshot() {
+    const counts = {
+      "capital-obelisco": 0,
+      "wilde": 0,
+      "longchamps": 0,
+      "sin-definir": 0
+    };
+
+    DATA.guests
+      .filter(isCompetitionGuest)
+      .forEach(guest => {
+        const rsvp = state.rsvps[guest.id];
+
+        if (
+          !hasCompletedRsvp(rsvp) ||
+          rsvp.attendance !== "si" ||
+          !["combi", "micro"].includes(
+            String(rsvp.transport || "")
+          )
+        ) {
+          return;
+        }
+
+        const zone = String(
+          rsvp.pickupZone || ""
+        );
+
+        if (
+          Object.prototype.hasOwnProperty.call(
+            TRANSPORT_CAPACITY_BY_ZONE,
+            zone
+          )
+        ) {
+          counts[zone] += 1;
+        } else {
+          counts["sin-definir"] += 1;
+        }
+      });
+
+    const zones = {};
+
+    Object.entries(
+      TRANSPORT_CAPACITY_BY_ZONE
+    ).forEach(([zone, capacity]) => {
+      const booked = Number(counts[zone] || 0);
+      const rawRemaining =
+        Number(capacity || 0) - booked;
+
+      zones[zone] = {
+        zone,
+        capacity: Number(capacity || 0),
+        booked,
+        remaining: Math.max(
+          0,
+          rawRemaining
+        ),
+        overbooked: Math.max(
+          0,
+          -rawRemaining
+        ),
+        full: rawRemaining <= 0
+      };
+    });
+
+    const totalRemaining =
+      Object.values(zones).reduce(
+        (sum, item) =>
+          sum + item.remaining,
+        0
+      );
+
+    return {
+      counts,
+      zones,
+      totalRemaining,
+      unassigned: counts["sin-definir"]
+    };
+  }
+
+  function transportSeatsLabel(item) {
+    if (!item) return "Sin información";
+
+    if (item.overbooked > 0) {
+      return `Excedido por ${
+        item.overbooked
+      } ${
+        item.overbooked === 1
+          ? "persona"
+          : "personas"
+      }`;
+    }
+
+    if (item.full) {
+      return "Completo";
+    }
+
+    return `${item.remaining} ${
+      item.remaining === 1
+        ? "lugar"
+        : "lugares"
+    }`;
+  }
+
+  function transportCapacityDetail(item) {
+    if (!item) return "";
+
+    return `${item.booked}/${item.capacity} ocupados`;
+  }
+
+  function transportAvailabilitySentence(
+    snapshot
+  ) {
+    const labels = {
+      "capital-obelisco": "Capital",
+      "wilde": "Wilde",
+      "longchamps": "Longchamps"
+    };
+
+    return Object.entries(snapshot.zones)
+      .map(([zone, item]) => {
+        const label = labels[zone] || zone;
+
+        if (item.overbooked > 0) {
+          return `${label} está excedido por ${item.overbooked}`;
+        }
+
+        if (item.full) {
+          return `${label} está completo`;
+        }
+
+        return `${label} tiene ${
+          item.remaining
+        } ${
+          item.remaining === 1
+            ? "lugar"
+            : "lugares"
+        }`;
+      })
+      .join(", ");
   }
 
   function rsvpThanksTitle(saved) {
@@ -6050,10 +6624,10 @@
       ? "MISIÓN CUMPLIDA"
       : "SUMÁ PUNTOS";
     const pointsTitle = currentGamesDone
-      ? "¡Completaste todos los desafíos!"
+      ? "¡Estás al día con los desafíos!"
       : "QUE EMPIECE LA COMPETENCIA";
     const pointsText = currentGamesDone
-      ? "Ahora sólo queda esperar nuevas misiones… o ir a Social a provocar un poco a los otros equipos."
+      ? "Ya completaste todo lo disponible. Próximamente se habilitan 2 desafíos nuevos."
       : "Completá desafíos, sumá puntos y ayudá a tu equipo a llegar a la cima.";
 
     return `
@@ -6200,19 +6774,32 @@
         </section>
       ` : ""}
 
-      ${
-        !currentGamesDone
-          ? `
-            <div class="points-coming-soon-note">
-              <span aria-hidden="true">🔒</span>
-              <strong>
-                Más juegos y actividades se habilitarán
-                más adelante.
-              </strong>
-            </div>
-          `
-          : ""
-      }
+      <section class="points-upcoming section-card">
+        <div class="points-upcoming-head">
+          <span>${uiIcon("lock")}</span>
+          <div>
+            <small>PRÓXIMAMENTE</small>
+            <strong>2 desafíos nuevos en camino</strong>
+            <p>
+              Todavía no se revelan. Se habilitarán más adelante
+              y pueden mover fuerte el ranking.
+            </p>
+          </div>
+        </div>
+
+        <div class="points-upcoming-grid">
+          <div>
+            <span>05</span>
+            <strong>Nuevo desafío</strong>
+            <small>Bloqueado</small>
+          </div>
+          <div>
+            <span>06</span>
+            <strong>Nuevo desafío</strong>
+            <small>Bloqueado</small>
+          </div>
+        </div>
+      </section>
     `;
   }
 
@@ -9289,6 +9876,9 @@
       pickupZoneCounts[key] += 1;
     });
 
+    const adminTransportAvailability =
+      transportAvailabilitySnapshot();
+
     const restrictionsCount = invitedGuests.filter(guest => {
       const rsvp = state.rsvps[guest.id];
       return (
@@ -9969,17 +10559,22 @@
           ${adminTransportZone(
             "Capital · Obelisco",
             pickupZoneCounts["capital-obelisco"],
-            "micro-capital"
+            "micro-capital",
+            adminTransportAvailability.zones[
+              "capital-obelisco"
+            ]
           )}
           ${adminTransportZone(
             "Wilde",
             pickupZoneCounts.wilde,
-            "micro-wilde"
+            "micro-wilde",
+            adminTransportAvailability.zones.wilde
           )}
           ${adminTransportZone(
             "Longchamps",
             pickupZoneCounts.longchamps,
-            "micro-longchamps"
+            "micro-longchamps",
+            adminTransportAvailability.zones.longchamps
           )}
           ${adminTransportZone(
             "Sin definir",
@@ -9989,8 +10584,12 @@
         </div>
 
         <small>
-          Los recorridos definitivos se pueden definir
-          después del cierre del 15 de agosto.
+          Disponibilidad automática según las respuestas:
+          ${escapeHTML(
+            transportAvailabilitySentence(
+              adminTransportAvailability
+            )
+          )}.
         </small>
       </section>
 
@@ -10075,7 +10674,8 @@
   function adminTransportZone(
     label,
     value,
-    listType = ""
+    listType = "",
+    availability = null
   ) {
     const tag = listType
       ? "button"
@@ -10093,7 +10693,26 @@
         }"
         ${attributes}>
         <span>${escapeHTML(label)}</span>
-        <strong>${Number(value || 0)}</strong>
+        <strong>
+          ${
+            availability
+              ? `${Number(
+                  availability.booked || 0
+                )}/${Number(
+                  availability.capacity || 0
+                )}`
+              : Number(value || 0)
+          }
+        </strong>
+        ${
+          availability
+            ? `<small>${escapeHTML(
+                transportSeatsLabel(
+                  availability
+                )
+              )}</small>`
+            : ""
+        }
         ${
           listType
             ? "<em>Ver personas</em>"
@@ -10379,6 +10998,103 @@
         } else {
           toast("No se pudo actualizar. Se muestran los últimos datos disponibles.");
         }
+      });
+    }
+
+    if (route === "traslado") {
+      $$("[data-join-transport-zone]").forEach(button => {
+        button.addEventListener("click", async () => {
+          if (button.disabled) return;
+
+          const zone = String(
+            button.dataset.joinTransportZone || ""
+          );
+          const label = String(
+            button.dataset.joinTransportLabel || ""
+          );
+
+          const rsvp =
+            state.rsvps[currentGuest.id] || {};
+
+          if (
+            rsvp.attendance !== "si" ||
+            !["particular", "auto", "sin-decidir"].includes(
+              String(rsvp.transport || "")
+            )
+          ) {
+            toast(
+              "Primero confirmá asistencia o revisá tu elección."
+            );
+            navigate("asistencia");
+            return;
+          }
+
+          button.disabled = true;
+          button.textContent = "Verificando lugar…";
+
+          const synced = await syncFromSheets(false);
+
+          if (!synced) {
+            button.disabled = false;
+            button.textContent = "Sumarme a este micro";
+            toast(
+              "No pudimos verificar la disponibilidad. Intentá nuevamente."
+            );
+            return;
+          }
+
+          const latestAvailability =
+            transportAvailabilitySnapshot();
+          const zoneAvailability =
+            latestAvailability.zones[zone];
+
+          if (
+            !zoneAvailability ||
+            zoneAvailability.remaining <= 0
+          ) {
+            renderCurrentRoute();
+            toast(
+              "Ese micro acaba de quedarse sin lugares. Elegí otra salida."
+            );
+            return;
+          }
+
+          const confirmed = window.confirm(
+            `¿Reservar un lugar en ${label}?\n\nTu traslado pasará a Micro / Combi.`
+          );
+
+          if (!confirmed) {
+            renderCurrentRoute();
+            return;
+          }
+
+          const latestRsvp =
+            state.rsvps[currentGuest.id] || rsvp;
+
+          const payload = {
+            ...latestRsvp,
+            guestId: currentGuest.id,
+            teamId: currentGuest.team,
+            attendance: "si",
+            transport: "combi",
+            pickupZone: zone,
+            updatedAt: new Date().toISOString()
+          };
+
+          const saved = await postToSheets(
+            "saveRsvp",
+            payload
+          );
+
+          if (saved) {
+            toast(
+              `¡Listo! Te anotaste en ${label}.`
+            );
+          } else {
+            await syncFromSheets(false);
+            renderCurrentRoute();
+          }
+        });
       });
     }
 
@@ -11849,7 +12565,7 @@
             text:
               "Google Sheets no confirmó el reset.",
             detail:
-              `${state.lastRemoteError} Publicá Code.gs v32502 y volvé a intentar.`
+              `${state.lastRemoteError} Publicá Code.gs v32511 y volvé a intentar.`
           });
         }
       }

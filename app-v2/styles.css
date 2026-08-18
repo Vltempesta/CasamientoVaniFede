@@ -10854,7 +10854,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Regalos simplificado y hero azul
+   v32511 · Regalos simplificado y hero azul
    ============================================================ */
 
 .gift-hero {
@@ -10900,7 +10900,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Menú, identidad y tipografías
+   v32511 · Menú, identidad y tipografías
    ============================================================ */
 
 #mainScreen .topbar-identity {
@@ -11052,7 +11052,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Textos amigables y botones dorados legibles
+   v32511 · Textos amigables y botones dorados legibles
    ============================================================ */
 
 #loginButton,
@@ -11113,7 +11113,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Sumá puntos, progreso y botones
+   v32511 · Sumá puntos, progreso y botones
    ============================================================ */
 
 /* Encabezado de Sumá puntos con fondo bordó */
@@ -11217,7 +11217,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Bloqueados visibles y Social
+   v32511 · Bloqueados visibles y Social
    ============================================================ */
 
 /* Ubicación y En viaje quedan visibles en el menú aunque estén bloqueados */
@@ -11303,7 +11303,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Estados sutiles y capitanes con contraste
+   v32511 · Estados sutiles y capitanes con contraste
    ============================================================ */
 
 #view .guest-pill.captain-pill {
@@ -11412,7 +11412,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Capitanes, acordeón y Mi equipo
+   v32511 · Capitanes, acordeón y Mi equipo
    ============================================================ */
 
 /* El icono queda centrado respecto de toda la tarjeta */
@@ -11513,7 +11513,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Íconos de asistencia geométricamente centrados
+   v32511 · Íconos de asistencia geométricamente centrados
    ============================================================ */
 
 #view .guest-attendance-status {
@@ -11547,7 +11547,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Roles visibles y traslado pendiente
+   v32511 · Roles visibles y traslado pendiente
    ============================================================ */
 
 /* Rol debajo del nombre en Los seis equipos */
@@ -11660,7 +11660,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Asistencia optimizada
+   v32511 · Asistencia optimizada
    ============================================================ */
 
 /* Ritmo vertical consistente entre los campos */
@@ -11896,7 +11896,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Inicio, aporte personal, menú y ubicación
+   v32511 · Inicio, aporte personal, menú y ubicación
    ============================================================ */
 
 #view .home-gifts-plane-emoji {
@@ -11972,7 +11972,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Puntajes, RSVP y actividad de Regalos
+   v32511 · Puntajes, RSVP y actividad de Regalos
    ============================================================ */
 
 /* Inicio más limpio */
@@ -12248,7 +12248,7 @@ html[data-app-updating="true"] {
 
 
 /* ============================================================
-   v32508 · Modal de Traslado y Regalos compactos
+   v32511 · Modal de Traslado y Regalos compactos
    ============================================================ */
 
 /* Cartel de recomendación de traslado */
@@ -12615,7 +12615,7 @@ body.rsvp-transport-modal-open {
 
 
 /* ============================================================
-   v32508 · Administración consolidada
+   v32511 · Administración consolidada
    ============================================================ */
 
 #view .admin-transport-overview {
@@ -13193,4 +13193,318 @@ summary > b {
   #view .admin-response-field-grid {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* ============================================================
+   v32511 · Traslados confirmados + próximos desafíos
+   ============================================================ */
+
+#view .home-micro-update{
+  width:100%;
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr) 12px;
+  gap:9px;
+  align-items:center;
+  margin-top:8px;
+  padding:9px 11px;
+  border:1px solid rgba(49,83,110,.14);
+  border-radius:13px;
+  background:linear-gradient(
+    135deg,
+    rgba(49,83,110,.045),
+    rgba(255,255,255,.64)
+  );
+  color:#31536e;
+  text-align:left;
+  box-shadow:none;
+}
+#view .home-micro-update-icon{
+  width:33px;
+  height:33px;
+  display:grid;
+  place-items:center;
+  border-radius:10px;
+  background:rgba(49,83,110,.085);
+}
+#view .home-micro-update-icon .ui-icon{
+  width:18px;
+  height:18px;
+}
+#view .home-micro-update strong,
+#view .home-micro-update small{
+  display:block;
+}
+#view .home-micro-update strong{
+  font-size:9.5px;
+}
+#view .home-micro-update small{
+  margin-top:2px;
+  color:#64788a;
+  font-size:7.5px;
+  line-height:1.25;
+}
+#view .home-micro-update>b{
+  font-size:17px;
+}
+#view .home-essential-location-particular .home-essential-icon{
+  background:rgba(180,134,62,.10);
+  color:#9a6e2f;
+}
+#view .home-essential-location-micro .home-essential-icon{
+  background:rgba(49,83,110,.08);
+  color:#31536e;
+}
+
+#view .points-upcoming{
+  margin-top:9px;
+  padding:11px;
+  border-style:dashed;
+  border-color:rgba(116,51,68,.18);
+  background:linear-gradient(
+    135deg,
+    rgba(116,51,68,.035),
+    rgba(255,253,248,.82)
+  );
+}
+#view .points-upcoming-head{
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr);
+  gap:9px;
+  align-items:start;
+}
+#view .points-upcoming-head>span{
+  width:33px;
+  height:33px;
+  display:grid;
+  place-items:center;
+  border-radius:10px;
+  background:rgba(116,51,68,.08);
+  color:#743344;
+}
+#view .points-upcoming-head>span .ui-icon{
+  width:17px;
+  height:17px;
+}
+#view .points-upcoming-head small{
+  display:block;
+  color:var(--gold-deep);
+  font-size:6.5px;
+  font-weight:950;
+  letter-spacing:.09em;
+}
+#view .points-upcoming-head strong{
+  display:block;
+  margin-top:1px;
+  font-size:12px;
+}
+#view .points-upcoming-head p{
+  margin:3px 0 0;
+  color:var(--muted);
+  font-size:8px;
+  line-height:1.35;
+}
+#view .points-upcoming-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px;
+  margin-top:8px;
+}
+#view .points-upcoming-grid>div{
+  display:grid;
+  grid-template-columns:25px minmax(0,1fr) auto;
+  gap:6px;
+  align-items:center;
+  padding:7px 8px;
+  border:1px solid rgba(116,51,68,.10);
+  border-radius:10px;
+  background:rgba(255,255,255,.38);
+}
+#view .points-upcoming-grid>div>span{
+  width:24px;
+  height:24px;
+  display:grid;
+  place-items:center;
+  border-radius:8px;
+  background:rgba(116,51,68,.07);
+  color:#743344;
+  font-size:7px;
+  font-weight:950;
+}
+#view .points-upcoming-grid strong{
+  font-size:8.5px;
+}
+#view .points-upcoming-grid small{
+  color:var(--muted);
+  font-size:6.5px;
+  font-weight:850;
+}
+
+@media(max-width:520px){
+  #view .points-upcoming-grid{
+    grid-template-columns:1fr;
+  }
+}
+
+
+/* ============================================================
+   v32511 · Disponibilidad dinámica de micros
+   ============================================================ */
+
+#view .transport-zone-availability{
+  flex-wrap:wrap;
+}
+#view .transport-zone-availability small{
+  margin-left:auto;
+  color:var(--muted);
+  font-size:6.5px;
+  font-weight:800;
+}
+#view .transport-zone-availability.is-full small{
+  color:#8b6a70;
+}
+#view .admin-transport-zone>small{
+  display:block;
+  margin-top:2px;
+  color:var(--muted);
+  font-size:6.5px;
+  font-weight:800;
+}
+
+
+/* ============================================================
+   v32511 · Nuevo plazo + reserva directa de micros
+   ============================================================ */
+
+#view .home-pending-transport{
+  width:100%;
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr) 12px;
+  gap:9px;
+  align-items:center;
+  margin-top:8px;
+  padding:9px 11px;
+  border:1px solid rgba(49,83,110,.14);
+  border-radius:13px;
+  background:linear-gradient(
+    135deg,
+    rgba(49,83,110,.045),
+    rgba(255,255,255,.66)
+  );
+  color:#31536e;
+  text-align:left;
+  box-shadow:none;
+}
+#view .home-pending-transport>span:first-child{
+  width:33px;
+  height:33px;
+  display:grid;
+  place-items:center;
+  border-radius:10px;
+  background:rgba(49,83,110,.08);
+}
+#view .home-pending-transport .ui-icon{
+  width:18px;
+  height:18px;
+}
+#view .home-pending-transport strong,
+#view .home-pending-transport small{
+  display:block;
+}
+#view .home-pending-transport strong{
+  font-size:9.5px;
+}
+#view .home-pending-transport small{
+  margin-top:2px;
+  color:#64788a;
+  font-size:7.5px;
+  line-height:1.25;
+}
+#view .home-pending-transport>b{
+  font-size:17px;
+}
+
+#view .transport-pending-deadline{
+  display:grid;
+  grid-template-columns:38px minmax(0,1fr);
+  gap:10px;
+  align-items:start;
+  margin-top:8px;
+  padding:11px;
+  border-color:rgba(180,134,62,.20);
+  background:linear-gradient(
+    135deg,
+    rgba(223,190,112,.08),
+    rgba(255,253,248,.92)
+  );
+}
+#view .transport-pending-deadline>span{
+  width:36px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  border-radius:11px;
+  background:rgba(180,134,62,.10);
+  color:#946827;
+}
+#view .transport-pending-deadline .ui-icon{
+  width:19px;
+  height:19px;
+}
+#view .transport-pending-deadline small{
+  display:block;
+  color:var(--gold-deep);
+  font-size:6.5px;
+  font-weight:950;
+  letter-spacing:.08em;
+}
+#view .transport-pending-deadline strong{
+  display:block;
+  margin-top:1px;
+  font-size:12px;
+}
+#view .transport-pending-deadline p{
+  margin:3px 0 7px;
+  color:var(--muted);
+  font-size:8px;
+  line-height:1.35;
+}
+#view .transport-pending-deadline button{
+  min-height:32px;
+  padding:6px 10px;
+  font-size:8px;
+}
+
+#view .transport-zone-join{
+  width:100%;
+  min-height:34px;
+  margin-top:8px;
+  padding:7px 9px;
+  border-radius:10px;
+  background:linear-gradient(135deg,#31536e,#243f55);
+  color:#fff;
+  font-size:8px;
+  font-weight:950;
+  box-shadow:none;
+}
+#view .transport-zone-join:disabled{
+  opacity:.48;
+  cursor:not-allowed;
+}
+#view .transport-zone-current{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  margin-top:8px;
+  padding:7px 8px;
+  border-radius:10px;
+  background:rgba(74,125,79,.08);
+  color:#426f47;
+  font-size:7.5px;
+  font-weight:950;
+}
+#view .transport-zone-current .ui-icon{
+  width:14px;
+  height:14px;
 }
