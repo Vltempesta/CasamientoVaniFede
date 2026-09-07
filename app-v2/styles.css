@@ -13511,7 +13511,7 @@ summary > b {
 
 
 /* ============================================================
-   v32512 · UX limpia + tipografía accesible
+   v32513 · UX limpia + tipografía accesible
    ============================================================ */
 #view .eyebrow{font-size:10px!important;line-height:1.2!important;letter-spacing:.09em!important}
 #view .section-head h3{font-size:clamp(29px,6vw,38px)!important;line-height:1.04!important}

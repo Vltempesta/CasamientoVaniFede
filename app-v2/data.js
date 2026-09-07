@@ -1,5 +1,5 @@
 window.WEDDING_APP_DATA = {
-  "appVersion": "Real v2.4 · Roles + puntos equilibrados",
+  "appVersion": "Real v2.4.1 · Comunidad sin ausentes",
   "couple": {
     "bride": "Vani",
     "groom": "Fede",

@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32512";
+  const CURRENT_APP_VERSION = "32513";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -408,7 +408,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32512"
+        appVersion: CONFIG.APP_VERSION || "32513"
       })
     );
   }
@@ -844,6 +844,14 @@
     return DATA.guests.filter(guest => guest.team === teamId && isCompetitionGuest(guest));
   }
 
+  // En las vistas sociales de equipos ocultamos a quienes respondieron que NO asisten.
+  // Los pendientes siguen visibles hasta que den una respuesta definitiva.
+  function isVisibleTeamCommunityGuest(guest) {
+    if (!isCompetitionGuest(guest)) return false;
+    const rsvp = state.rsvps[guest.id] || {};
+    return rsvp.attendance !== "no";
+  }
+
   function teamSizeForPoints(teamId) {
     return teamCompetitionMembers(teamId).length || 1;
   }
@@ -985,7 +993,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32512",
+      appVersion: "32513",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -5728,7 +5736,7 @@
     const selectedTeamId = selectedTeamViewId || currentGuest.team;
     const team = getTeam(selectedTeamId);
     const members = DATA.guests
-      .filter(guest => guest.team === team.id && isCompetitionGuest(guest))
+      .filter(guest => guest.team === team.id && isVisibleTeamCommunityGuest(guest))
       .sort((a, b) => {
         const captainDiff =
           Number(isGuestCaptain(b)) -
@@ -7370,7 +7378,7 @@
     const myTeamMembers = DATA.guests.filter(
       guest =>
         guest.team === myTeam.id &&
-        isCompetitionGuest(guest)
+        isVisibleTeamCommunityGuest(guest)
     ).length;
 
     return `
@@ -7629,7 +7637,7 @@
       guests: DATA.guests
         .filter(guest =>
           guest.team === team.id &&
-          isCompetitionGuest(guest)
+          isVisibleTeamCommunityGuest(guest)
         )
         .sort(sortGuestsForDisplay)
     }));
