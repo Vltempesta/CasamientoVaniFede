@@ -1,5 +1,5 @@
 window.WEDDING_APP_DATA = {
-  "appVersion": "Real v2.4.1 · Comunidad sin ausentes",
+  "appVersion": "Real v2.5 · Ruleta + Guerra",
   "couple": {
     "bride": "Vani",
     "groom": "Fede",
@@ -2171,6 +2171,51 @@ window.WEDDING_APP_DATA = {
       ],
       "roleVisible": "Amigo",
       "displayRelation": "Amigo"
+    },
+    {
+      "id": "matias-climente",
+      "firstName": "Matias",
+      "lastName": "Climente",
+      "email": "",
+      "alias": "Matias",
+      "relation": "Invitado",
+      "team": "bosque",
+      "role": "invitado",
+      "tags": [
+        "bosque"
+      ],
+      "roleVisible": "Invitado",
+      "displayRelation": "Invitado"
+    },
+    {
+      "id": "lautaro-duarte",
+      "firstName": "Lautaro",
+      "lastName": "Duarte",
+      "email": "",
+      "alias": "Lautaro",
+      "relation": "Invitado",
+      "team": "bosque",
+      "role": "invitado",
+      "tags": [
+        "bosque"
+      ],
+      "roleVisible": "Invitado",
+      "displayRelation": "Invitado"
+    },
+    {
+      "id": "felipe-molinare",
+      "firstName": "Felipe",
+      "lastName": "Molinare",
+      "email": "",
+      "alias": "Felipe",
+      "relation": "Invitado",
+      "team": "viento",
+      "role": "invitado",
+      "tags": [
+        "viento"
+      ],
+      "roleVisible": "Invitado",
+      "displayRelation": "Invitado"
     }
   ],
   "games": [
@@ -2236,6 +2281,33 @@ window.WEDDING_APP_DATA = {
       "unlockKey": "battle",
       "maxPoints": 90,
       "description": "Encontrar personajes, secretos y escenas de la noche."
+    },
+    {
+      "id": "roulette-risk-v1",
+      "phase": "Torneo previo",
+      "title": "Ruleta · Todo o Nada",
+      "type": "Digital",
+      "unlockKey": "game-roulette",
+      "maxPoints": 0,
+      "description": "Una tirada por persona con opción Doble o Nada / Recupero."
+    },
+    {
+      "id": "war-strategy-v1",
+      "phase": "Torneo previo",
+      "title": "Guerra de Equipos",
+      "type": "Digital grupal",
+      "unlockKey": "game-war",
+      "maxPoints": 1400,
+      "description": "Dos rondas de Sumar, Atacar o Defender con objetivos libres y botín según ranking."
+    },
+    {
+      "id": "during-trip-final",
+      "phase": "Viaje",
+      "title": "Durante el viaje",
+      "type": "Digital",
+      "unlockKey": "game-travel-final",
+      "maxPoints": 0,
+      "description": "Juego final bloqueado. Se definirá más adelante."
     }
   ],
   "bracket": {
