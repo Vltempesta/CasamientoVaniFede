@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32521";
+  const CURRENT_APP_VERSION = "32522";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32521"
+        appVersion: CONFIG.APP_VERSION || "32522"
       })
     );
   }
@@ -1032,7 +1032,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32521",
+      appVersion: "32522",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -3066,16 +3066,16 @@
   const PRE_EVENT_SEQUENCE_GUEST_ID = "system-pre-event-sequence";
   const PRE_EVENT_STAGE_MS = 48 * 60 * 60 * 1000;
 
-  // Ruleta v32521: 7 positivos, 4 negativos y 1 cero (12 casilleros equiprobables).
-  // La dificultad queda en la decisión posterior; la expectativa total se mantiene ~800 pts por equipo.
+  // Ruleta v32522: 8 positivos y 4 negativos (12 casilleros equiprobables, sin cero).
+  // Se mantiene la expectativa total ~800 pts por equipo, y el diseño/UX de la rueda permanecen iguales.
   // Orden visual: los negativos quedan espaciados para evitar bloques de color y mejorar lectura.
   const ROULETTE_VALUES_BY_TEAM = {
-    bosque: [-60, 40, 125, -35, 75, 0, -20, 170, 55, -10, 95, 20],
-    fuego: [-55, 35, 105, -30, 65, 0, -15, 150, 50, -5, 85, 15],
-    luz: [-75, 55, 165, -45, 100, 0, -25, 210, 75, -10, 125, 25],
-    noche: [-85, 60, 185, -50, 115, 0, -30, 245, 85, -15, 145, 30],
-    agua: [-65, 45, 145, -35, 85, 0, -20, 195, 65, -10, 110, 20],
-    viento: [-60, 45, 135, -35, 80, 0, -20, 185, 60, -10, 105, 20]
+    bosque: [-60, 40, 125, -35, 75, 10, -20, 160, 55, -10, 95, 20],
+    fuego: [-55, 35, 105, -30, 65, 10, -15, 140, 50, -5, 85, 15],
+    luz: [-75, 55, 165, -45, 100, 10, -25, 200, 75, -10, 125, 25],
+    noche: [-85, 60, 185, -50, 115, 10, -30, 235, 85, -15, 145, 30],
+    agua: [-65, 45, 145, -35, 85, 10, -20, 185, 65, -10, 110, 20],
+    viento: [-60, 45, 135, -35, 80, 10, -20, 175, 60, -10, 105, 20]
   };
 
   function manualGameFlag(key) {
@@ -7073,9 +7073,8 @@
         </div>
       </div>
       <div class="roulette-legend" aria-label="Probabilidades de la ruleta">
-        <span class="is-positive"><i></i>7 SUMAN</span>
+        <span class="is-positive"><i></i>8 SUMAN</span>
         <span class="is-negative"><i></i>4 RESTAN</span>
-        <span class="is-zero"><i></i>1 CERO</span>
       </div>
     `;
   }

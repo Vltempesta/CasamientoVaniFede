@@ -1,5 +1,5 @@
 window.WEDDING_APP_DATA = {
-  "appVersion": "Real v2.6 · Ruleta UX + Guerra estratégica",
+  "appVersion": "Real v2.6 · Ruleta UX sin cero + Guerra estratégica",
   "couple": {
     "bride": "Vani",
     "groom": "Fede",
