@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32517";
+  const CURRENT_APP_VERSION = "32518";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -59,6 +59,10 @@
   let fullSyncInFlight = null;
   let lastUnlockSyncAttemptAt = 0;
   let countdownTimer = null;
+  let timedCompetitionInterval = null;
+  let timedResolutionInFlight = false;
+  let timedStageUiSignature = "";
+  let warRoundViewOverride = null;
 
   const UNLOCK_SYNC_INTERVAL_MS = 30000;
   const UNLOCK_SYNC_MIN_GAP_MS = 4000;
@@ -408,7 +412,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32517"
+        appVersion: CONFIG.APP_VERSION || "32518"
       })
     );
   }
@@ -993,7 +997,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32517",
+      appVersion: "32518",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -1978,12 +1982,14 @@
     window.addEventListener("focus", () => {
       syncUnlocksWhenAppReturns();
       checkVersionWhenAppReturns();
+      void ensureTimedCompetitionState();
     });
 
     window.addEventListener("online", () => {
       syncUnlocksWhenAppReturns();
       checkVersionWhenAppReturns();
       retryPendingWrites();
+      void ensureTimedCompetitionState();
     });
 
     window.addEventListener("pageshow", () => {
@@ -1994,9 +2000,11 @@
       if (document.visibilityState === "visible") {
         syncUnlocksWhenAppReturns();
         checkVersionWhenAppReturns();
+        void ensureTimedCompetitionState();
       }
     });
     startUnlockAutoSync();
+    startTimedCompetitionWatcher();
 
     if (state.currentGuestId) {
       const guest = getGuestById(state.currentGuestId);
@@ -2403,13 +2411,17 @@
       route = "asistencia";
     }
 
-    if (route === "ruleta" && !isTriviaGameOpen("game-roulette")) {
-      toast("La Ruleta todavía está bloqueada.");
+    const requestedWarRound = warRoundViewOverride || warRoundNumber();
+    const requestedWarStage = requestedWarRound === 2 ? "war2" : "war1";
+    const rouletteTiming = timedStageStatus("roulette");
+    if (route === "ruleta" && !rouletteTiming.active && !rouletteSubmissionFor(currentGuest?.id)) {
+      toast(rouletteTiming.expired ? "La Ruleta ya finalizó." : "La Ruleta todavía está bloqueada.");
       route = "puntos";
     }
 
-    if (route === "guerra" && !isTriviaGameOpen("game-war")) {
-      toast("La Guerra de Equipos todavía está bloqueada.");
+    const requestedWarTiming = timedStageStatus(requestedWarStage);
+    if (route === "guerra" && !requestedWarTiming.active && !warRoundRevealed(requestedWarRound)) {
+      toast(requestedWarTiming.expired ? `La Ronda ${requestedWarRound} terminó y se está procesando.` : `La Ronda ${requestedWarRound} todavía está bloqueada.`);
       route = "puntos";
     }
 
@@ -2982,17 +2994,127 @@
   const WAR_SUM_POINTS = 300;
   const WAR_BLOCKED_PENALTY = -150;
   const WAR_DEFEND_REWARD = 150;
+  const PRE_EVENT_SEQUENCE_GAME_ID = "pre-event-timed-sequence-v1";
+  const PRE_EVENT_SEQUENCE_GUEST_ID = "system-pre-event-sequence";
+  const PRE_EVENT_STAGE_MS = 48 * 60 * 60 * 1000;
 
-  // Calibradas para que, con el plantel actual completo, la expectativa
-  // de la Ruleta quede cerca de 800 puntos por equipo.
+  // Más exigente: 4 negativos, 1 cero y 7 positivos.
+  // Aun así, la expectativa total se mantiene cerca de 800 pts por equipo.
   const ROULETTE_VALUES_BY_TEAM = {
-    bosque: [-45, -15, 15, 35, 45, 60, 90, 120],
-    fuego: [-40, -10, 15, 30, 40, 55, 80, 95],
-    luz: [-55, -15, 20, 40, 50, 70, 105, 140],
-    noche: [-60, -15, 20, 40, 55, 75, 110, 150],
-    agua: [-45, -15, 15, 35, 45, 60, 95, 130],
-    viento: [-40, -10, 15, 30, 35, 45, 70, 100]
+    bosque: [-50, -30, -15, -5, 0, 20, 35, 55, 75, 95, 125, 150],
+    fuego: [-50, -30, -15, -5, 0, 15, 30, 50, 70, 90, 110, 135],
+    luz: [-70, -40, -20, -10, 0, 25, 50, 75, 100, 130, 170, 190],
+    noche: [-80, -45, -25, -10, 0, 30, 55, 80, 115, 150, 190, 225],
+    agua: [-60, -35, -20, -10, 0, 20, 45, 65, 90, 120, 145, 175],
+    viento: [-55, -35, -15, -5, 0, 20, 40, 60, 85, 110, 140, 160]
   };
+
+  function manualGameFlag(key) {
+    if (Object.prototype.hasOwnProperty.call(state.manualUnlocks || {}, key)) {
+      return state.manualUnlocks[key] === true || String(state.manualUnlocks[key]).toUpperCase() === "TRUE";
+    }
+    return Boolean(TRIVIA_GAME_DEFAULTS[key]);
+  }
+
+  function preEventSequenceRecord() {
+    const raw = gameSubmissionFor(PRE_EVENT_SEQUENCE_GUEST_ID, PRE_EVENT_SEQUENCE_GAME_ID);
+    if (!raw) return null;
+    const data = safeJsonObject(raw.answer);
+    const activatedAt = data.activatedAt || raw.activatedAt || raw.updatedAt || raw.submittedAt || "";
+    const start = new Date(activatedAt).getTime();
+    if (!Number.isFinite(start) || start <= 0) return null;
+    return { raw, data, start };
+  }
+
+  function preEventSequenceSchedule() {
+    const record = preEventSequenceRecord();
+    if (!record) return null;
+    const rouletteStart = record.start;
+    const rouletteEnd = rouletteStart + PRE_EVENT_STAGE_MS;
+    const war1Start = rouletteEnd;
+    const war1End = war1Start + PRE_EVENT_STAGE_MS;
+    const war2Start = war1End;
+    const war2End = war2Start + PRE_EVENT_STAGE_MS;
+    return { rouletteStart, rouletteEnd, war1Start, war1End, war2Start, war2End };
+  }
+
+  function timedStageStatus(stage, now = Date.now()) {
+    const schedule = preEventSequenceSchedule();
+    const launched = manualGameFlag("game-roulette");
+    if (!schedule || !launched) {
+      return { stage, state: "locked", active: false, expired: false, startsAt: 0, endsAt: 0, remainingMs: 0 };
+    }
+    const ranges = {
+      roulette: [schedule.rouletteStart, schedule.rouletteEnd],
+      war1: [schedule.war1Start, schedule.war1End],
+      war2: [schedule.war2Start, schedule.war2End]
+    };
+    const [startsAt, endsAt] = ranges[stage] || [0, 0];
+    const stateName = now < startsAt ? "waiting" : now < endsAt ? "active" : "expired";
+    return {
+      stage,
+      state: stateName,
+      active: stateName === "active",
+      expired: stateName === "expired",
+      startsAt,
+      endsAt,
+      remainingMs: Math.max(0, (stateName === "waiting" ? startsAt : endsAt) - now)
+    };
+  }
+
+  function formatTimedStageRemaining(ms) {
+    const totalMinutes = Math.max(0, Math.ceil(Number(ms || 0) / 60000));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours >= 24) {
+      const days = Math.floor(hours / 24);
+      return `${days}d ${hours % 24}h`;
+    }
+    return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  }
+
+  function timedStageChip(stage) {
+    const status = timedStageStatus(stage);
+    if (status.state === "active") return `⏱️ Vence en ${formatTimedStageRemaining(status.remainingMs)}`;
+    if (status.state === "waiting") return `🔒 Abre en ${formatTimedStageRemaining(status.remainingMs)}`;
+    if (status.state === "expired") return "Tiempo finalizado";
+    return "Bloqueado";
+  }
+
+  function anyTimedPreEventStageActive() {
+    return ["roulette", "war1", "war2"].some(stage => timedStageStatus(stage).active);
+  }
+
+  async function startTimedPreEventSequence() {
+    if (!state.adminUnlocked || !currentGuest) return false;
+    const nowIso = new Date().toISOString();
+    const answer = {
+      activatedAt: nowIso,
+      durationHoursPerStage: 48,
+      mode: "roulette-war1-war2"
+    };
+    const payload = {
+      gameId: PRE_EVENT_SEQUENCE_GAME_ID,
+      guestId: PRE_EVENT_SEQUENCE_GUEST_ID,
+      teamId: "system",
+      answer: JSON.stringify(answer),
+      comment: "Secuencia automática: Ruleta 48h → Guerra R1 48h → Guerra R2 48h",
+      earnedPoints: 0,
+      status: "active",
+      activatedAt: nowIso,
+      updatedAt: nowIso,
+      requestId: newRequestId("pre-event-sequence")
+    };
+    const result = await writeToSheets("saveGameSubmission", payload, { silent: true, allowPreview: true });
+    if (!result) return false;
+    state.gameSubmissions[`${PRE_EVENT_SEQUENCE_GUEST_ID}::${PRE_EVENT_SEQUENCE_GAME_ID}`] = {
+      ...payload,
+      ...(result.record || {}),
+      pendingSync: false
+    };
+    saveState();
+    return true;
+  }
 
 
   const SECTION_DEFINITIONS = [
@@ -3913,10 +4035,10 @@
 
 
   function isTriviaGameOpen(key) {
-    if (Object.prototype.hasOwnProperty.call(state.manualUnlocks || {}, key)) {
-      return state.manualUnlocks[key] === true || state.manualUnlocks[key] === "TRUE";
-    }
-    return Boolean(TRIVIA_GAME_DEFAULTS[key]);
+    if (key === "game-roulette") return timedStageStatus("roulette").active;
+    if (key === "game-war") return timedStageStatus("war1").active;
+    if (key === "game-war-r2") return timedStageStatus("war2").active;
+    return manualGameFlag(key);
   }
 
   function triviaSubmission(gameId) {
@@ -4153,8 +4275,8 @@
   }
 
   function warRoundEnabled(round) {
-    if (Number(round) === 1) return isTriviaGameOpen("game-war");
-    return isTriviaGameOpen("game-war-r2") && warRoundRevealed(1);
+    if (Number(round) === 1) return timedStageStatus("war1").active;
+    return timedStageStatus("war2").active && warRoundRevealed(1);
   }
 
   function warVoteForGuest(guestId, round) {
@@ -4300,8 +4422,8 @@
     const whoTriviaDone = Boolean(
       triviaSubmission("who-is-who-trivia-test")
     );
-    const rouletteOpen = isTriviaGameOpen("game-roulette");
-    const warOpen = isTriviaGameOpen("game-war");
+    const rouletteOpen = timedStageStatus("roulette").active;
+    const warOpen = timedStageStatus("war1").active || timedStageStatus("war2").active;
     const newGamesActive = rouletteOpen || warOpen;
     const rouletteDone = rouletteSubmissionFor(currentGuest.id)?.status === "completed";
     const warDone = warRoundRevealed(2);
@@ -6806,29 +6928,33 @@
   function rouletteWheelMarkup(teamId) {
     const team = getTeam(teamId);
     const values = ROULETTE_VALUES_BY_TEAM[teamId] || ROULETTE_VALUES_BY_TEAM.viento;
-    const positivePalette = ["#6f9275", "#668a6d", "#5d8265", "#547a5e", "#4b7256", "#426a4f"];
-    const negativePalette = ["#a65f64", "#7f3f4d"];
+    const positivePalette = ["#5d8066", "#55775f", "#4d7058", "#456950", "#3f624a", "#365b43", "#31553e"];
+    const negativePalette = ["#8f4855", "#7a3948", "#692f40", "#572638"];
+    const zeroColor = "#566879";
     let positiveIndex = 0;
     let negativeIndex = 0;
     const segmentSize = 100 / values.length;
+    const startAngle = -(180 / values.length);
     const gradient = values.map((value, index) => {
       const color = value < 0
         ? negativePalette[Math.min(negativeIndex++, negativePalette.length - 1)]
-        : positivePalette[Math.min(positiveIndex++, positivePalette.length - 1)];
+        : value > 0
+          ? positivePalette[Math.min(positiveIndex++, positivePalette.length - 1)]
+          : zeroColor;
       return `${color} ${(index * segmentSize).toFixed(4)}% ${((index + 1) * segmentSize).toFixed(4)}%`;
     }).join(",");
 
     return `
       <div class="new-roulette-stage" style="--local-accent:${team.accent}">
         <span class="new-roulette-pointer" aria-hidden="true"></span>
-        <div id="newRouletteWheel" class="new-roulette-wheel" style="background:conic-gradient(from -22.5deg,${gradient})">
+        <div id="newRouletteWheel" class="new-roulette-wheel" style="background:conic-gradient(from ${startAngle}deg,${gradient})">
           ${values.map((value, index) => {
             const angle = index * (360 / values.length);
             const radians = angle * Math.PI / 180;
-            const x = 50 + Math.sin(radians) * 38;
-            const y = 50 - Math.cos(radians) * 38;
+            const x = 50 + Math.sin(radians) * 39;
+            const y = 50 - Math.cos(radians) * 39;
             return `
-              <span class="new-roulette-label ${value < 0 ? "is-negative" : "is-positive"}" style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%">
+              <span class="new-roulette-label ${value < 0 ? "is-negative" : value > 0 ? "is-positive" : "is-zero"}" style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%">
                 <b>${value > 0 ? "+" : ""}${value}</b>
               </span>
             `;
@@ -6841,6 +6967,7 @@
       </div>
     `;
   }
+
 
   function rouletteDecisionCopy(baseResult) {
     if (baseResult > 0) {
@@ -6859,8 +6986,10 @@
   }
 
   function renderRouletteGame() {
-    if (!isTriviaGameOpen("game-roulette")) {
-      return newGameLockedCard("Ruleta · Todo o Nada", "Vani y Fede todavía no habilitaron este juego.");
+    const rouletteStage = timedStageStatus("roulette");
+    const existingResult = rouletteSubmissionFor(currentGuest?.id);
+    if (!rouletteStage.active && !existingResult) {
+      return newGameLockedCard("Ruleta · Todo o Nada", rouletteStage.expired ? "El plazo de 48 horas terminó. La competencia continúa con Guerra de Equipos." : "Vani y Fede todavía no habilitaron este juego.");
     }
     if (!currentGuestCanPlayNewGames()) {
       return newGameLockedCard("Ruleta · Todo o Nada", "Este juego se habilita para quienes confirmaron que asisten.");
@@ -6879,8 +7008,8 @@
         <button type="button" class="new-game-back" data-go="puntos">‹ Sumá puntos</button>
         <section class="section-card new-game-hero" style="--local-accent:${team.accent}">
           <div class="new-game-hero-logo">${teamLogo(team, "new-game-team-logo")}</div>
-          <div><p class="eyebrow">Desafío 05 · ${escapeHTML(team.name)}</p><h3>🎡 Ruleta · Todo o Nada</h3><p>Girás una vez y después decidís cuánto riesgo querés asumir.</p></div>
-          <span class="new-game-status-chip">${played}/${participants.length} jugaron</span>
+          <div><p class="eyebrow">RULETA · ${escapeHTML(team.name)}</p><h3>🎡 Ruleta · Todo o Nada</h3><p>Girás una vez y después decidís cuánto riesgo querés asumir.</p></div>
+          <span class="new-game-status-chip ${rouletteStage.active ? "is-open" : ""}">${rouletteStage.active ? escapeHTML(timedStageChip("roulette")) : `${played}/${participants.length} jugaron`}</span>
         </section>
 
         <section class="section-card new-roulette-card">
@@ -6891,7 +7020,7 @@
             </div>
             <div class="roulette-team-next-note">
               <span>⏳</span>
-              <div><strong>Ahora depende de todo tu equipo</strong><p>Cuando todos los integrantes de ${escapeHTML(team.name)} terminen la Ruleta, se habilitará el próximo juego.</p></div>
+              <div><strong>Tu parte ya está hecha</strong><p>La Ruleta queda abierta durante 48 horas. Cuando venza, la Ronda 1 de Guerra de Equipos se habilitará automáticamente.</p></div>
             </div>
           ` : pendingBase !== null ? `
             <div class="new-roulette-decision">
@@ -6943,10 +7072,82 @@
     window.setTimeout(() => { overlay.classList.remove("is-visible"); window.setTimeout(() => overlay.remove(), 280); }, 2200);
   }
 
+  function warDecisionDescription(action, targetTeamId = "") {
+    if (action === "sum") return `Tu voto será SUMAR +${WAR_SUM_POINTS} puntos seguros. Tu equipo queda expuesto a ataques.`;
+    if (action === "defend") return `Tu voto será DEFENDER. No sumás de base, pero cada ataque bloqueado le da +${WAR_DEFEND_REWARD} a tu equipo y resta ${Math.abs(WAR_BLOCKED_PENALTY)} al atacante.`;
+    if (action === "attack") {
+      const target = DATA.teams[targetTeamId] ? getTeam(targetTeamId) : null;
+      const bounty = target ? warBountyForTeam(targetTeamId, warRoundViewOverride || warRoundNumber()) : 0;
+      return `Tu voto será ATACAR${target ? ` a ${target.name}` : ""}. Si no se defiende, el botín actual es de ${bounty} puntos y se divide si otros equipos atacan al mismo rival.`;
+    }
+    return "";
+  }
+
+  function confirmWarDecision(action, targetTeamId = "") {
+    document.querySelector(".war-confirm-overlay")?.remove();
+    return new Promise(resolve => {
+      const target = DATA.teams[targetTeamId] ? getTeam(targetTeamId) : null;
+      const icon = action === "sum" ? "➕" : action === "attack" ? "⚔️" : "🛡️";
+      const label = action === "sum" ? "SUMAR" : action === "attack" ? `ATACAR${target ? ` A ${target.name.toUpperCase()}` : ""}` : "DEFENDER";
+      const overlay = document.createElement("div");
+      overlay.className = `war-confirm-overlay is-${action}`;
+      overlay.innerHTML = `
+        <div class="war-confirm-card" role="dialog" aria-modal="true" aria-label="Confirmar jugada">
+          <span class="war-confirm-icon">${icon}</span>
+          <p class="eyebrow">GUERRA DE EQUIPOS</p>
+          <h3>¿Estás seguro?</h3>
+          <strong>${escapeHTML(label)}</strong>
+          <p>${escapeHTML(warDecisionDescription(action, targetTeamId))}</p>
+          <div class="war-confirm-actions">
+            <button type="button" data-war-confirm="no">No, volver</button>
+            <button type="button" data-war-confirm="yes">Sí, confirmar</button>
+          </div>
+        </div>`;
+      const finish = value => {
+        overlay.classList.remove("is-visible");
+        window.setTimeout(() => overlay.remove(), 180);
+        resolve(value);
+      };
+      overlay.addEventListener("click", event => {
+        const choice = event.target.closest("[data-war-confirm]")?.dataset.warConfirm;
+        if (choice === "yes") finish(true);
+        if (choice === "no") finish(false);
+      });
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => overlay.classList.add("is-visible"));
+    });
+  }
+
+  function showWarDecisionAnimation(action, targetTeamId = "") {
+    document.querySelector(".war-decision-overlay")?.remove();
+    const target = DATA.teams[targetTeamId] ? getTeam(targetTeamId) : null;
+    const icon = action === "sum" ? "➕" : action === "attack" ? "⚔️" : "🛡️";
+    const title = action === "sum" ? "SUMAR" : action === "attack" ? "ATACAR" : "DEFENDER";
+    const detail = action === "attack" && target
+      ? `Objetivo: ${target.name}`
+      : action === "sum"
+        ? `+${WAR_SUM_POINTS} si la jugada oficial del equipo termina siendo SUMAR`
+        : `+${WAR_DEFEND_REWARD} por cada ataque que logren bloquear`;
+    const overlay = document.createElement("div");
+    overlay.className = `war-decision-overlay is-${action}`;
+    overlay.innerHTML = `
+      <div class="war-decision-card" role="status" aria-live="assertive">
+        <span>${icon}</span><small>VOTO CONFIRMADO</small><h3>${title}</h3>
+        <strong>${escapeHTML(detail)}</strong><p>Tu voto ya quedó registrado para ${escapeHTML(getTeam(currentGuest.team).name)}.</p>
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("is-visible"));
+    window.setTimeout(() => {
+      overlay.classList.remove("is-visible");
+      window.setTimeout(() => overlay.remove(), 220);
+    }, 1800);
+  }
+
   function warActionLabel(action) {
     if (action === "sum") return "➕ SUMAR";
     if (action === "attack") return "⚔️ ATACAR";
     if (action === "defend") return "🛡️ DEFENDER";
+    if (action === "none") return "⏱️ SIN JUGADA";
     return "Sin decisión";
   }
 
@@ -7014,59 +7215,62 @@
     const tieInfo = warTieInfoForTeam(team.id, round);
     const savedTie = warTiebreakForTeam(team.id, round);
     const teamsClosed = warClosedTeamsCount(round);
-    const ready = warRoundReadyForCaptainReveal(round);
     const actionTie = closed && tieInfo.tiedActions.length > 1;
     const chosenAction = tieInfo.tiedActions.length === 1 ? tieInfo.tiedActions[0] : (savedTie?.action && tieInfo.tiedActions.includes(savedTie.action) ? savedTie.action : "");
     const targetTie = closed && chosenAction === "attack" && tieInfo.tiedTargets.length > 1;
+    const stage = round === 2 ? "war2" : "war1";
 
     return `
       <section class="section-card war-captain-control">
         <div class="war-captain-control-head">
-          <div><p class="eyebrow">CONTROL DEL CAPITÁN</p><h4>${escapeHTML(team.name)} · Ronda ${round}</h4><p>Vos cerrás o reabrís la votación de tu equipo. Cuando los 6 equipos cierran, la ronda puede revelarse.</p></div>
+          <div><p class="eyebrow">CONTROL DEL CAPITÁN</p><h4>${escapeHTML(team.name)} · Ronda ${round}</h4><p>Podés cerrar la votación de tu equipo cuando ya hayan debatido, reabrirla si hace falta y desempatar. La ronda global vence sola.</p></div>
           <span>${votes}/${eligible} votos</span>
         </div>
         <button type="button" class="war-captain-toggle ${closed ? "is-open-action" : "is-close-action"}" data-war-team-toggle="${closed ? "open" : "closed"}">${closed ? "🔓 Reabrir votación de mi equipo" : "🔒 Cerrar votación de mi equipo"}</button>
         ${closed && votes < eligible ? `<p class="war-captain-warning">⚠️ Cerraste con ${eligible - votes} integrante${eligible - votes === 1 ? "" : "s"} sin votar.</p>` : ""}
         ${actionTie ? `<div class="war-captain-tiebreak"><strong>⚖️ Hay empate de jugada. Desempatá:</strong><div>${tieInfo.tiedActions.map(action => `<button type="button" data-war-tiebreak-action="${action}" class="${savedTie?.action === action ? "is-selected" : ""}">${warActionLabel(action)}</button>`).join("")}</div></div>` : ""}
         ${targetTie ? `<div class="war-captain-tiebreak"><strong>🎯 Hay empate de objetivo. Elegí:</strong><div>${tieInfo.tiedTargets.map(targetId => `<button type="button" data-war-tiebreak-target="${targetId}" class="${savedTie?.targetTeamId === targetId ? "is-selected" : ""}">${escapeHTML(getTeam(targetId).name)}</button>`).join("")}</div></div>` : ""}
-        <div class="war-captain-round-state">
-          <span>${teamsClosed}/6 equipos cerraron</span>
-          ${ready ? `<button type="button" data-captain-reveal-war="${round}">🔥 Revelar Ronda ${round}</button>` : `<small>El reveal se habilita cuando los seis equipos cierren y no queden empates.</small>`}
-        </div>
-      </section>
-    `;
+        <div class="war-captain-round-state"><span>${teamsClosed}/6 equipos cerraron</span><small>${escapeHTML(timedStageChip(stage))} · el reveal y el ranking se publican automáticamente cuando termina el tiempo.</small></div>
+      </section>`;
   }
 
   function renderWarGame() {
-    if (!isTriviaGameOpen("game-war")) {
-      return newGameLockedCard("Guerra de Equipos", "Vani y Fede todavía no habilitaron este juego.");
-    }
     if (!currentGuestCanPlayNewGames()) {
       return newGameLockedCard("Guerra de Equipos", "Este juego es para quienes confirmaron que asisten.");
     }
 
     const activeRound = warRoundNumber();
-    const round1Done = warRoundRevealed(1);
-    const round2Done = warRoundRevealed(2);
-    const round2Enabled = warRoundEnabled(2);
-    const round = activeRound === 2 && round1Done && !round2Enabled && !round2Done ? 1 : activeRound;
+    const round = [1, 2].includes(Number(warRoundViewOverride)) ? Number(warRoundViewOverride) : activeRound;
+    const stage = round === 2 ? "war2" : "war1";
+    const timing = timedStageStatus(stage);
     const roundEnabled = warRoundEnabled(round);
+    const revealed = warRoundRevealed(round);
     const team = getTeam(currentGuest.team);
+
+    if (!revealed && !roundEnabled) {
+      const message = timing.expired
+        ? `La Ronda ${round} terminó. Estamos procesando automáticamente las jugadas y el ranking.`
+        : timing.state === "waiting"
+          ? `La Ronda ${round} se habilita automáticamente en ${formatTimedStageRemaining(timing.remainingMs)}.`
+          : "La secuencia de nuevos juegos todavía no fue lanzada.";
+      return newGameLockedCard(`Guerra de Equipos · Ronda ${round}`, message);
+    }
+
     const members = confirmedNewGameMembers(team.id);
     const vote = warVoteForGuest(currentGuest.id, round);
     const rawVote = gameSubmissionFor(currentGuest.id, warVoteGameId(round));
     const snapshot = warRoundSnapshot(round);
     const ownSnapshot = snapshot.find(item => item.id === team.id);
     const teamVotingClosed = warTeamVotingClosed(team.id, round);
-
     const voteRows = Object.values(DATA.teams).map(otherTeam => {
       const eligible = confirmedNewGameMembers(otherTeam.id);
       const received = warVotesForTeam(otherTeam.id, round).length;
       return { team: otherTeam, eligible: eligible.length, received, closed: warTeamVotingClosed(otherTeam.id, round) };
     });
 
-    if (warRoundRevealed(round)) {
+    if (revealed) {
       const result = warResultForTeam(round, team.id);
+      const nextTiming = round === 1 ? timedStageStatus("war2") : null;
       return `
         <div class="new-game-page">
           <button type="button" class="new-game-back" data-go="puntos">‹ Sumá puntos</button>
@@ -7092,50 +7296,44 @@
 
           ${warUpdatedRankingMarkup(round === 1 ? "RANKING DESPUÉS DE LA RONDA 1" : "RANKING FINAL DE LA GUERRA")}
 
-          ${round === 1 ? `<section class="section-card new-game-next-round"><span>🏁</span><div><strong>Ronda 2</strong><p>${round2Enabled ? "Ya está habilitada. Todos vuelven a decidir desde cero." : "Queda bloqueada hasta que Vani y Fede den la señal."}</p></div>${round2Enabled ? `<button type="button" data-go="guerra">Ir a Ronda 2</button>` : ""}</section>` : `<button type="button" class="new-game-ranking-button" data-go="ranking">Ver ranking general</button>`}
+          ${round === 1 ? `<section class="section-card new-game-next-round"><span>🏁</span><div><strong>Ronda 2</strong><p>${nextTiming?.active ? "Ya está abierta. Todos vuelven a decidir desde cero." : nextTiming?.state === "waiting" ? `Se abre automáticamente en ${formatTimedStageRemaining(nextTiming.remainingMs)}.` : "Se habilita automáticamente al terminar la Ronda 1."}</p></div>${nextTiming?.active ? `<button type="button" data-go="guerra" data-war-round="2">Ir a Ronda 2</button>` : ""}</section>` : `<button type="button" class="new-game-ranking-button" data-go="ranking">Ver ranking general</button>`}
         </div>`;
     }
-
-    if (!roundEnabled) return newGameLockedCard(`Guerra de Equipos · Ronda ${activeRound}`, "La próxima ronda todavía no fue habilitada.");
 
     return `
       <div class="new-game-page">
         <button type="button" class="new-game-back" data-go="puntos">‹ Sumá puntos</button>
         <section class="section-card new-game-hero" style="--local-accent:${team.accent}">
           <div class="new-game-hero-logo">${teamLogo(team, "new-game-team-logo")}</div>
-          <div><p class="eyebrow">Desafío 06 · Ronda ${round} de 2</p><h3>⚔️ Guerra de Equipos</h3><p>La estrategia es grupal: debatan primero y después cada integrante vota en secreto.</p></div>
-          <span class="new-game-status-chip ${teamVotingClosed ? "" : "is-open"}">${escapeHTML(warRoundStatusText(round, team.id))}</span>
+          <div><p class="eyebrow">RONDA ${round} DE 2</p><h3>⚔️ Guerra de Equipos</h3><p>La estrategia es grupal: debatan primero en WhatsApp y después cada integrante vota en secreto.</p></div>
+          <span class="new-game-status-chip is-open">${escapeHTML(timedStageChip(stage))}</span>
         </section>
 
         <section class="section-card war-how-to-play">
-          <div class="war-whatsapp-callout"><span>📱</span><div><strong>Hablen la estrategia en el WhatsApp de su equipo</strong><p>Lean el ranking, intenten anticipar qué harán los demás y coordinen la jugada antes de votar.</p></div></div>
+          <div class="war-whatsapp-callout"><span>📱</span><div><strong>Debátanlo en el WhatsApp de su equipo</strong><p>Miren el ranking, anticipen qué pueden hacer los demás y coordinen la jugada antes de votar.</p></div></div>
           <div class="war-mini-rules"><span><b>➕ SUMAR</b><small>+${WAR_SUM_POINTS} seguros · quedás expuesto</small></span><span><b>⚔️ ATACAR</b><small>Robás el botín si el rival no defiende</small></span><span><b>🛡️ DEFENDER</b><small>Bloqueás ataques · +${WAR_DEFEND_REWARD} por cada ataque bloqueado</small></span></div>
-          <p class="war-how-note">Si varios atacan al mismo rival, se reparten el botín. Si atacás a un equipo que defendió, perdés ${Math.abs(WAR_BLOCKED_PENALTY)} puntos y esos ${WAR_DEFEND_REWARD} puntos pasan al equipo que defendió.</p>
+          <p class="war-how-note">Si varios atacan al mismo rival, se reparten el botín. Si atacás a un equipo que defendió, perdés ${Math.abs(WAR_BLOCKED_PENALTY)} y esos ${WAR_DEFEND_REWARD} puntos pasan al equipo que defendió.</p>
         </section>
 
         ${round === 2 ? warPreviousRoundMarkup(1) : ""}
         ${warCompactRankingMarkup(round, "RANKING Y BOTINES")}
 
         <section class="section-card war-vote-card ${teamVotingClosed ? "is-closed" : ""}">
-          <div class="war-vote-heading"><div><p class="eyebrow">TU VOTO · ${escapeHTML(team.name)}</p><h4>${teamVotingClosed ? "La votación de tu equipo está cerrada" : "¿Qué debería hacer tu equipo?"}</h4><p>Tu equipo está ${ownSnapshot?.rank || "-"}° y vale ${ownSnapshot?.bounty || "-"} puntos si alguien lo ataca.</p></div><span>${warVotesForTeam(team.id, round).length}/${members.length} votos</span></div>
+          <div class="war-vote-heading"><div><p class="eyebrow">TU VOTO · ${escapeHTML(team.name)}</p><h4>${teamVotingClosed ? "La votación de tu equipo está cerrada" : "¿Qué debería hacer tu equipo?"}</h4><p>Tu equipo está ${ownSnapshot?.rank || "-"}° y vale ${ownSnapshot?.bounty || "-"} puntos si alguien lo ataca.</p></div>${state.adminUnlocked ? `<span>${warVotesForTeam(team.id, round).length}/${members.length} votos</span>` : `<span>${escapeHTML(timedStageChip(stage))}</span>`}</div>
           <div class="war-action-options ${rawVote?.pendingSync ? "is-saving" : ""}">
             <button type="button" data-war-action="sum" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "sum" ? "is-selected" : ""}"><span>➕</span><strong>SUMAR</strong><small>+${WAR_SUM_POINTS} seguros<br>pero quedás expuesto</small></button>
             <button type="button" data-war-action="attack" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "attack" ? "is-selected" : ""}"><span>⚔️</span><strong>ATACAR</strong><small>Robás puntos<br>si el rival no defiende</small></button>
             <button type="button" data-war-action="defend" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "defend" ? "is-selected" : ""}"><span>🛡️</span><strong>DEFENDER</strong><small>Inmunidad total<br>+${WAR_DEFEND_REWARD} por ataque bloqueado</small></button>
           </div>
-          ${vote?.action === "attack" ? `<div class="war-target-picker"><p>¿A quién atacarías?</p><div>${snapshot.filter(item => item.id !== team.id).map(item => { const targetTeam = getTeam(item.id); return `<button type="button" data-war-target="${item.id}" ${teamVotingClosed ? "disabled" : ""} class="${vote.targetTeamId === item.id ? "is-selected" : ""}" style="--local-accent:${targetTeam.accent}">${teamLogo(targetTeam,"war-target-logo")}<strong>${escapeHTML(targetTeam.name)}</strong><b>${item.bounty}</b><small>puntos</small></button>`; }).join("")}</div></div>` : ""}
-          <div class="new-game-note ${rawVote?.pendingSync ? "is-saving" : ""}">${teamVotingClosed ? "🔒 Tu capitán cerró la votación. Tu voto ya no puede modificarse salvo que la reabra." : rawVote?.pendingSync ? "Guardando tu voto…" : vote ? "✅ Tu voto quedó registrado. Podés cambiarlo mientras la votación siga abierta." : "Nadie puede ver cómo viene la votación. Sólo se muestra cuánta gente ya votó."}</div>
+          <div class="war-target-picker" ${vote?.action === "attack" ? "" : "hidden"}><p>¿A quién atacarías?</p><div>${snapshot.filter(item => item.id !== team.id).map(item => { const targetTeam = getTeam(item.id); return `<button type="button" data-war-target="${item.id}" ${teamVotingClosed ? "disabled" : ""} class="${vote?.targetTeamId === item.id ? "is-selected" : ""}" style="--local-accent:${targetTeam.accent}">${teamLogo(targetTeam, "war-target-logo")}<strong>${escapeHTML(targetTeam.name)}</strong><b>${item.bounty}</b><small>puntos</small></button>`; }).join("")}</div></div>
+          <div class="new-game-note ${rawVote?.pendingSync ? "is-saving" : ""}">${teamVotingClosed ? "🔒 Tu capitán cerró la votación. Tu voto ya no puede modificarse salvo que la reabra." : rawVote?.pendingSync ? "Guardando tu voto…" : vote ? "✅ Tu voto quedó registrado. Podés cambiarlo mientras la votación siga abierta." : "Tu voto es secreto. La jugada oficial se define con los votos del equipo."}</div>
         </section>
 
         ${renderWarCaptainControl(round, team)}
 
-        <section class="section-card war-public-progress">
-          <div><p class="eyebrow">PARTICIPACIÓN</p><h4>Estado de los equipos</h4><small>Las jugadas permanecen ocultas hasta el reveal.</small></div>
-          <div class="war-public-progress-grid">${voteRows.map(row => `<div style="--local-accent:${row.team.accent}">${teamLogo(row.team,"war-progress-logo")}<span><strong>${escapeHTML(row.team.name)}</strong><small>${row.received}/${row.eligible} votos${row.closed ? " · cerrado" : ""}</small></span><b>${row.closed ? "🔒" : row.eligible && row.received >= row.eligible ? "✓" : "…"}</b></div>`).join("")}</div>
-        </section>
+        ${state.adminUnlocked ? `<section class="section-card war-public-progress"><div><p class="eyebrow">PARTICIPACIÓN · SOLO ADMIN</p><h4>Estado de los equipos</h4><small>Las jugadas permanecen ocultas hasta el reveal.</small></div><div class="war-public-progress-grid">${voteRows.map(row => `<div style="--local-accent:${row.team.accent}">${teamLogo(row.team, "war-progress-logo")}<span><strong>${escapeHTML(row.team.name)}</strong><small>${row.received}/${row.eligible} votos${row.closed ? " · cerrado" : ""}</small></span><b>${row.closed ? "🔒" : row.eligible && row.received >= row.eligible ? "✓" : "…"}</b></div>`).join("")}</div></section>` : ""}
       </div>`;
   }
-
 
   function renderPointsHub() {
     const team = getTeam(currentGuest.team);
@@ -7148,18 +7346,23 @@
     const musicOpen = isTriviaGameOpen("trivia-music");
     const triviaOpen = isTriviaGameOpen("trivia-couple");
     const whoTriviaOpen = isTriviaGameOpen("trivia-who");
-    const rouletteOpen = isTriviaGameOpen("game-roulette");
-    const warOpen = isTriviaGameOpen("game-war");
+    const rouletteTiming = timedStageStatus("roulette");
+    const war1Timing = timedStageStatus("war1");
+    const war2Timing = timedStageStatus("war2");
+    const rouletteOpen = rouletteTiming.active;
+    const war1Open = war1Timing.active;
+    const war2Open = war2Timing.active && warRoundRevealed(1);
     const rouletteResult = rouletteSubmissionFor(currentGuest.id);
     const rouletteDone = rouletteResult?.status === "completed";
     const rouletteEarnedPoints = rouletteDone ? Number(rouletteResult.finalPoints || 0) : 0;
-    const activeWarRound = warRoundNumber();
-    const currentWarVote = warVoteForGuest(currentGuest.id, activeWarRound);
-    const warDone = warRoundRevealed(2);
+    const war1Done = warRoundRevealed(1);
+    const war2Done = warRoundRevealed(2);
+    const war1Vote = warVoteForGuest(currentGuest.id, 1);
+    const war2Vote = warVoteForGuest(currentGuest.id, 2);
+    const warDone = war2Done;
     const musicDone = Boolean(triviaSubmission("music-selection"));
     const triviaDone = Boolean(triviaSubmission("couple-trivia-test"));
     const whoTriviaDone = Boolean(triviaSubmission("who-is-who-trivia-test"));
-    const musicSubmission = triviaSubmission("music-selection");
     const coupleSubmission = triviaSubmission("couple-trivia-test");
     const whoSubmission = triviaSubmission("who-is-who-trivia-test");
     const musicEarnedPoints = musicDone ? musicPoints : 0;
@@ -7169,12 +7372,36 @@
     const whoMaxPoints = triviaMaxPointsFor("who-is-who-trivia-test", team.id);
     const personalContribution = rsvpTotalPoints + musicEarnedPoints + coupleEarnedPoints + whoEarnedPoints + rouletteEarnedPoints;
     const allPreEventChallengesDone = rsvpDone && musicDone && triviaDone && whoTriviaDone && rouletteDone && warDone;
+    const attending = rsvpDone && rsvp?.attendance === "si";
+    const seqLaunched = manualGameFlag("game-roulette") && Boolean(preEventSequenceSchedule());
 
     const pointsEyebrow = allPreEventChallengesDone ? "ETAPA COMPLETADA" : "SUMÁ PUNTOS";
     const pointsTitle = allPreEventChallengesDone ? "¡No quedan más desafíos por ahora!" : "QUE EMPIECE LA COMPETENCIA";
     const pointsText = allPreEventChallengesDone
       ? "El próximo capítulo será el día del casamiento. Y sí: van a seguir compitiendo durante toda la noche."
       : "Completá cada desafío y ayudá a tu equipo a escalar en el ranking.";
+
+    const rouletteText = rouletteDone
+      ? "Tu resultado quedó registrado."
+      : rouletteOpen
+        ? "La ruleta está abierta: girá y elegí cuánto riesgo asumir."
+        : rouletteTiming.expired
+          ? "La ventana de 48 horas ya terminó."
+          : seqLaunched && rouletteTiming.state === "waiting" ? `Se abre automáticamente en ${formatTimedStageRemaining(rouletteTiming.remainingMs)}.` : "Nuevo juego · se habilitará próximamente.";
+    const rouletteProgress = rouletteDone
+      ? `${rouletteEarnedPoints > 0 ? "+" : ""}${rouletteEarnedPoints} puntos obtenidos`
+      : rouletteOpen ? timedStageChip("roulette") : "48 horas para jugar";
+
+    const war1Text = war1Done
+      ? "Ronda revelada: podés revisar las jugadas y el ranking."
+      : war1Open
+        ? "Debatan en WhatsApp y voten: sumar, atacar o defender."
+        : war1Timing.expired ? "La ronda terminó y se está procesando." : seqLaunched ? `Se habilita después de la Ruleta · ${timedStageChip("war1")}` : "Se habilita automáticamente después de la Ruleta.";
+    const war2Text = war2Done
+      ? "Ronda final revelada."
+      : war2Open
+        ? "Nueva estrategia, nuevo ranking y todos vuelven a decidir."
+        : war2Timing.expired ? "La ronda terminó y se está procesando." : seqLaunched ? `Se habilita después de la Ronda 1 · ${timedStageChip("war2")}` : "Se habilita automáticamente después de la Ronda 1.";
 
     return `
       ${pointsHubStyles()}
@@ -7187,75 +7414,48 @@
         <span class="points-personal-counter"><small>Tu aporte</small><b>${personalContribution}</b><em>puntos al equipo</em></span>
       </section>
 
-      ${isSectionOpen("reglas") ? `<button type="button" class="points-rules-entry section-card" data-go="reglas"><span>${uiIcon("rules")}</span><div><strong>¿Cómo se juega?</strong><small>Reglas, nuevos desafíos y qué pasa durante la boda.</small></div><b aria-hidden="true">›</b></button>` : ""}
+      ${isSectionOpen("reglas") ? `<button type="button" class="points-rules-entry section-card" data-go="reglas"><span>${uiIcon("rules")}</span><div><strong>¿Cómo se juega?</strong><small>Reglas, nuevos desafíos y cómo sigue la competencia durante toda la noche del casamiento.</small></div><b aria-hidden="true">›</b></button>` : ""}
 
       <div class="points-new-game-list points-all-game-list">
-        ${pointsChallengeCard({ number:"01", icon:"✉️", title:"Confirmar asistencia", text:rsvpDone ? "Tu respuesta quedó guardada." : "Confirmá asistencia y tus datos.", done:rsvpDone, route:"asistencia", progressText:rsvpDone ? `${rsvpTotalPoints} puntos obtenidos` : `${attendancePoints} puntos por completar`, bonusText:microBonusPoints ? `Incluye +${microBonusPoints} por elegir micro` : "", actionLabel:rsvpDone ? "Ver / editar" : "Comenzar", locked:false })}
-        ${pointsChallengeCard({ number:"02", icon:"🎵", title:"Canciones favoritas", text:musicDone ? "Tus canciones quedaron guardadas." : "Elegí tus 2 canciones.", done:musicDone, route:"musica", progressText:musicDone ? `${musicEarnedPoints} puntos obtenidos` : `${musicPoints} puntos por completar`, actionLabel:musicDone ? "Ver / editar" : "Comenzar", locked:!rsvpDone || !musicOpen })}
-        ${pointsChallengeCard({ number:"03", icon:"🎯", title:"¿Cuánto conocés a Vani y Fede?", text:triviaDone ? "Trivia completada." : "Respondé 5 preguntas.", done:triviaDone, route:"trivia-pareja", progressText:triviaDone ? `${coupleEarnedPoints} puntos obtenidos` : `Hasta ${coupleMaxPoints} puntos`, actionLabel:triviaDone ? "Ver resultado" : "Comenzar", locked:!rsvpDone || !triviaOpen })}
-        ${pointsChallengeCard({ number:"04", icon:"⚖️", title:"¿Vani o Fede?", text:whoTriviaDone ? "Trivia completada." : "Elegí: ¿Vani o Fede?", done:whoTriviaDone, route:"trivia-quien", progressText:whoTriviaDone ? `${whoEarnedPoints} puntos obtenidos` : `Hasta ${whoMaxPoints} puntos`, actionLabel:whoTriviaDone ? "Ver resultado" : "Comenzar", locked:!rsvpDone || !whoTriviaOpen })}
-        ${pointsChallengeCard({ number:"05", icon:"🎡", title:"Ruleta · Todo o Nada", text:rouletteOpen ? (rouletteDone ? "Tu tirada ya quedó registrada." : "Girás una vez y elegís cuánto riesgo asumir.") : "Nuevo juego · se habilitará próximamente.", done:rouletteDone, route:"ruleta", progressText:rouletteDone ? `${rouletteEarnedPoints > 0 ? "+" : ""}${rouletteEarnedPoints} puntos obtenidos` : "Resultado directo al equipo", actionLabel:rouletteDone ? "Ver resultado" : "Jugar", locked:!rsvpDone || rsvp?.attendance !== "si" || !rouletteOpen })}
-        ${pointsChallengeCard({ number:"06", icon:"⚔️", title:"Guerra de Equipos", text:warDone ? "Las dos rondas ya fueron resueltas." : warRoundRevealed(1) ? (isTriviaGameOpen("game-war-r2") ? "Ronda 2 abierta: vuelvan a debatir la estrategia." : "Ronda 1 revelada. La Ronda 2 sigue bloqueada.") : warOpen ? "Debatan en WhatsApp y voten: sumar, atacar o defender." : "Nuevo juego grupal · se habilitará próximamente.", done:warDone, route:"guerra", progressText:warDone ? "Guerra finalizada" : warRoundRevealed(1) ? "Ronda 1 resuelta" : "Muchos puntos en juego · 2 rondas", actionLabel:currentWarVote ? "Ver / cambiar voto" : "Entrar", locked:!rsvpDone || rsvp?.attendance !== "si" || !warOpen })}
-        ${pointsChallengeCard({ number:"07", icon:"🚌", title:"Durante el viaje", text:"Contenido secreto. Lo vamos a revelar más adelante.", done:false, route:"puntos", progressText:"Próximamente", actionLabel:"", locked:true })}
-      </div>
-    `;
+        ${pointsChallengeCard({ icon:"✉️", title:"Confirmar asistencia", text:rsvpDone ? "Tu respuesta quedó guardada." : "Confirmá asistencia y tus datos.", done:rsvpDone, route:"asistencia", progressText:rsvpDone ? `${rsvpTotalPoints} puntos obtenidos` : `${attendancePoints} puntos por completar`, bonusText:microBonusPoints ? `Incluye +${microBonusPoints} por elegir micro` : "", actionLabel:rsvpDone ? "REVISAR / EDITAR" : "COMENZAR", locked:false })}
+        ${pointsChallengeCard({ icon:"🎵", title:"Canciones favoritas", text:musicDone ? "Tus canciones quedaron guardadas." : "Elegí tus 2 canciones.", done:musicDone, route:"musica", progressText:musicDone ? `${musicEarnedPoints} puntos obtenidos` : `${musicPoints} puntos por completar`, actionLabel:musicDone ? "REVISAR / EDITAR" : "COMENZAR", locked:!rsvpDone || !musicOpen })}
+        ${pointsChallengeCard({ icon:"🎯", title:"¿Cuánto conocés a Vani y Fede?", text:triviaDone ? "Trivia completada." : "Respondé 5 preguntas.", done:triviaDone, route:"trivia-pareja", progressText:triviaDone ? `${coupleEarnedPoints} puntos obtenidos` : `Hasta ${coupleMaxPoints} puntos`, actionLabel:triviaDone ? "VER RESULTADO" : "COMENZAR", locked:!rsvpDone || !triviaOpen })}
+        ${pointsChallengeCard({ icon:"⚖️", title:"¿Vani o Fede?", text:whoTriviaDone ? "Trivia completada." : "Elegí: ¿Vani o Fede?", done:whoTriviaDone, route:"trivia-quien", progressText:whoTriviaDone ? `${whoEarnedPoints} puntos obtenidos` : `Hasta ${whoMaxPoints} puntos`, actionLabel:whoTriviaDone ? "VER RESULTADO" : "COMENZAR", locked:!rsvpDone || !whoTriviaOpen })}
+        ${pointsChallengeCard({ icon:"🎡", title:"Ruleta · Todo o Nada", text:rouletteText, done:rouletteDone, active:rouletteOpen && !rouletteDone, route:"ruleta", progressText:rouletteProgress, actionLabel:rouletteDone ? "VER RESULTADO" : "ABRIR RULETA", locked:!attending || (!rouletteOpen && !rouletteDone) })}
+        ${pointsChallengeCard({ icon:"⚔️", title:"Guerra de Equipos · Ronda 1", text:war1Text, done:war1Done, active:war1Open && !war1Done, route:"guerra", warRound:1, progressText:war1Done ? "Ronda 1 finalizada" : war1Open ? timedStageChip("war1") : "48 horas para votar", actionLabel:war1Done ? "VER RESULTADOS" : war1Vote ? "VER / CAMBIAR VOTO" : "ENTRAR A RONDA 1", locked:!attending || (!war1Open && !war1Done) })}
+        ${pointsChallengeCard({ icon:"🛡️", title:"Guerra de Equipos · Ronda 2", text:war2Text, done:war2Done, active:war2Open && !war2Done, route:"guerra", warRound:2, progressText:war2Done ? "Ronda 2 finalizada" : war2Open ? timedStageChip("war2") : "48 horas para votar", actionLabel:war2Done ? "VER RESULTADOS" : war2Vote ? "VER / CAMBIAR VOTO" : "ENTRAR A RONDA 2", locked:!attending || (!war2Open && !war2Done) })}
+        ${pointsChallengeCard({ icon:"🚌", title:"Durante el viaje", text:"Contenido secreto. Lo vamos a revelar más adelante.", done:false, route:"puntos", progressText:"Próximamente", actionLabel:"", locked:true })}
+      </div>`;
   }
 
   function pointsChallengeCard({
-    number,
     icon,
     title,
     text,
     done,
+    active = false,
     route,
+    warRound = 0,
     progressText,
     bonusText = "",
     actionLabel,
     locked = false
   }) {
-    const isNewChallenge = !done && !locked && ["05", "06"].includes(String(number));
     return `
-      <section
-        class="points-challenge-card section-card ${
-          done ? "is-done" : ""
-        } ${locked ? "is-locked" : ""} ${isNewChallenge ? "is-new" : ""}">
-        <span class="points-challenge-number">
-          ${escapeHTML(number)}
-        </span>
-        <span class="points-challenge-icon" aria-hidden="true">
-          ${icon}
-        </span>
+      <section class="points-challenge-card section-card ${done ? "is-done" : ""} ${locked ? "is-locked" : ""} ${active ? "is-new is-active" : ""}">
+        <span class="points-challenge-icon" aria-hidden="true">${icon}</span>
         <div class="points-challenge-copy">
-          <small>
-            ${
-              done
-                ? "✓ Desafío completado"
-                : isNewChallenge
-                  ? `Nuevo · Desafío ${escapeHTML(number)}`
-                  : `Desafío ${escapeHTML(number)}`
-            }
-          </small>
+          <small>${done ? "✓ COMPLETADO" : active ? "● ACTIVO AHORA" : locked ? "PRÓXIMAMENTE" : "DESAFÍO DISPONIBLE"}</small>
           <strong>${escapeHTML(title)}</strong>
           <p>${escapeHTML(text)}</p>
           <em>${escapeHTML(progressText || "")}</em>
           ${bonusText ? `<i class="points-challenge-bonus">${escapeHTML(bonusText)}</i>` : ""}
         </div>
-        ${
-          locked
-            ? `<span class="points-challenge-locked">
-                ${uiIcon("lock")}
-                Bloqueado
-              </span>`
-            : `<button
-                type="button"
-                data-go="${escapeHTML(route)}">
-                ${escapeHTML(actionLabel || "Ver")}
-              </button>`
-        }
-      </section>
-    `;
+        ${locked
+          ? `<span class="points-challenge-locked">${uiIcon("lock")} Bloqueado</span>`
+          : `<button type="button" data-go="${escapeHTML(route)}" ${warRound ? `data-war-round="${warRound}"` : ""}>${escapeHTML(actionLabel || "ABRIR")}</button>`}
+      </section>`;
   }
-
 
   function pointsAction({
     icon,
@@ -10148,70 +10348,56 @@
   function renderAdminWarControl() {
     const r1 = warAdminProgress(1);
     const r2 = warAdminProgress(2);
+    const roulette = timedStageStatus("roulette");
+    const war1 = timedStageStatus("war1");
+    const war2 = timedStageStatus("war2");
+    const launched = manualGameFlag("game-roulette") && Boolean(preEventSequenceSchedule());
+    const rouletteEligible = Object.keys(DATA.teams).reduce((sum, id) => sum + confirmedNewGameMembers(id).length, 0);
+    const roulettePlayed = Object.keys(DATA.teams).reduce((sum, id) => sum + confirmedNewGameMembers(id).filter(g => rouletteSubmissionFor(g.id)?.status === "completed").length, 0);
+    const rows = [
+      { label:"Ruleta", status:roulette, detail:`${roulettePlayed}/${rouletteEligible} jugaron` },
+      { label:"Guerra R1", status:war1, detail:`${r1.votes}/${r1.eligible} votos${warRoundRevealed(1) ? " · revelada" : ""}` },
+      { label:"Guerra R2", status:war2, detail:`${r2.votes}/${r2.eligible} votos${warRoundRevealed(2) ? " · revelada" : ""}` }
+    ];
     return `
-      <section class="section-card admin-war-control">
+      <section class="section-card admin-war-control admin-timed-sequence">
         <div class="admin-war-control-head">
-          <div>
-            <p class="eyebrow">Juegos nuevos</p>
-            <h4>Guerra de Equipos</h4>
-            <p>La votación queda en RESPUESTAS_JUEGOS. El reveal se resuelve acá y los puntos impactan automáticamente en el ranking.</p>
-          </div>
-          <span>${warRoundRevealed(2) ? "Finalizada" : warRoundRevealed(1) ? "Ronda 1 lista" : "Pendiente"}</span>
+          <div><p class="eyebrow">Juegos nuevos</p><h4>Secuencia automática de 6 días</h4><p>Al lanzar los juegos: Ruleta 48h → Guerra R1 48h → Guerra R2 48h. No hace falta cerrar ni revelar rondas desde Admin.</p></div>
+          <span>${!launched ? "Sin lanzar" : warRoundRevealed(2) ? "Finalizada" : "⏱ Automático"}</span>
         </div>
-
-        ${[1,2].map(round => {
-          const progress = round === 1 ? r1 : r2;
-          const enabled = warRoundEnabled(round);
-          const revealed = warRoundRevealed(round);
-          const priorReady = round === 1 || warRoundRevealed(1);
-          return `
-            <div class="admin-war-round ${revealed ? "is-done" : ""}">
-              <div>
-                <strong>Ronda ${round}</strong>
-                <small>${progress.votes}/${progress.eligible} votos · ${enabled ? "habilitada" : "bloqueada"}</small>
-              </div>
-              <div class="admin-war-round-teams">
-                ${progress.teams.map(item => `<span style="--local-accent:${item.team.accent}">${item.team.name}<b>${item.votes}/${item.eligible}</b></span>`).join("")}
-              </div>
-              <button type="button" data-admin-resolve-war="${round}" ${(!enabled || revealed || !priorReady) ? "disabled" : ""}>
-                ${revealed ? "Ronda revelada ✓" : `Cerrar y revelar R${round}`}
-              </button>
-            </div>
-          `;
-        }).join("")}
-      </section>
-    `;
+        <div class="admin-timed-sequence-grid">
+          ${rows.map(row => `<div class="admin-timed-sequence-row ${row.status.active ? "is-active" : row.status.expired ? "is-done" : ""}"><strong>${row.label}</strong><span>${escapeHTML(row.status.active || row.status.state === "waiting" ? timedStageChip(row.status.stage) : row.status.expired ? "Tiempo finalizado" : "Bloqueado")}</span><small>${escapeHTML(row.detail)}</small></div>`).join("")}
+        </div>
+        <p class="admin-section-note">Las rondas de Guerra se resuelven automáticamente al vencimiento. Los capitanes coordinan, pueden cerrar/reabrir su equipo y desempatar.</p>
+      </section>`;
   }
 
-  function warOfficialChoiceForTeam(teamId, round) {
+  function warOfficialChoiceForTeam(teamId, round, options = {}) {
+    const allowExpiredFallback = Boolean(options.allowExpiredFallback);
     const members = confirmedNewGameMembers(teamId);
-    const votes = members.map(guest => ({
-      guest,
-      vote: warVoteForGuest(guest.id, round)
-    })).filter(item => item.vote);
+    const votes = members.map(guest => ({ guest, vote: warVoteForGuest(guest.id, round) })).filter(item => item.vote);
 
     if (!votes.length) {
-      return { error: `${getTeam(teamId).name} todavía no tiene votos.` };
+      return allowExpiredFallback
+        ? { action:"none", targetTeamId:"", voteCount:0, eligibleCount:members.length }
+        : { error: `${getTeam(teamId).name} todavía no tiene votos.` };
     }
 
     const actionCounts = { sum: 0, attack: 0, defend: 0 };
     votes.forEach(item => { actionCounts[item.vote.action] += 1; });
     const maxAction = Math.max(...Object.values(actionCounts));
-    const tiedActions = Object.keys(actionCounts)
-      .filter(action => actionCounts[action] === maxAction);
+    const tiedActions = Object.keys(actionCounts).filter(action => actionCounts[action] === maxAction);
 
     let action = tiedActions[0];
     if (tiedActions.length > 1) {
       const tiebreak = warTiebreakForTeam(teamId, round);
-      if (tiebreak?.action && tiedActions.includes(tiebreak.action)) {
-        action = tiebreak.action;
-      } else {
+      if (tiebreak?.action && tiedActions.includes(tiebreak.action)) action = tiebreak.action;
+      else {
         const captain = members.find(isGuestCaptain);
         const captainVote = captain ? warVoteForGuest(captain.id, round) : null;
-        if (!captainVote || !tiedActions.includes(captainVote.action)) {
-          return { error: `${getTeam(teamId).name}: hay empate y el capitán todavía no lo definió.` };
-        }
-        action = captainVote.action;
+        if (captainVote && tiedActions.includes(captainVote.action)) action = captainVote.action;
+        else if (allowExpiredFallback) action = "none";
+        else return { error: `${getTeam(teamId).name}: hay empate y el capitán todavía no lo definió.` };
       }
     }
 
@@ -10225,22 +10411,22 @@
       });
       const targetEntries = Object.entries(targetCounts);
       if (!targetEntries.length) {
-        return { error: `${getTeam(teamId).name}: ganó ATACAR pero no hay objetivo válido.` };
-      }
-      const maxTarget = Math.max(...targetEntries.map(([, count]) => count));
-      const tiedTargets = targetEntries.filter(([, count]) => count === maxTarget).map(([id]) => id);
-      targetTeamId = tiedTargets[0];
-      if (tiedTargets.length > 1) {
-        const tiebreak = warTiebreakForTeam(teamId, round);
-        if (tiebreak?.action === "attack" && tiedTargets.includes(tiebreak.targetTeamId)) {
-          targetTeamId = tiebreak.targetTeamId;
-        } else {
-          const captain = members.find(isGuestCaptain);
-          const captainVote = captain ? warVoteForGuest(captain.id, round) : null;
-          if (!captainVote || captainVote.action !== "attack" || !tiedTargets.includes(captainVote.targetTeamId)) {
-            return { error: `${getTeam(teamId).name}: hay empate de objetivos y el capitán todavía no lo definió.` };
+        if (allowExpiredFallback) action = "none";
+        else return { error: `${getTeam(teamId).name}: ganó ATACAR pero no hay objetivo válido.` };
+      } else {
+        const maxTarget = Math.max(...targetEntries.map(([, count]) => count));
+        const tiedTargets = targetEntries.filter(([, count]) => count === maxTarget).map(([id]) => id);
+        targetTeamId = tiedTargets[0];
+        if (tiedTargets.length > 1) {
+          const tiebreak = warTiebreakForTeam(teamId, round);
+          if (tiebreak?.action === "attack" && tiedTargets.includes(tiebreak.targetTeamId)) targetTeamId = tiebreak.targetTeamId;
+          else {
+            const captain = members.find(isGuestCaptain);
+            const captainVote = captain ? warVoteForGuest(captain.id, round) : null;
+            if (captainVote && captainVote.action === "attack" && tiedTargets.includes(captainVote.targetTeamId)) targetTeamId = captainVote.targetTeamId;
+            else if (allowExpiredFallback) { action = "none"; targetTeamId = ""; }
+            else return { error: `${getTeam(teamId).name}: hay empate de objetivos y el capitán todavía no lo definió.` };
           }
-          targetTeamId = captainVote.targetTeamId;
         }
       }
     }
@@ -10250,11 +10436,16 @@
 
   async function resolveWarRound(round, options = {}) {
     const source = options.source || "admin";
+    const stage = Number(round) === 2 ? "war2" : "war1";
+    const timing = timedStageStatus(stage);
+    const autoAllowed = source === "auto" && timing.expired;
     const captainAllowed = source === "captain" && isGuestCaptain(currentGuest) && warRoundReadyForCaptainReveal(round);
     const adminAllowed = source === "admin" && state.adminUnlocked;
-    if ((!captainAllowed && !adminAllowed) || !warRoundEnabled(round) || warRoundRevealed(round)) return false;
+    if ((!autoAllowed && !captainAllowed && !adminAllowed) || warRoundRevealed(round)) return false;
+    if (!autoAllowed && !warRoundEnabled(round)) return false;
 
     await syncFromSheets(false);
+    if (warRoundRevealed(round)) return true;
     if (source === "captain" && !warRoundReadyForCaptainReveal(round)) {
       toast("Todavía falta cerrar algún equipo o resolver un empate.");
       return false;
@@ -10262,33 +10453,26 @@
 
     const official = {};
     for (const teamId of Object.keys(DATA.teams)) {
-      const choice = warOfficialChoiceForTeam(teamId, round);
+      const choice = warOfficialChoiceForTeam(teamId, round, { allowExpiredFallback: autoAllowed });
       if (choice.error) {
-        toast(choice.error);
-        return false;
-      }
-      official[teamId] = choice;
+        if (autoAllowed) official[teamId] = { action:"none", targetTeamId:"", voteCount:0, eligibleCount:confirmedNewGameMembers(teamId).length };
+        else { toast(choice.error); return false; }
+      } else official[teamId] = choice;
     }
 
     const progress = warAdminProgress(round);
-    if (progress.votes < progress.eligible) {
+    if (!autoAllowed && progress.votes < progress.eligible) {
       const missing = progress.eligible - progress.votes;
       if (!confirm(`Todavía faltan ${missing} votos. ¿Cerrar y revelar la ronda igualmente?`)) return false;
     }
 
-    const snapshot = calculateRanking().map((row, index) => ({
-      id: row.id,
-      rank: index + 1,
-      bounty: WAR_BOUNTIES[index] || 200
-    }));
+    const snapshot = calculateRanking().map((row, index) => ({ id:row.id, rank:index + 1, bounty:WAR_BOUNTIES[index] || 200 }));
     const deltas = Object.fromEntries(Object.keys(DATA.teams).map(id => [id, 0]));
     const notes = Object.fromEntries(Object.keys(DATA.teams).map(id => [id, []]));
 
     Object.entries(official).forEach(([teamId, choice]) => {
-      if (choice.action === "sum") {
-        deltas[teamId] += WAR_SUM_POINTS;
-        notes[teamId].push(`SUMAR +${WAR_SUM_POINTS}`);
-      }
+      if (choice.action === "sum") { deltas[teamId] += WAR_SUM_POINTS; notes[teamId].push(`SUMAR +${WAR_SUM_POINTS}`); }
+      if (choice.action === "none") notes[teamId].push("Sin jugada oficial al cierre");
     });
 
     const incoming = {};
@@ -10326,67 +10510,54 @@
 
     const resolutionId = `war-r${round}-${Date.now()}`;
     const savedTeams = [];
-
     for (const teamId of Object.keys(DATA.teams)) {
       const choice = official[teamId];
       const snap = snapshot.find(item => item.id === teamId);
-      const resultData = {
-        teamId,
-        round,
-        officialAction: choice.action,
-        targetTeamId: choice.targetTeamId || "",
-        delta: Number(deltas[teamId] || 0),
-        roundRank: Number(snap?.rank || 0),
-        bounty: Number(snap?.bounty || 0),
-        resolutionId,
-        note: notes[teamId].join(" · ") || "Sin variación"
-      };
+      const resultData = { teamId, round, officialAction:choice.action, targetTeamId:choice.targetTeamId || "", delta:Number(deltas[teamId] || 0), roundRank:Number(snap?.rank || 0), bounty:Number(snap?.bounty || 0), resolutionId, note:notes[teamId].join(" · ") || "Sin variación" };
       const guestId = `war-r${round}-result-${teamId}`;
-      const payload = {
-        gameId: warResultGameId(round),
-        guestId,
-        teamId,
-        answer: JSON.stringify(resultData),
-        comment: resultData.note,
-        score: 0,
-        bestScore: 0,
-        earnedPoints: resultData.delta,
-        maxScore: 0,
-        warRound: round,
-        officialAction: resultData.officialAction,
-        targetTeamId: resultData.targetTeamId,
-        delta: resultData.delta,
-        roundRank: resultData.roundRank,
-        bounty: resultData.bounty,
-        resolutionId,
-        note: resultData.note,
-        resolvedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        requestId: newRequestId(`war-r${round}-${teamId}`)
-      };
-
-      const result = await writeToSheets("saveGameSubmission", payload, { silent: true, allowPreview: true });
-      if (!result) {
-        toast(`No se pudo guardar el resultado de ${getTeam(teamId).name}. Reintentá el reveal.`);
-        saveState();
-        return false;
-      }
-      state.gameSubmissions[`${guestId}::${warResultGameId(round)}`] = {
-        ...payload,
-        ...(result.record || {}),
-        pendingSync: false
-      };
+      const payload = { gameId:warResultGameId(round), guestId, teamId, answer:JSON.stringify(resultData), comment:resultData.note, score:0, bestScore:0, earnedPoints:resultData.delta, maxScore:0, warRound:round, officialAction:resultData.officialAction, targetTeamId:resultData.targetTeamId, delta:resultData.delta, roundRank:resultData.roundRank, bounty:resultData.bounty, resolutionId, note:resultData.note, resolvedAt:new Date().toISOString(), updatedAt:new Date().toISOString(), requestId:newRequestId(`war-r${round}-${teamId}`) };
+      const result = await writeToSheets("saveGameSubmission", payload, { silent:true, allowPreview:true });
+      if (!result) { if (!autoAllowed) toast(`No se pudo guardar el resultado de ${getTeam(teamId).name}. Reintentá.`); saveState(); return false; }
+      state.gameSubmissions[`${guestId}::${warResultGameId(round)}`] = { ...payload, ...(result.record || {}), pendingSync:false };
       savedTeams.push(teamId);
     }
 
     saveState();
     await syncFromSheets(false);
-    toast(`Ronda ${round} revelada y guardada en Sheets.`);
+    if (!autoAllowed) toast(`Ronda ${round} revelada y guardada en Sheets.`);
     return savedTeams.length === Object.keys(DATA.teams).length;
   }
 
   async function resolveWarRoundAdmin(round) {
     return resolveWarRound(round, { source: "admin" });
+  }
+
+  async function ensureTimedCompetitionState() {
+    if (timedResolutionInFlight || navigator.onLine === false || !manualGameFlag("game-roulette") || !preEventSequenceSchedule()) return;
+    timedResolutionInFlight = true;
+    let changed = false;
+    try {
+      const beforeSignature = ["roulette", "war1", "war2"].map(stage => timedStageStatus(stage).state).join("|") + `|${warRoundRevealed(1)}|${warRoundRevealed(2)}`;
+      const stageChanged = Boolean(timedStageUiSignature && timedStageUiSignature !== beforeSignature);
+      timedStageUiSignature = beforeSignature;
+      const war1 = timedStageStatus("war1");
+      if (war1.expired && !warRoundRevealed(1)) changed = (await resolveWarRound(1, { source:"auto" })) || changed;
+      const war2 = timedStageStatus("war2");
+      if (war2.expired && warRoundRevealed(1) && !warRoundRevealed(2)) changed = (await resolveWarRound(2, { source:"auto" })) || changed;
+      const afterSignature = ["roulette", "war1", "war2"].map(stage => timedStageStatus(stage).state).join("|") + `|${warRoundRevealed(1)}|${warRoundRevealed(2)}`;
+      timedStageUiSignature = afterSignature;
+      if ((changed || stageChanged) && ["puntos", "guerra", "ruleta", "ranking", "admin", "inicio"].includes(currentRoute)) renderCurrentRoute();
+    } finally {
+      timedResolutionInFlight = false;
+    }
+  }
+
+  function startTimedCompetitionWatcher() {
+    if (timedCompetitionInterval) window.clearInterval(timedCompetitionInterval);
+    void ensureTimedCompetitionState();
+    timedCompetitionInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void ensureTimedCompetitionState();
+    }, 30000);
   }
 
   function renderAdmin() {
@@ -10938,21 +11109,11 @@
               },
               {
                 key: "game-roulette",
-                title: "Ruleta · Todo o Nada",
-                text: "Una tirada por invitado. Doble o Nada / Recupero."
-              },
-              {
-                key: "game-war",
-                title: "Guerra de Equipos · Ronda 1",
-                text: "Habilita la primera votación estratégica."
-              },
-              {
-                key: "game-war-r2",
-                title: "Guerra de Equipos · Ronda 2",
-                text: "Habilitar sólo después de resolver la Ronda 1."
+                title: "Lanzar nuevos juegos",
+                text: "Inicia la secuencia automática: Ruleta 48h → Guerra R1 48h → Guerra R2 48h."
               }
             ].map(game => {
-              const open = isTriviaGameOpen(game.key);
+              const open = game.key === "game-roulette" ? manualGameFlag(game.key) : isTriviaGameOpen(game.key);
 
               return `
                 <label
@@ -10973,7 +11134,7 @@
                     ${open ? "checked" : ""}>
                   <i aria-hidden="true"></i>
                   <b>
-                    ${open ? "Liberado" : "Bloqueado"}
+                    ${open ? (game.key === "game-roulette" ? "Secuencia activa" : "Liberado") : "Bloqueado"}
                   </b>
                 </label>
               `;
@@ -11490,6 +11651,11 @@
         selectedTeamViewId = currentGuest?.team || null;
         teamCommunityTab = "mine";
       }
+      if (button.dataset.go === "guerra" && button.dataset.warRound) {
+        warRoundViewOverride = Number(button.dataset.warRound);
+      } else if (button.dataset.go !== "guerra") {
+        warRoundViewOverride = null;
+      }
       navigate(button.dataset.go);
     }));
     $$('[data-scroll]').forEach(button => button.addEventListener("click", () => {
@@ -11603,30 +11769,28 @@
     }
 
     if (route === "guerra") {
-      const round = warRoundNumber();
+      const round = [1, 2].includes(Number(warRoundViewOverride)) ? Number(warRoundViewOverride) : warRoundNumber();
       const voteGameId = warVoteGameId(round);
 
-      const saveWarVote = (action, targetTeamId = "") => {
+      const saveWarVote = async (action, targetTeamId = "") => {
         if (!warTeamVotingOpen(currentGuest.team, round) || warRoundRevealed(round)) {
           toast("La votación de tu equipo está cerrada.");
-          return;
+          return false;
         }
         const existingRaw = gameSubmissionFor(currentGuest.id, voteGameId);
         if (existingRaw?.pendingSync) {
           toast("Esperá un segundo: estamos guardando tu voto.");
-          return;
+          return false;
         }
         const answer = { action, targetTeamId, round };
-        void queueOptimisticWrite(
+        return await queueOptimisticWrite(
           "saveGameSubmission",
           {
             gameId: voteGameId,
             guestId: currentGuest.id,
             teamId: currentGuest.team,
             answer: JSON.stringify(answer),
-            comment: action === "attack"
-              ? `ATACAR a ${getTeam(targetTeamId).name}`
-              : action.toUpperCase(),
+            comment: action === "attack" ? `ATACAR a ${getTeam(targetTeamId).name}` : action.toUpperCase(),
             score: 0,
             bestScore: 0,
             earnedPoints: 0,
@@ -11644,21 +11808,31 @@
       };
 
       $$('[data-war-action]').forEach(button => {
-        button.addEventListener("click", () => {
+        button.addEventListener("click", async () => {
           const action = button.dataset.warAction;
           if (action === "attack") {
-            const snapshot = warRoundSnapshot(round);
-            const fallbackTarget = snapshot.find(item => item.id !== currentGuest.team)?.id || "";
-            saveWarVote("attack", fallbackTarget);
-          } else {
-            saveWarVote(action, "");
+            $$('.war-action-options [data-war-action]').forEach(item => item.classList.toggle("is-selected", item === button));
+            const picker = $('.war-target-picker');
+            if (picker) {
+              picker.hidden = false;
+              picker.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+            return;
           }
+          const confirmed = await confirmWarDecision(action, "");
+          if (!confirmed) return;
+          const saved = await saveWarVote(action, "");
+          if (saved) showWarDecisionAnimation(action, "");
         });
       });
 
       $$('[data-war-target]').forEach(button => {
-        button.addEventListener("click", () => {
-          saveWarVote("attack", button.dataset.warTarget);
+        button.addEventListener("click", async () => {
+          const targetTeamId = button.dataset.warTarget;
+          const confirmed = await confirmWarDecision("attack", targetTeamId);
+          if (!confirmed) return;
+          const saved = await saveWarVote("attack", targetTeamId);
+          if (saved) showWarDecisionAnimation("attack", targetTeamId);
         });
       });
 
@@ -11713,16 +11887,6 @@
             warAction: "attack", targetTeamId, warRound: round, updatedAt: new Date().toISOString()
           }, { writeKey: `game:${currentGuest.id}:${warTiebreakGameId(round)}`, successMessage: "Objetivo de desempate guardado ✓" });
         });
-      });
-
-      $('[data-captain-reveal-war]')?.addEventListener("click", async event => {
-        if (!isGuestCaptain(currentGuest)) return;
-        const revealRound = Number(event.currentTarget.dataset.captainRevealWar || round);
-        event.currentTarget.disabled = true;
-        event.currentTarget.textContent = "Revelando…";
-        const ok = await resolveWarRound(revealRound, { source: "captain" });
-        if (!ok) { renderCurrentRoute(); return; }
-        renderCurrentRoute();
       });
     }
 
@@ -13020,22 +13184,6 @@
     });
 
 
-    $$('[data-admin-resolve-war]').forEach(button => {
-      button.addEventListener("click", async () => {
-        const round = Number(button.dataset.adminResolveWar || 0);
-        if (![1, 2].includes(round)) return;
-        button.disabled = true;
-        const original = button.textContent;
-        button.textContent = "Resolviendo…";
-        const ok = await resolveWarRoundAdmin(round);
-        if (!ok) {
-          button.disabled = false;
-          button.textContent = original;
-          return;
-        }
-        renderCurrentRoute();
-      });
-    });
 
     $$("[data-admin-response-team]")
       .forEach(button => {
@@ -13631,6 +13779,17 @@
         "is-saving"
       );
 
+      if (key === "game-roulette" && open) {
+        const sequenceStarted = await startTimedPreEventSequence();
+        if (!sequenceStarted) {
+          control.checked = false;
+          control.disabled = false;
+          toggleCard?.classList.remove("is-saving");
+          toast("No se pudo iniciar el reloj de los nuevos juegos.");
+          return;
+        }
+      }
+
       const saved = await writeToSheets("saveUnlock", {
         key,
         open,
@@ -13683,7 +13842,9 @@
       );
       const featureMessage = isSectionKey
         ? `${sectionName} ${open ? "habilitada" : "oculta"}.`
-        : (open ? "Juego habilitado." : "Juego oculto.");
+        : key === "game-roulette"
+          ? (open ? "Nuevos juegos lanzados: empieza la Ruleta de 48 horas." : "Secuencia de nuevos juegos desactivada.")
+          : (open ? "Juego habilitado." : "Juego oculto.");
 
       toast(featureMessage);
       renderCurrentRoute();
