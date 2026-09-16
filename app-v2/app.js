@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32520";
+  const CURRENT_APP_VERSION = "32521";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32520"
+        appVersion: CONFIG.APP_VERSION || "32521"
       })
     );
   }
@@ -1032,7 +1032,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32520",
+      appVersion: "32521",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -3066,15 +3066,16 @@
   const PRE_EVENT_SEQUENCE_GUEST_ID = "system-pre-event-sequence";
   const PRE_EVENT_STAGE_MS = 48 * 60 * 60 * 1000;
 
-  // Ruleta v32520: 5 negativos, 1 cero y 6 positivos; SVG preciso y semántica visual limpia.
-  // Los signos se intercalan visualmente y la expectativa total sigue cerca de 800 pts por equipo.
+  // Ruleta v32521: 7 positivos, 4 negativos y 1 cero (12 casilleros equiprobables).
+  // La dificultad queda en la decisión posterior; la expectativa total se mantiene ~800 pts por equipo.
+  // Orden visual: los negativos quedan espaciados para evitar bloques de color y mejorar lectura.
   const ROULETTE_VALUES_BY_TEAM = {
-    bosque: [-55, 40, -30, 90, 0, 135, -25, 65, -15, 110, -10, 150],
-    fuego: [-55, 35, -35, 80, 0, 120, -20, 60, -10, 100, -5, 130],
-    luz: [-70, 50, -40, 110, 0, 175, -30, 80, -15, 140, -10, 210],
-    noche: [-80, 55, -45, 125, 0, 200, -30, 90, -15, 160, -10, 235],
-    agua: [-65, 45, -35, 100, 0, 155, -25, 75, -15, 125, -10, 185],
-    viento: [-60, 40, -35, 95, 0, 145, -25, 70, -15, 120, -10, 180]
+    bosque: [-60, 40, 125, -35, 75, 0, -20, 170, 55, -10, 95, 20],
+    fuego: [-55, 35, 105, -30, 65, 0, -15, 150, 50, -5, 85, 15],
+    luz: [-75, 55, 165, -45, 100, 0, -25, 210, 75, -10, 125, 25],
+    noche: [-85, 60, 185, -50, 115, 0, -30, 245, 85, -15, 145, 30],
+    agua: [-65, 45, 145, -35, 85, 0, -20, 195, 65, -10, 110, 20],
+    viento: [-60, 45, 135, -35, 80, 0, -20, 185, 60, -10, 105, 20]
   };
 
   function manualGameFlag(key) {
@@ -7016,15 +7017,27 @@
     return `M ${cx} ${cy} L ${start.x.toFixed(3)} ${start.y.toFixed(3)} A ${radius} ${radius} 0 0 1 ${end.x.toFixed(3)} ${end.y.toFixed(3)} Z`;
   }
 
-  function rouletteWheelMarkup(teamId) {
+  function rouletteResultIndex(teamId, baseResult, explicitIndex = null) {
+    const values = ROULETTE_VALUES_BY_TEAM[teamId] || ROULETTE_VALUES_BY_TEAM.viento;
+    const parsedIndex = Number(explicitIndex);
+    if (Number.isInteger(parsedIndex) && parsedIndex >= 0 && parsedIndex < values.length) return parsedIndex;
+    const parsedResult = Number(baseResult);
+    return values.findIndex(value => Number(value) === parsedResult);
+  }
+
+  function rouletteWheelMarkup(teamId, settledIndex = null) {
     const team = getTeam(teamId);
     const values = ROULETTE_VALUES_BY_TEAM[teamId] || ROULETTE_VALUES_BY_TEAM.viento;
-    const positivePalette = ["#315f49", "#3d6c53", "#4a785e", "#365f49", "#527f64", "#416f57"];
-    const negativePalette = ["#6b273b", "#7a3045", "#87394c", "#5d2034", "#914456"];
+    const positivePalette = ["#315f49", "#3a6b51", "#46785d", "#356349", "#527f64", "#416f57", "#5a8669"];
+    const negativePalette = ["#6b273b", "#7a3045", "#87394c", "#5d2034"];
     const zeroColor = "#31536e";
     let positiveIndex = 0;
     let negativeIndex = 0;
     const segmentStep = 360 / values.length;
+    const hasSettledIndex = Number.isInteger(Number(settledIndex)) && Number(settledIndex) >= 0 && Number(settledIndex) < values.length;
+    const selectedIndex = hasSettledIndex ? Number(settledIndex) : -1;
+    // En reposo la flecha queda sobre un separador; después del giro queda clavada en el centro del premio obtenido.
+    const staticRotation = hasSettledIndex ? ((360 - selectedIndex * segmentStep) % 360) : (segmentStep / 2);
 
     const segments = values.map((value, index) => {
       const fill = value < 0
@@ -7033,22 +7046,23 @@
           ? positivePalette[positiveIndex++ % positivePalette.length]
           : zeroColor;
       const centerAngle = index * segmentStep;
-      const label = roulettePoint(200, 200, 137, centerAngle);
+      const label = roulettePoint(200, 200, 143, centerAngle);
       const semanticClass = value < 0 ? "is-negative" : value > 0 ? "is-positive" : "is-zero";
+      const winnerClass = index === selectedIndex ? " is-winning" : "";
       return `
-        <path class="roulette-svg-segment ${semanticClass}" d="${rouletteSegmentPath(index, values.length)}" fill="${fill}"></path>
-        <text class="roulette-svg-value ${semanticClass}" x="${label.x.toFixed(2)}" y="${label.y.toFixed(2)}" text-anchor="middle" dominant-baseline="middle">${value > 0 ? "+" : ""}${value}</text>`;
+        <path class="roulette-svg-segment ${semanticClass}${winnerClass}" d="${rouletteSegmentPath(index, values.length)}" fill="${fill}"></path>
+        <text class="roulette-svg-value ${semanticClass}${winnerClass}" x="${label.x.toFixed(2)}" y="${label.y.toFixed(2)}" text-anchor="middle" dominant-baseline="middle">${value > 0 ? "+" : ""}${value}</text>`;
     }).join("");
 
     return `
-      <div class="new-roulette-stage roulette-v32520" style="--local-accent:${team.accent}">
+      <div class="new-roulette-stage roulette-v32520 roulette-v32521 ${hasSettledIndex ? "is-static-settled" : ""}" style="--local-accent:${team.accent}">
         <div class="roulette-pointer-housing" aria-hidden="true"><span class="new-roulette-pointer"></span></div>
         <div class="roulette-outer-rim">
-          <div id="newRouletteWheel" class="new-roulette-wheel-rotor" aria-label="Ruleta de puntos">
+          <div id="newRouletteWheel" class="new-roulette-wheel-rotor" aria-label="Ruleta de puntos" style="transform:rotate(${staticRotation.toFixed(3)}deg)">
             <svg class="new-roulette-svg" viewBox="0 0 400 400" role="img" aria-hidden="true">
               <circle cx="200" cy="200" r="195" fill="#f6efe2"></circle>
               <g>${segments}</g>
-              <circle class="roulette-svg-inner-ring" cx="200" cy="200" r="101"></circle>
+              <circle class="roulette-svg-inner-ring" cx="200" cy="200" r="92"></circle>
               <circle class="roulette-svg-outer-ring" cx="200" cy="200" r="190"></circle>
             </svg>
           </div>
@@ -7058,10 +7072,10 @@
           <small>1 TIRADA</small>
         </div>
       </div>
-      <div class="roulette-legend" aria-hidden="true">
-        <span class="is-negative"><i></i>RESTA</span>
-        <span class="is-zero"><i></i>CERO</span>
-        <span class="is-positive"><i></i>SUMA</span>
+      <div class="roulette-legend" aria-label="Probabilidades de la ruleta">
+        <span class="is-positive"><i></i>7 SUMAN</span>
+        <span class="is-negative"><i></i>4 RESTAN</span>
+        <span class="is-zero"><i></i>1 CERO</span>
       </div>
     `;
   }
@@ -7097,6 +7111,7 @@
     const saved = rouletteSubmissionFor(currentGuest.id);
     const pending = saved ? {} : getRoulettePending(currentGuest.id);
     const pendingBase = Number.isFinite(Number(pending.baseResult)) ? Number(pending.baseResult) : null;
+    const pendingIndex = pendingBase !== null ? rouletteResultIndex(team.id, pendingBase, pending.wheelIndex) : -1;
     const participants = confirmedNewGameMembers(team.id);
     const played = participants.filter(guest => rouletteSubmissionFor(guest.id)?.status === "completed").length;
     const decision = pendingBase !== null ? rouletteDecisionCopy(pendingBase) : null;
@@ -7122,6 +7137,8 @@
             </div>
             ${testMode ? `<button type="button" class="admin-test-reset-game" data-reset-admin-test="roulette">↻ Probar la Ruleta de nuevo</button>` : ""}
           ` : pendingBase !== null ? `
+            <div class="roulette-settled-intro"><span>RESULTADO DEL GIRO</span><strong>${pendingBase > 0 ? "+" : ""}${pendingBase}</strong><small>La ruleta queda fija en tu casillero mientras decidís.</small></div>
+            ${rouletteWheelMarkup(team.id, pendingIndex)}
             <div class="new-roulette-decision">
               <span class="new-roulette-base ${pendingBase > 0 ? "is-positive" : pendingBase < 0 ? "is-negative" : ""}">${pendingBase > 0 ? "+" : ""}${pendingBase}</span>
               <div><p class="eyebrow">DECISIÓN FINAL</p><h4>${escapeHTML(decision.title)}</h4><p>${escapeHTML(decision.text)}</p></div>
@@ -7138,7 +7155,7 @@
           ` : `
             ${rouletteWheelMarkup(team.id)}
             <button id="newRouletteSpin" type="button" class="new-roulette-spin">GIRAR RULETA</button>
-            <p class="new-game-note">Los valores están equilibrados según la cantidad de integrantes de cada equipo.</p>
+            <p class="new-game-note"><strong>58% de los casilleros suman.</strong> Los valores cambian por equipo para mantener la competencia equilibrada.</p>
           `}
         </section>
 
@@ -11822,6 +11839,7 @@
           window.setTimeout(() => {
             setRoulettePending({
               baseResult,
+              wheelIndex: index,
               createdAt: new Date().toISOString()
             });
             renderCurrentRoute();
@@ -11858,8 +11876,10 @@
             decision = "Resultado neutro";
           }
 
+          const wheelIndex = rouletteResultIndex(currentGuest.team, baseResult, pending.wheelIndex);
           const answer = {
             baseResult,
+            wheelIndex,
             decision,
             finalPoints,
             status: "completed"
@@ -11868,7 +11888,7 @@
           showRouletteFinalAnimation(finalPoints, decision);
           clearRoulettePending(currentGuest.id);
           if (isAdminTestMode()) {
-            adminTestSession.rouletteResult = { baseResult, decision, finalPoints, status: "completed" };
+            adminTestSession.rouletteResult = { baseResult, wheelIndex, decision, finalPoints, status: "completed" };
             window.setTimeout(() => renderCurrentRoute(), 1850);
             return;
           }
@@ -11885,6 +11905,7 @@
               earnedPoints: finalPoints,
               maxScore: 0,
               baseResult,
+              wheelIndex,
               decision,
               finalPoints,
               status: "completed",
