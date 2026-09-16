@@ -13986,7 +13986,7 @@ summary > b {
 }
 
 /* =========================================================
-   v32519 · Timers automáticos + UX Sumá puntos / Guerra
+   v32520 · Timers automáticos + UX Sumá puntos / Guerra
    ========================================================= */
 
 /* Sumá puntos: sin numeración, iconos grandes y CTA real */
@@ -14200,7 +14200,7 @@ summary > b {
 
 
 /* ============================================================
-   v32519 · Sumá puntos + Ruleta + Admin de prueba
+   v32520 · Sumá puntos + Ruleta + Admin de prueba
    ============================================================ */
 .admin-test-login-row{display:grid;gap:6px;margin-top:10px;padding:12px;border:1px solid rgba(116,51,68,.16);border-radius:14px;background:rgba(116,51,68,.05)}
 .admin-test-login-row.hidden{display:none!important}.admin-test-login-row label{font-size:9px;font-weight:950;color:#743344}.admin-test-login-row input{height:45px;margin:0;border-radius:12px}.admin-test-login-row small{font-size:8px;line-height:1.35;color:var(--muted)}
@@ -14277,4 +14277,108 @@ summary > b {
   #view .new-roulette-label b{font-size:9.5px!important}
   #view .points-all-game-list .points-challenge-card.is-compact-done{grid-template-columns:42px minmax(0,1fr)!important}
   #view .points-all-game-list .points-challenge-card.is-compact-done>button{grid-column:2!important;justify-self:start!important;min-width:105px!important}
+}
+
+
+/* ============================================================
+   v32520 · Ruleta premium + Guerra sin premios/castigos al bloquear
+   ============================================================ */
+#view .roulette-v32520{
+  width:min(438px,88vw)!important;
+  aspect-ratio:1;
+  margin:12px auto 12px!important;
+  position:relative;
+  filter:drop-shadow(0 18px 28px rgba(52,42,31,.13));
+}
+#view .roulette-v32520 .roulette-outer-rim{
+  position:absolute;inset:0;border-radius:50%;padding:8px;
+  background:linear-gradient(145deg,#f7f0e2 0%,#c9a75e 32%,#fff9eb 58%,#b9934a 100%);
+  box-shadow:0 16px 34px rgba(57,43,27,.18),inset 0 0 0 1px rgba(115,81,35,.18),inset 0 0 0 5px rgba(255,255,255,.42);
+}
+#view .roulette-v32520 .new-roulette-wheel-rotor{
+  position:absolute;inset:8px;border-radius:50%;overflow:hidden;
+  transform-origin:50% 50%;will-change:transform;
+  background:#f6efe2;
+}
+#view .roulette-v32520 .new-roulette-svg{width:100%;height:100%;display:block}
+#view .roulette-v32520 .roulette-svg-segment{
+  stroke:rgba(255,248,232,.82);stroke-width:2.1;vector-effect:non-scaling-stroke;
+}
+#view .roulette-v32520 .roulette-svg-value{
+  fill:#fff;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:17px;font-weight:1000;letter-spacing:-.04em;
+  paint-order:stroke;stroke:rgba(20,22,25,.28);stroke-width:4px;stroke-linejoin:round;
+  font-variant-numeric:tabular-nums;
+}
+#view .roulette-v32520 .roulette-svg-value.is-zero{font-size:18px}
+#view .roulette-v32520 .roulette-svg-inner-ring{
+  fill:none;stroke:rgba(255,255,255,.34);stroke-width:2;
+}
+#view .roulette-v32520 .roulette-svg-outer-ring{
+  fill:none;stroke:rgba(255,255,255,.46);stroke-width:3;
+}
+#view .roulette-v32520 .new-roulette-center{
+  width:112px!important;height:112px!important;border-radius:50%;
+  background:radial-gradient(circle at 35% 28%,#fffdf8,#ecdfc8 74%);
+  border:5px solid rgba(255,250,238,.93)!important;
+  box-shadow:0 8px 20px rgba(44,34,24,.21),0 0 0 1px rgba(183,137,69,.36)!important;
+}
+#view .roulette-v32520 .new-roulette-team-logo{width:58px!important;height:58px!important}
+#view .roulette-v32520 .new-roulette-center small{
+  margin-top:-4px!important;font-size:8px!important;letter-spacing:.13em!important;color:#a67936!important;
+}
+#view .roulette-v32520 .roulette-pointer-housing{
+  position:absolute;z-index:8;left:50%;top:-10px;transform:translateX(-50%);
+  width:54px;height:46px;display:grid;place-items:start center;pointer-events:none;
+}
+#view .roulette-v32520 .new-roulette-pointer{
+  position:relative!important;left:auto!important;top:auto!important;transform:none!important;
+  width:0!important;height:0!important;
+  border-left:18px solid transparent!important;border-right:18px solid transparent!important;border-top:34px solid #d6b762!important;
+  filter:drop-shadow(0 3px 3px rgba(65,45,20,.28));
+}
+#view .roulette-v32520.is-spinning .new-roulette-pointer{animation:roulettePointerPremium .09s ease-in-out infinite alternate!important}
+#view .roulette-v32520.is-spinning .roulette-outer-rim{box-shadow:0 18px 42px rgba(57,43,27,.24),0 0 0 5px rgba(214,183,98,.12),inset 0 0 0 1px rgba(115,81,35,.18),inset 0 0 0 5px rgba(255,255,255,.42)}
+#view .roulette-v32520.is-settled .roulette-outer-rim{animation:rouletteSettleGlow .6s ease both}
+#view .roulette-v32520.is-settled .new-roulette-pointer{animation:rouletteSettlePointer .56s cubic-bezier(.18,.9,.3,1.2) both!important}
+@keyframes roulettePointerPremium{from{transform:rotate(-8deg)}to{transform:rotate(8deg)}}
+@keyframes rouletteSettleGlow{0%{filter:none}45%{filter:brightness(1.1);box-shadow:0 18px 46px rgba(183,137,69,.34),0 0 0 8px rgba(214,183,98,.12)}100%{filter:none}}
+@keyframes rouletteSettlePointer{0%{transform:translateY(-7px) scale(.9)}55%{transform:translateY(4px) scale(1.18)}100%{transform:none}}
+#view .roulette-legend{
+  display:flex;justify-content:center;align-items:center;gap:14px;margin:3px auto 15px;
+  color:#726c62;font-size:8px;font-weight:950;letter-spacing:.08em;
+}
+#view .roulette-legend span{display:flex;align-items:center;gap:5px}
+#view .roulette-legend i{width:9px;height:9px;border-radius:50%;display:block}
+#view .roulette-legend .is-negative i{background:#7a3045}
+#view .roulette-legend .is-zero i{background:#31536e}
+#view .roulette-legend .is-positive i{background:#3d6c53}
+#view .new-roulette-spin{
+  width:min(438px,100%)!important;min-height:58px!important;border-radius:16px!important;
+  font-size:15px!important;letter-spacing:.09em!important;
+  background:linear-gradient(135deg,#365f7d,#284b68)!important;
+  box-shadow:0 10px 20px rgba(49,83,110,.2)!important;
+}
+#view .new-roulette-card>.new-game-note{margin:12px auto 0!important;max-width:520px;text-align:center;color:#7a7368!important}
+#view .war-mini-rules span:nth-child(3){background:rgba(49,83,110,.06)}
+#view .war-mini-rules span:nth-child(3) small{color:#31536e!important}
+
+@media(max-width:760px){
+  #view .roulette-v32520{width:min(360px,91vw)!important;margin-top:8px!important}
+  #view .roulette-v32520 .roulette-svg-value{font-size:16px}
+  #view .roulette-v32520 .new-roulette-center{width:102px!important;height:102px!important}
+  #view .roulette-v32520 .new-roulette-team-logo{width:52px!important;height:52px!important}
+  #view .new-roulette-spin{width:min(360px,100%)!important}
+}
+@media(max-width:390px){
+  #view .roulette-v32520{width:min(330px,91vw)!important}
+  #view .roulette-v32520 .roulette-svg-value{font-size:15px}
+  #view .roulette-v32520 .new-roulette-center{width:94px!important;height:94px!important}
+  #view .roulette-v32520 .new-roulette-team-logo{width:47px!important;height:47px!important}
+  #view .roulette-legend{gap:10px;font-size:7.5px}
+}
+@media(prefers-reduced-motion:reduce){
+  #view .roulette-v32520.is-spinning .new-roulette-pointer,
+  #view .roulette-v32520.is-settled .roulette-outer-rim,
+  #view .roulette-v32520.is-settled .new-roulette-pointer{animation:none!important}
 }

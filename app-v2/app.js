@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32519";
+  const CURRENT_APP_VERSION = "32520";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32519"
+        appVersion: CONFIG.APP_VERSION || "32520"
       })
     );
   }
@@ -1032,7 +1032,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32519",
+      appVersion: "32520",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -3060,13 +3060,13 @@
   };
   const WAR_BOUNTIES = [700, 600, 500, 400, 300, 200];
   const WAR_SUM_POINTS = 300;
-  const WAR_BLOCKED_PENALTY = -150;
-  const WAR_DEFEND_REWARD = 150;
+  const WAR_BLOCKED_PENALTY = 0;
+  const WAR_DEFEND_REWARD = 0;
   const PRE_EVENT_SEQUENCE_GAME_ID = "pre-event-timed-sequence-v1";
   const PRE_EVENT_SEQUENCE_GUEST_ID = "system-pre-event-sequence";
   const PRE_EVENT_STAGE_MS = 48 * 60 * 60 * 1000;
 
-  // Ruleta v32519: 5 negativos, 1 cero y 6 positivos.
+  // Ruleta v32520: 5 negativos, 1 cero y 6 positivos; SVG preciso y semántica visual limpia.
   // Los signos se intercalan visualmente y la expectativa total sigue cerca de 800 pts por equipo.
   const ROULETTE_VALUES_BY_TEAM = {
     bosque: [-55, 40, -30, 90, 0, 135, -25, 65, -15, 110, -10, 150],
@@ -6999,49 +6999,72 @@
     `;
   }
 
+  function roulettePoint(cx, cy, radius, angleDeg) {
+    const radians = (angleDeg - 90) * Math.PI / 180;
+    return {
+      x: cx + radius * Math.cos(radians),
+      y: cy + radius * Math.sin(radians)
+    };
+  }
+
+  function rouletteSegmentPath(index, count, radius = 190, cx = 200, cy = 200) {
+    const step = 360 / Math.max(1, count);
+    const startAngle = index * step - step / 2;
+    const endAngle = startAngle + step;
+    const start = roulettePoint(cx, cy, radius, startAngle);
+    const end = roulettePoint(cx, cy, radius, endAngle);
+    return `M ${cx} ${cy} L ${start.x.toFixed(3)} ${start.y.toFixed(3)} A ${radius} ${radius} 0 0 1 ${end.x.toFixed(3)} ${end.y.toFixed(3)} Z`;
+  }
+
   function rouletteWheelMarkup(teamId) {
     const team = getTeam(teamId);
     const values = ROULETTE_VALUES_BY_TEAM[teamId] || ROULETTE_VALUES_BY_TEAM.viento;
-    const positivePalette = ["#5d8066", "#55775f", "#4d7058", "#456950", "#3f624a", "#365b43", "#31553e"];
-    const negativePalette = ["#8f4855", "#7a3948", "#692f40", "#572638"];
-    const zeroColor = "#566879";
+    const positivePalette = ["#315f49", "#3d6c53", "#4a785e", "#365f49", "#527f64", "#416f57"];
+    const negativePalette = ["#6b273b", "#7a3045", "#87394c", "#5d2034", "#914456"];
+    const zeroColor = "#31536e";
     let positiveIndex = 0;
     let negativeIndex = 0;
-    const segmentSize = 100 / values.length;
-    const startAngle = -(180 / values.length);
-    const gradient = values.map((value, index) => {
-      const color = value < 0
-        ? negativePalette[Math.min(negativeIndex++, negativePalette.length - 1)]
+    const segmentStep = 360 / values.length;
+
+    const segments = values.map((value, index) => {
+      const fill = value < 0
+        ? negativePalette[negativeIndex++ % negativePalette.length]
         : value > 0
-          ? positivePalette[Math.min(positiveIndex++, positivePalette.length - 1)]
+          ? positivePalette[positiveIndex++ % positivePalette.length]
           : zeroColor;
-      return `${color} ${(index * segmentSize).toFixed(4)}% ${((index + 1) * segmentSize).toFixed(4)}%`;
-    }).join(",");
+      const centerAngle = index * segmentStep;
+      const label = roulettePoint(200, 200, 137, centerAngle);
+      const semanticClass = value < 0 ? "is-negative" : value > 0 ? "is-positive" : "is-zero";
+      return `
+        <path class="roulette-svg-segment ${semanticClass}" d="${rouletteSegmentPath(index, values.length)}" fill="${fill}"></path>
+        <text class="roulette-svg-value ${semanticClass}" x="${label.x.toFixed(2)}" y="${label.y.toFixed(2)}" text-anchor="middle" dominant-baseline="middle">${value > 0 ? "+" : ""}${value}</text>`;
+    }).join("");
 
     return `
-      <div class="new-roulette-stage" style="--local-accent:${team.accent}">
-        <span class="new-roulette-pointer" aria-hidden="true"></span>
-        <div id="newRouletteWheel" class="new-roulette-wheel" style="background:conic-gradient(from ${startAngle}deg,${gradient})">
-          ${values.map((value, index) => {
-            const angle = index * (360 / values.length);
-            const radians = angle * Math.PI / 180;
-            const x = 50 + Math.sin(radians) * 35.5;
-            const y = 50 - Math.cos(radians) * 35.5;
-            return `
-              <span class="new-roulette-label ${value < 0 ? "is-negative" : value > 0 ? "is-positive" : "is-zero"}" style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%">
-                <b>${value > 0 ? "+" : ""}${value}</b>
-              </span>
-            `;
-          }).join("")}
+      <div class="new-roulette-stage roulette-v32520" style="--local-accent:${team.accent}">
+        <div class="roulette-pointer-housing" aria-hidden="true"><span class="new-roulette-pointer"></span></div>
+        <div class="roulette-outer-rim">
+          <div id="newRouletteWheel" class="new-roulette-wheel-rotor" aria-label="Ruleta de puntos">
+            <svg class="new-roulette-svg" viewBox="0 0 400 400" role="img" aria-hidden="true">
+              <circle cx="200" cy="200" r="195" fill="#f6efe2"></circle>
+              <g>${segments}</g>
+              <circle class="roulette-svg-inner-ring" cx="200" cy="200" r="101"></circle>
+              <circle class="roulette-svg-outer-ring" cx="200" cy="200" r="190"></circle>
+            </svg>
+          </div>
         </div>
         <div class="new-roulette-center">
           ${teamLogo(team, "new-roulette-team-logo")}
           <small>1 TIRADA</small>
         </div>
       </div>
+      <div class="roulette-legend" aria-hidden="true">
+        <span class="is-negative"><i></i>RESTA</span>
+        <span class="is-zero"><i></i>CERO</span>
+        <span class="is-positive"><i></i>SUMA</span>
+      </div>
     `;
   }
-
 
   function rouletteDecisionCopy(baseResult) {
     if (baseResult > 0) {
@@ -7150,7 +7173,7 @@
 
   function warDecisionDescription(action, targetTeamId = "") {
     if (action === "sum") return `Tu voto será SUMAR +${WAR_SUM_POINTS} puntos seguros. Tu equipo queda expuesto a ataques.`;
-    if (action === "defend") return `Tu voto será DEFENDER. No sumás de base, pero cada ataque bloqueado le da +${WAR_DEFEND_REWARD} a tu equipo y resta ${Math.abs(WAR_BLOCKED_PENALTY)} al atacante.`;
+    if (action === "defend") return `Tu voto será DEFENDER. No sumás puntos, pero bloqueás todos los ataques que reciba tu equipo y no perdés nada.`;
     if (action === "attack") {
       const target = DATA.teams[targetTeamId] ? getTeam(targetTeamId) : null;
       const bounty = target ? warBountyForTeam(targetTeamId, warRoundViewOverride || warRoundNumber()) : 0;
@@ -7203,7 +7226,7 @@
       ? `Objetivo: ${target.name}`
       : action === "sum"
         ? `+${WAR_SUM_POINTS} si la jugada oficial del equipo termina siendo SUMAR`
-        : `+${WAR_DEFEND_REWARD} por cada ataque que logren bloquear`;
+        : `0 puntos · inmunidad total durante la ronda`;
     const overlay = document.createElement("div");
     overlay.className = `war-decision-overlay is-${action}`;
     overlay.innerHTML = `
@@ -7388,8 +7411,8 @@
 
         <section class="section-card war-how-to-play">
           <div class="war-whatsapp-callout"><span>📱</span><div><strong>Debátanlo en el WhatsApp de su equipo</strong><p>Miren el ranking, anticipen qué pueden hacer los demás y coordinen la jugada antes de votar.</p></div></div>
-          <div class="war-mini-rules"><span><b>➕ SUMAR</b><small>+${WAR_SUM_POINTS} seguros · quedás expuesto</small></span><span><b>⚔️ ATACAR</b><small>Robás el botín si el rival no defiende</small></span><span><b>🛡️ DEFENDER</b><small>Bloqueás ataques · +${WAR_DEFEND_REWARD} por cada ataque bloqueado</small></span></div>
-          <p class="war-how-note">Si varios atacan al mismo rival, se reparten el botín. Si atacás a un equipo que defendió, perdés ${Math.abs(WAR_BLOCKED_PENALTY)} y esos ${WAR_DEFEND_REWARD} puntos pasan al equipo que defendió.</p>
+          <div class="war-mini-rules"><span><b>➕ SUMAR</b><small>+${WAR_SUM_POINTS} seguros · quedás expuesto</small></span><span><b>⚔️ ATACAR</b><small>Robás el botín si el rival no defiende</small></span><span><b>🛡️ DEFENDER</b><small>0 puntos · inmunidad total</small></span></div>
+          <p class="war-how-note">Si varios atacan al mismo rival, se reparten el botín. Si atacás a un equipo que eligió DEFENDER, el ataque queda bloqueado: no ganás ni perdés puntos por ese ataque.</p>
         </section>
 
         ${round === 2 ? warPreviousRoundMarkup(1) : ""}
@@ -7400,7 +7423,7 @@
           <div class="war-action-options ${rawVote?.pendingSync ? "is-saving" : ""}">
             <button type="button" data-war-action="sum" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "sum" ? "is-selected" : ""}"><span>➕</span><strong>SUMAR</strong><small>+${WAR_SUM_POINTS} seguros<br>pero quedás expuesto</small></button>
             <button type="button" data-war-action="attack" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "attack" ? "is-selected" : ""}"><span>⚔️</span><strong>ATACAR</strong><small>Robás puntos<br>si el rival no defiende</small></button>
-            <button type="button" data-war-action="defend" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "defend" ? "is-selected" : ""}"><span>🛡️</span><strong>DEFENDER</strong><small>Inmunidad total<br>+${WAR_DEFEND_REWARD} por ataque bloqueado</small></button>
+            <button type="button" data-war-action="defend" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "defend" ? "is-selected" : ""}"><span>🛡️</span><strong>DEFENDER</strong><small>0 puntos<br>inmunidad total</small></button>
           </div>
           <div class="war-target-picker" ${vote?.action === "attack" ? "" : "hidden"}><p>¿A quién atacarías?</p><div>${snapshot.filter(item => item.id !== team.id).map(item => { const targetTeam = getTeam(item.id); return `<button type="button" data-war-target="${item.id}" ${teamVotingClosed ? "disabled" : ""} class="${vote?.targetTeamId === item.id ? "is-selected" : ""}" style="--local-accent:${targetTeam.accent}">${teamLogo(targetTeam, "war-target-logo")}<strong>${escapeHTML(targetTeam.name)}</strong><b>${item.bounty}</b><small>puntos</small></button>`; }).join("")}</div></div>
           <div class="new-game-note ${rawVote?.pendingSync ? "is-saving" : ""}">${testMode ? (vote ? "🧪 Voto de prueba confirmado. Podés cambiarlo todas las veces que quieras; no se guarda ni suma puntos." : "🧪 Modo prueba: elegí una jugada. Nada de lo que hagas acá modifica la competencia real.") : teamVotingClosed ? "🔒 Tu capitán cerró la votación. Tu voto ya no puede modificarse salvo que la reabra." : rawVote?.pendingSync ? "Guardando tu voto…" : vote ? "✅ Tu voto quedó registrado. Podés cambiarlo mientras la votación siga abierta." : "Tu voto es secreto. La jugada oficial se define con los votos del equipo."}</div>
@@ -9033,7 +9056,7 @@
           "El puntaje depende de los aciertos y está ajustado según la cantidad de integrantes del equipo."
         )}
         ${rulesRow("Ruleta · Todo o Nada", "Variable", "Una tirada por persona. Si sale positivo podés plantarte o duplicar; si sale negativo podés aceptar o intentar recuperarte.")}
-        ${rulesRow("Guerra de Equipos", "Variable", `Dos rondas grupales. Debatan en WhatsApp y voten entre Sumar, Atacar o Defender. Defender bloquea ataques: cada atacante bloqueado pierde ${Math.abs(WAR_BLOCKED_PENALTY)} y el equipo que defendió gana ${WAR_DEFEND_REWARD}.`)}
+        ${rulesRow("Guerra de Equipos", "Variable", `Dos rondas grupales. Debatan en WhatsApp y voten entre Sumar, Atacar o Defender. Defender no suma puntos: simplemente bloquea todos los ataques. Un ataque bloqueado queda en 0.`)}
         ${rulesRow("Durante la boda", "+ / −", "La competencia no termina antes del evento: los seis equipos seguirán sumando y perdiendo puntos durante toda la noche con juegos y consignas en vivo.")}
         ${rulesRow("Bonus o penalizaciones", "+ / −", "Vani y Fede podrán sumar o restar puntos por juegos, actitud o incumplimiento de consignas.")}
       </section>
@@ -10578,12 +10601,9 @@
       const attackers = [...attackersRaw].sort();
       if (official[targetTeamId]?.action === "defend") {
         attackers.forEach(attackerId => {
-          deltas[attackerId] += WAR_BLOCKED_PENALTY;
-          deltas[targetTeamId] += WAR_DEFEND_REWARD;
-          notes[attackerId].push(`Ataque bloqueado por ${getTeam(targetTeamId).name} ${WAR_BLOCKED_PENALTY}`);
+          notes[attackerId].push(`Ataque bloqueado por ${getTeam(targetTeamId).name}: 0 pts`);
         });
-        const defendGain = attackers.length * WAR_DEFEND_REWARD;
-        notes[targetTeamId].push(`DEFENDER bloqueó ${attackers.length} ataque${attackers.length === 1 ? "" : "s"}: +${defendGain}`);
+        notes[targetTeamId].push(`DEFENDER bloqueó ${attackers.length} ataque${attackers.length === 1 ? "" : "s"}: 0 pts`);
         return;
       }
 
@@ -11791,18 +11811,22 @@
           const segment = 360 / Math.max(1, values.length);
           const target = (360 - (index * segment)) % 360;
           stage?.classList.add("is-spinning");
-          wheel.style.transition = "transform 3.2s cubic-bezier(.10,.72,.16,1)";
-          wheel.style.transform = `rotate(${2160 + target}deg)`;
+          wheel.style.transition = "transform 4.15s cubic-bezier(.08,.68,.14,1)";
+          wheel.style.transform = `rotate(${2520 + target}deg)`;
         }
 
         window.setTimeout(() => {
           stage?.classList.remove("is-spinning");
-          setRoulettePending({
-            baseResult,
-            createdAt: new Date().toISOString()
-          });
-          renderCurrentRoute();
-        }, 3250);
+          stage?.classList.add("is-settled");
+          button.textContent = baseResult > 0 ? `SALIO +${baseResult}` : baseResult < 0 ? `SALIO ${baseResult}` : "SALIO 0";
+          window.setTimeout(() => {
+            setRoulettePending({
+              baseResult,
+              createdAt: new Date().toISOString()
+            });
+            renderCurrentRoute();
+          }, 620);
+        }, 4180);
       });
 
       $$('[data-roulette-decision]').forEach(button => {
