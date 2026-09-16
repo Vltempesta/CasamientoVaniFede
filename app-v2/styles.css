@@ -13675,7 +13675,7 @@ summary > b {
 }
 
 /* =========================================================
-   v32516 · UX Ruleta + Guerra + desafíos unificados
+   v32517 · Estados visuales + traslados + defensa estratégica
    ========================================================= */
 
 /* Sumá puntos: los 7 desafíos comparten exactamente el mismo sistema visual */
@@ -13815,3 +13815,172 @@ summary > b {
 }
 .war-round-history{padding:11px 13px!important}.war-round-history summary{cursor:pointer;font-size:10px;font-weight:950;color:#31536e}.war-round-history-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:10px}.war-round-history-grid>div{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:7px;align-items:center;padding:7px;border:1px solid var(--line);border-left:3px solid var(--local-accent);border-radius:10px;background:rgba(255,255,255,.38)}.war-history-logo{width:28px;height:28px}.war-round-history-grid strong,.war-round-history-grid small{display:block}.war-round-history-grid strong{font-size:9px}.war-round-history-grid small{font-size:7px;color:var(--muted)}.war-round-history-grid b{font-size:12px}.war-round-history-grid b.is-positive{color:var(--ok)}.war-round-history-grid b.is-negative{color:var(--danger)}
 @media(max-width:520px){.war-round-history-grid{grid-template-columns:1fr}}
+
+
+/* =========================================================
+   v32517 · Claridad visual de estados + nuevos juegos
+   ========================================================= */
+
+/* Sumá puntos: que el estado se entienda de un vistazo */
+#view .points-all-game-list .points-challenge-card{
+  position:relative;
+  overflow:hidden;
+  border-left:4px solid rgba(183,137,69,.42)!important;
+  transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease,background .16s ease;
+}
+#view .points-all-game-list .points-challenge-card:not(.is-done):not(.is-locked){
+  background:linear-gradient(135deg,rgba(255,253,248,.98),rgba(247,238,221,.93))!important;
+  box-shadow:0 7px 17px rgba(78,55,27,.08)!important;
+}
+#view .points-all-game-list .points-challenge-card.is-done{
+  opacity:.84;
+  border:1px solid rgba(74,125,79,.32)!important;
+  border-left:5px solid #4f7f56!important;
+  background:linear-gradient(135deg,rgba(74,125,79,.12),rgba(246,250,244,.92))!important;
+  box-shadow:0 5px 12px rgba(48,89,54,.07)!important;
+}
+#view .points-all-game-list .points-challenge-card.is-done .points-challenge-number{
+  border-color:rgba(74,125,79,.34)!important;
+  background:rgba(74,125,79,.14)!important;
+  color:#3d6d44!important;
+}
+#view .points-all-game-list .points-challenge-card.is-done .points-challenge-copy>small,
+#view .points-all-game-list .points-challenge-card.is-done .points-challenge-copy>em{
+  color:#3f7247!important;
+}
+#view .points-all-game-list .points-challenge-card.is-done .points-challenge-copy>strong{
+  color:#344b38!important;
+}
+#view .points-all-game-list .points-challenge-card.is-new{
+  border:1px solid rgba(116,51,68,.34)!important;
+  border-left:5px solid #743344!important;
+  background:linear-gradient(135deg,rgba(116,51,68,.10),rgba(255,250,243,.97))!important;
+  box-shadow:0 9px 21px rgba(116,51,68,.10)!important;
+}
+#view .points-all-game-list .points-challenge-card.is-new::after{
+  content:"NUEVO";
+  position:absolute;
+  top:8px;
+  right:9px;
+  padding:3px 7px;
+  border-radius:999px;
+  background:#743344;
+  color:#fff9ef;
+  font-size:6.5px;
+  font-weight:1000;
+  letter-spacing:.08em;
+}
+#view .points-all-game-list .points-challenge-card.is-new .points-challenge-copy>small,
+#view .points-all-game-list .points-challenge-card.is-new .points-challenge-copy>em{
+  color:#743344!important;
+}
+#view .points-all-game-list .points-challenge-card.is-locked{
+  border-left-color:rgba(94,91,84,.26)!important;
+  filter:saturate(.72);
+}
+
+/* Traslados: los tres micros se leen como una unidad visual */
+#view .transport-confirmed-grid .transport-confirmed-card{
+  border:1px solid rgba(161,194,218,.26)!important;
+  background:linear-gradient(145deg,#365b78 0%,#2d4d68 56%,#28445b 100%)!important;
+  box-shadow:0 10px 22px rgba(42,73,97,.16)!important;
+}
+#view .transport-confirmed-grid .transport-confirmed-card .transport-zone-card-head>span{
+  background:rgba(255,255,255,.12)!important;
+  color:#eef7ff!important;
+}
+#view .transport-confirmed-grid .transport-confirmed-card .transport-zone-card-head small{
+  color:#d7bd7a!important;
+}
+#view .transport-confirmed-grid .transport-confirmed-card .transport-zone-card-head strong{
+  color:#fff!important;
+}
+#view .transport-confirmed-grid .transport-confirmed-card .transport-zone-card-head p{
+  color:rgba(243,248,252,.74)!important;
+}
+#view .transport-confirmed-grid .transport-confirmed-card .transport-zone-times>div{
+  border-color:rgba(255,255,255,.12)!important;
+  background:rgba(255,255,255,.085)!important;
+}
+#view .transport-confirmed-grid .transport-confirmed-card .transport-zone-times small{
+  color:rgba(238,246,252,.72)!important;
+}
+#view .transport-confirmed-grid .transport-confirmed-card .transport-zone-times strong{
+  color:#fff!important;
+}
+#view .transport-confirmed-grid .transport-confirmed-card .transport-zone-availability{
+  border-top-color:rgba(255,255,255,.13)!important;
+  color:#ccebd4!important;
+}
+#view .transport-confirmed-grid .transport-confirmed-card .transport-zone-availability.is-full{
+  color:#ffc7c7!important;
+}
+#view .transport-confirmed-grid .transport-confirmed-card.is-selected{
+  border:2px solid #d8b96e!important;
+  background:linear-gradient(145deg,#3e6683 0%,#31536e 58%,#29465d 100%)!important;
+  box-shadow:0 10px 24px rgba(49,83,110,.22),inset 0 0 0 1px rgba(255,238,187,.08)!important;
+}
+#view .transport-confirmed-grid .transport-selected-chip{
+  background:#d8b96e!important;
+  color:#3f2e13!important;
+}
+#view .transport-confirmed-grid .transport-zone-current{
+  color:#f6e2aa!important;
+}
+
+/* Ruleta: puente claro hacia el siguiente juego */
+#view .roulette-team-next-note{
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr);
+  gap:9px;
+  align-items:center;
+  margin-top:12px;
+  padding:11px 12px;
+  border:1px solid rgba(49,83,110,.18);
+  border-radius:13px;
+  background:linear-gradient(135deg,rgba(49,83,110,.08),rgba(255,253,248,.80));
+}
+#view .roulette-team-next-note>span{
+  width:32px;height:32px;display:grid;place-items:center;border-radius:10px;
+  background:rgba(49,83,110,.10);font-size:17px;
+}
+#view .roulette-team-next-note strong{display:block;color:#2e4c64;font-size:11px}
+#view .roulette-team-next-note p{margin:2px 0 0;color:var(--muted);font-size:9px;line-height:1.35}
+
+/* Guerra: la decisión activa queda claramente separada del resto */
+#view .war-vote-card{
+  border:1px solid rgba(204,226,241,.24)!important;
+  background:radial-gradient(circle at 100% 0,rgba(216,185,106,.17),transparent 31%),linear-gradient(145deg,#365b78 0%,#31536e 52%,#29465d 100%)!important;
+  box-shadow:0 13px 28px rgba(42,73,97,.18)!important;
+}
+#view .war-vote-card .war-vote-heading .eyebrow{color:#e4c478!important}
+#view .war-vote-card .war-vote-heading h4{color:#fff!important}
+#view .war-vote-card .war-vote-heading p:not(.eyebrow){color:rgba(242,248,252,.78)!important}
+#view .war-vote-card .war-vote-heading>span{
+  background:rgba(255,255,255,.12)!important;
+  color:#fff!important;
+  border:1px solid rgba(255,255,255,.11);
+}
+#view .war-vote-card .war-action-options button{
+  background:linear-gradient(180deg,#fffdf8,#efe4d2)!important;
+  border-color:rgba(255,255,255,.30)!important;
+  box-shadow:0 7px 14px rgba(18,44,64,.13);
+}
+#view .war-vote-card .war-action-options button.is-selected{
+  border-color:#e2c06b!important;
+  box-shadow:0 0 0 2px rgba(226,192,107,.22),0 8px 18px rgba(17,40,58,.17)!important;
+  transform:translateY(-1px);
+}
+#view .war-vote-card .new-game-note{color:rgba(242,248,252,.76)!important}
+#view .war-vote-card .war-target-picker>p{color:#fff!important}
+#view .war-vote-card .war-target-picker button{background:rgba(255,253,248,.95)!important}
+#view .war-how-note{
+  border-left:3px solid #743344;
+  padding:8px 10px;
+  border-radius:0 10px 10px 0;
+  background:rgba(116,51,68,.06);
+}
+
+@media(max-width:600px){
+  #view .points-all-game-list .points-challenge-card.is-new::after{top:6px;right:7px}
+}

@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32516";
+  const CURRENT_APP_VERSION = "32517";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -408,7 +408,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32516"
+        appVersion: CONFIG.APP_VERSION || "32517"
       })
     );
   }
@@ -993,7 +993,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32516",
+      appVersion: "32517",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2981,6 +2981,7 @@
   const WAR_BOUNTIES = [700, 600, 500, 400, 300, 200];
   const WAR_SUM_POINTS = 300;
   const WAR_BLOCKED_PENALTY = -150;
+  const WAR_DEFEND_REWARD = 150;
 
   // Calibradas para que, con el plantel actual completo, la expectativa
   // de la Ruleta quede cerca de 800 puntos por equipo.
@@ -4301,6 +4302,7 @@
     );
     const rouletteOpen = isTriviaGameOpen("game-roulette");
     const warOpen = isTriviaGameOpen("game-war");
+    const newGamesActive = rouletteOpen || warOpen;
     const rouletteDone = rouletteSubmissionFor(currentGuest.id)?.status === "completed";
     const warDone = warRoundRevealed(2);
     const challengesDone =
@@ -4357,6 +4359,16 @@
         text: "Revisá la información clave antes de salir.",
         button: "Ver lo esencial",
         attr: 'data-scroll="homeEssential"'
+      };
+    } else if (!homeChallengesDone && newGamesActive) {
+      primaryAction = {
+        tone: "play",
+        icon: "star",
+        kicker: "¡NUEVOS JUEGOS!",
+        title: "SEGUÍ SUMANDO PUNTOS PARA TU EQUIPO",
+        text: "Ya hay nuevos desafíos disponibles. Entrá, jugá y ayudá a mover el ranking.",
+        button: "Ver desafíos",
+        attr: 'data-go="puntos"'
       };
     } else if (nearEvent) {
       primaryAction = {
@@ -6877,6 +6889,10 @@
               <span>${saved.finalPoints > 0 ? "🏆" : saved.finalPoints < 0 ? "😬" : "🤝"}</span>
               <small>Resultado final</small><strong>${saved.finalPoints > 0 ? "+" : ""}${saved.finalPoints}</strong><p>${escapeHTML(saved.decision || "Tirada completada")}</p>
             </div>
+            <div class="roulette-team-next-note">
+              <span>⏳</span>
+              <div><strong>Ahora depende de todo tu equipo</strong><p>Cuando todos los integrantes de ${escapeHTML(team.name)} terminen la Ruleta, se habilitará el próximo juego.</p></div>
+            </div>
           ` : pendingBase !== null ? `
             <div class="new-roulette-decision">
               <span class="new-roulette-base ${pendingBase > 0 ? "is-positive" : pendingBase < 0 ? "is-negative" : ""}">${pendingBase > 0 ? "+" : ""}${pendingBase}</span>
@@ -7093,8 +7109,8 @@
 
         <section class="section-card war-how-to-play">
           <div class="war-whatsapp-callout"><span>📱</span><div><strong>Hablen la estrategia en el WhatsApp de su equipo</strong><p>Lean el ranking, intenten anticipar qué harán los demás y coordinen la jugada antes de votar.</p></div></div>
-          <div class="war-mini-rules"><span><b>➕ SUMAR</b><small>+${WAR_SUM_POINTS} seguros · quedás expuesto</small></span><span><b>⚔️ ATACAR</b><small>Robás el botín si el rival no defiende</small></span><span><b>🛡️ DEFENDER</b><small>0 pts · bloqueás todos los ataques</small></span></div>
-          <p class="war-how-note">Si varios atacan al mismo rival, se reparten el botín. Si atacás a un equipo que defendió, perdés ${Math.abs(WAR_BLOCKED_PENALTY)} puntos.</p>
+          <div class="war-mini-rules"><span><b>➕ SUMAR</b><small>+${WAR_SUM_POINTS} seguros · quedás expuesto</small></span><span><b>⚔️ ATACAR</b><small>Robás el botín si el rival no defiende</small></span><span><b>🛡️ DEFENDER</b><small>Bloqueás ataques · +${WAR_DEFEND_REWARD} por cada ataque bloqueado</small></span></div>
+          <p class="war-how-note">Si varios atacan al mismo rival, se reparten el botín. Si atacás a un equipo que defendió, perdés ${Math.abs(WAR_BLOCKED_PENALTY)} puntos y esos ${WAR_DEFEND_REWARD} puntos pasan al equipo que defendió.</p>
         </section>
 
         ${round === 2 ? warPreviousRoundMarkup(1) : ""}
@@ -7105,7 +7121,7 @@
           <div class="war-action-options ${rawVote?.pendingSync ? "is-saving" : ""}">
             <button type="button" data-war-action="sum" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "sum" ? "is-selected" : ""}"><span>➕</span><strong>SUMAR</strong><small>+${WAR_SUM_POINTS} seguros<br>pero quedás expuesto</small></button>
             <button type="button" data-war-action="attack" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "attack" ? "is-selected" : ""}"><span>⚔️</span><strong>ATACAR</strong><small>Robás puntos<br>si el rival no defiende</small></button>
-            <button type="button" data-war-action="defend" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "defend" ? "is-selected" : ""}"><span>🛡️</span><strong>DEFENDER</strong><small>0 puntos<br>inmunidad total</small></button>
+            <button type="button" data-war-action="defend" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "defend" ? "is-selected" : ""}"><span>🛡️</span><strong>DEFENDER</strong><small>Inmunidad total<br>+${WAR_DEFEND_REWARD} por ataque bloqueado</small></button>
           </div>
           ${vote?.action === "attack" ? `<div class="war-target-picker"><p>¿A quién atacarías?</p><div>${snapshot.filter(item => item.id !== team.id).map(item => { const targetTeam = getTeam(item.id); return `<button type="button" data-war-target="${item.id}" ${teamVotingClosed ? "disabled" : ""} class="${vote.targetTeamId === item.id ? "is-selected" : ""}" style="--local-accent:${targetTeam.accent}">${teamLogo(targetTeam,"war-target-logo")}<strong>${escapeHTML(targetTeam.name)}</strong><b>${item.bounty}</b><small>puntos</small></button>`; }).join("")}</div></div>` : ""}
           <div class="new-game-note ${rawVote?.pendingSync ? "is-saving" : ""}">${teamVotingClosed ? "🔒 Tu capitán cerró la votación. Tu voto ya no puede modificarse salvo que la reabra." : rawVote?.pendingSync ? "Guardando tu voto…" : vote ? "✅ Tu voto quedó registrado. Podés cambiarlo mientras la votación siga abierta." : "Nadie puede ver cómo viene la votación. Sólo se muestra cuánta gente ya votó."}</div>
@@ -7179,7 +7195,7 @@
         ${pointsChallengeCard({ number:"03", icon:"🎯", title:"¿Cuánto conocés a Vani y Fede?", text:triviaDone ? "Trivia completada." : "Respondé 5 preguntas.", done:triviaDone, route:"trivia-pareja", progressText:triviaDone ? `${coupleEarnedPoints} puntos obtenidos` : `Hasta ${coupleMaxPoints} puntos`, actionLabel:triviaDone ? "Ver resultado" : "Comenzar", locked:!rsvpDone || !triviaOpen })}
         ${pointsChallengeCard({ number:"04", icon:"⚖️", title:"¿Vani o Fede?", text:whoTriviaDone ? "Trivia completada." : "Elegí: ¿Vani o Fede?", done:whoTriviaDone, route:"trivia-quien", progressText:whoTriviaDone ? `${whoEarnedPoints} puntos obtenidos` : `Hasta ${whoMaxPoints} puntos`, actionLabel:whoTriviaDone ? "Ver resultado" : "Comenzar", locked:!rsvpDone || !whoTriviaOpen })}
         ${pointsChallengeCard({ number:"05", icon:"🎡", title:"Ruleta · Todo o Nada", text:rouletteOpen ? (rouletteDone ? "Tu tirada ya quedó registrada." : "Girás una vez y elegís cuánto riesgo asumir.") : "Nuevo juego · se habilitará próximamente.", done:rouletteDone, route:"ruleta", progressText:rouletteDone ? `${rouletteEarnedPoints > 0 ? "+" : ""}${rouletteEarnedPoints} puntos obtenidos` : "Resultado directo al equipo", actionLabel:rouletteDone ? "Ver resultado" : "Jugar", locked:!rsvpDone || rsvp?.attendance !== "si" || !rouletteOpen })}
-        ${pointsChallengeCard({ number:"06", icon:"⚔️", title:"Guerra de Equipos", text:warDone ? "Las dos rondas ya fueron resueltas." : warRoundRevealed(1) ? (isTriviaGameOpen("game-war-r2") ? "Ronda 2 abierta: vuelvan a debatir la estrategia." : "Ronda 1 revelada. La Ronda 2 sigue bloqueada.") : warOpen ? "Debatan en WhatsApp y voten: sumar, atacar o defender." : "Nuevo juego grupal · se habilitará próximamente.", done:warDone, route:"guerra", progressText:warDone ? "Guerra finalizada" : warRoundRevealed(1) ? "Ronda 1 resuelta" : "Hasta +1.400 puntos en 2 rondas", actionLabel:currentWarVote ? "Ver / cambiar voto" : "Entrar", locked:!rsvpDone || rsvp?.attendance !== "si" || !warOpen })}
+        ${pointsChallengeCard({ number:"06", icon:"⚔️", title:"Guerra de Equipos", text:warDone ? "Las dos rondas ya fueron resueltas." : warRoundRevealed(1) ? (isTriviaGameOpen("game-war-r2") ? "Ronda 2 abierta: vuelvan a debatir la estrategia." : "Ronda 1 revelada. La Ronda 2 sigue bloqueada.") : warOpen ? "Debatan en WhatsApp y voten: sumar, atacar o defender." : "Nuevo juego grupal · se habilitará próximamente.", done:warDone, route:"guerra", progressText:warDone ? "Guerra finalizada" : warRoundRevealed(1) ? "Ronda 1 resuelta" : "Muchos puntos en juego · 2 rondas", actionLabel:currentWarVote ? "Ver / cambiar voto" : "Entrar", locked:!rsvpDone || rsvp?.attendance !== "si" || !warOpen })}
         ${pointsChallengeCard({ number:"07", icon:"🚌", title:"Durante el viaje", text:"Contenido secreto. Lo vamos a revelar más adelante.", done:false, route:"puntos", progressText:"Próximamente", actionLabel:"", locked:true })}
       </div>
     `;
@@ -7197,11 +7213,12 @@
     actionLabel,
     locked = false
   }) {
+    const isNewChallenge = !done && !locked && ["05", "06"].includes(String(number));
     return `
       <section
         class="points-challenge-card section-card ${
           done ? "is-done" : ""
-        } ${locked ? "is-locked" : ""}">
+        } ${locked ? "is-locked" : ""} ${isNewChallenge ? "is-new" : ""}">
         <span class="points-challenge-number">
           ${escapeHTML(number)}
         </span>
@@ -7212,8 +7229,10 @@
           <small>
             ${
               done
-                ? "Desafío completado"
-                : `Desafío ${escapeHTML(number)}`
+                ? "✓ Desafío completado"
+                : isNewChallenge
+                  ? `Nuevo · Desafío ${escapeHTML(number)}`
+                  : `Desafío ${escapeHTML(number)}`
             }
           </small>
           <strong>${escapeHTML(title)}</strong>
@@ -8722,7 +8741,7 @@
           "El puntaje depende de los aciertos y está ajustado según la cantidad de integrantes del equipo."
         )}
         ${rulesRow("Ruleta · Todo o Nada", "Variable", "Una tirada por persona. Si sale positivo podés plantarte o duplicar; si sale negativo podés aceptar o intentar recuperarte.")}
-        ${rulesRow("Guerra de Equipos", "Hasta +1.400", "Dos rondas grupales. Debatan la estrategia en WhatsApp y voten entre Sumar, Atacar o Defender. El ranking define cuánto vale cada objetivo.")}
+        ${rulesRow("Guerra de Equipos", "Variable", `Dos rondas grupales. Debatan en WhatsApp y voten entre Sumar, Atacar o Defender. Defender bloquea ataques: cada atacante bloqueado pierde ${Math.abs(WAR_BLOCKED_PENALTY)} y el equipo que defendió gana ${WAR_DEFEND_REWARD}.`)}
         ${rulesRow("Durante la boda", "+ / −", "La competencia no termina antes del evento: los seis equipos seguirán sumando y perdiendo puntos durante toda la noche con juegos y consignas en vivo.")}
         ${rulesRow("Bonus o penalizaciones", "+ / −", "Vani y Fede podrán sumar o restar puntos por juegos, actitud o incumplimiento de consignas.")}
       </section>
@@ -10284,9 +10303,11 @@
       if (official[targetTeamId]?.action === "defend") {
         attackers.forEach(attackerId => {
           deltas[attackerId] += WAR_BLOCKED_PENALTY;
+          deltas[targetTeamId] += WAR_DEFEND_REWARD;
           notes[attackerId].push(`Ataque bloqueado por ${getTeam(targetTeamId).name} ${WAR_BLOCKED_PENALTY}`);
         });
-        notes[targetTeamId].push(`DEFENDER bloqueó ${attackers.length} ataque${attackers.length === 1 ? "" : "s"}`);
+        const defendGain = attackers.length * WAR_DEFEND_REWARD;
+        notes[targetTeamId].push(`DEFENDER bloqueó ${attackers.length} ataque${attackers.length === 1 ? "" : "s"}: +${defendGain}`);
         return;
       }
 
