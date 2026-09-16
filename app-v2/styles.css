@@ -13673,3 +13673,145 @@ summary > b {
 @media(max-width:520px){
   .new-roulette-stage{width:min(310px,84vw)}.new-roulette-label{transform:rotate(var(--angle)) translateY(-113px) rotate(calc(var(--angle) * -1));font-size:11px}.new-roulette-decision{grid-template-columns:70px minmax(0,1fr)}.new-roulette-base{width:66px;height:66px;font-size:21px}.new-roulette-decision-actions{grid-template-columns:1fr}.war-action-options{grid-template-columns:1fr}.war-action-options button{min-height:76px;grid-template-columns:34px minmax(0,1fr);text-align:left;justify-items:start;align-content:center}.war-action-options button>span{grid-row:1/3}.war-target-picker>div{grid-template-columns:repeat(2,1fr)}.war-reveal-grid{grid-template-columns:1fr}.new-game-next-round{grid-template-columns:32px minmax(0,1fr)}.new-game-next-round button{grid-column:1/-1}.war-public-progress-grid{grid-template-columns:1fr}
 }
+
+/* =========================================================
+   v32516 · UX Ruleta + Guerra + desafíos unificados
+   ========================================================= */
+
+/* Sumá puntos: los 7 desafíos comparten exactamente el mismo sistema visual */
+.points-all-game-list{
+  display:grid;
+  gap:8px;
+  margin-top:9px;
+}
+.points-all-game-list .points-challenge-card{
+  min-height:88px;
+  grid-template-columns:34px 36px minmax(0,1fr) auto;
+  gap:9px;
+  padding:11px 12px!important;
+  border-radius:16px!important;
+  background:rgba(255,253,248,.76);
+}
+.points-all-game-list .points-challenge-number{
+  width:32px;height:32px;border-radius:10px;font-size:10px;
+}
+.points-all-game-list .points-challenge-icon{font-size:22px}
+.points-all-game-list .points-challenge-copy strong{font-size:14px;line-height:1.15}
+.points-all-game-list .points-challenge-copy p{font-size:9.5px;line-height:1.3;margin:3px 0}
+.points-all-game-list .points-challenge-copy em{font-size:8.5px}
+.points-challenge-bonus{display:block;margin-top:2px;color:#426f47;font-size:8px;font-style:normal;font-weight:900}
+.points-event-next-chip{display:inline-flex;margin-top:7px;padding:5px 8px;border-radius:999px;background:rgba(116,51,68,.08);color:#743344;font-size:8px;font-weight:950;letter-spacing:.03em}
+
+/* Ruleta: semántica visual, números horizontales y feedback */
+.new-roulette-card{padding:16px!important}
+.new-roulette-stage{width:min(390px,88vw);margin:4px auto 18px}
+.new-roulette-wheel{
+  border:9px solid rgba(255,255,255,.88)!important;
+  box-shadow:0 18px 36px rgba(62,44,24,.2),inset 0 0 0 1px rgba(49,83,110,.14)!important;
+  overflow:hidden;
+  will-change:transform;
+}
+.new-roulette-wheel::before{
+  content:"";position:absolute;inset:0;border-radius:50%;z-index:1;pointer-events:none;
+  background:repeating-conic-gradient(from -22.5deg,transparent 0 44.2deg,rgba(255,255,255,.52) 44.2deg 45deg);
+}
+.new-roulette-wheel::after{z-index:1!important;inset:13%!important;border:1px solid rgba(255,255,255,.42)!important}
+.new-roulette-label{
+  z-index:2!important;
+  width:auto!important;min-width:48px!important;
+  margin:0!important;
+  padding:4px 6px!important;
+  border-radius:999px;
+  transform:translate(-50%,-50%)!important;
+  transform-origin:center!important;
+  font-size:14px!important;
+  line-height:1!important;
+  color:#fff!important;
+  text-shadow:0 1px 3px rgba(0,0,0,.46)!important;
+  background:rgba(20,30,25,.17);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+}
+.new-roulette-label.is-negative{background:rgba(89,31,43,.22)}
+.new-roulette-label.is-positive{background:rgba(28,72,42,.18)}
+.new-roulette-label b{font-weight:1000!important;font-variant-numeric:tabular-nums}
+.new-roulette-pointer{top:-2px!important;border-left-width:16px!important;border-right-width:16px!important;border-top-width:31px!important;z-index:5!important}
+.new-roulette-stage.is-spinning .new-roulette-pointer{animation:roulettePointerTick .115s ease-in-out infinite alternate}
+@keyframes roulettePointerTick{from{transform:translateX(-50%) rotate(-5deg)}to{transform:translateX(-50%) rotate(5deg)}}
+.new-roulette-spin{min-height:54px;font-size:15px;transition:transform .16s ease,filter .16s ease}
+.new-roulette-spin:not(:disabled):active{transform:scale(.985)}
+.new-roulette-rules-compact{grid-template-columns:1fr 1fr!important}
+
+.roulette-result-overlay{
+  position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:22px;
+  background:rgba(27,24,20,.63);backdrop-filter:blur(8px);
+  opacity:0;pointer-events:none;transition:opacity .22s ease;
+}
+.roulette-result-overlay.is-visible{opacity:1;pointer-events:auto}
+.roulette-result-animation-card{
+  position:relative;overflow:hidden;width:min(430px,92vw);padding:30px 24px 27px;text-align:center;
+  border:1px solid rgba(255,255,255,.42);border-radius:28px;background:linear-gradient(180deg,#fffdf8,#efe3cf);
+  box-shadow:0 26px 70px rgba(0,0,0,.3);transform:scale(.76) translateY(14px);opacity:0;
+  transition:transform .42s cubic-bezier(.18,.88,.26,1.15),opacity .22s ease;
+}
+.roulette-result-overlay.is-visible .roulette-result-animation-card{transform:scale(1) translateY(0);opacity:1}
+.roulette-result-animation-card>small{display:block;margin-top:8px;color:var(--gold-deep);font-size:9px;font-weight:950;letter-spacing:.13em}
+.roulette-result-animation-card>h3{margin:5px 0 2px;font-size:27px}
+.roulette-result-animation-card>strong{display:block;font-family:var(--font-title);font-size:47px;line-height:1.05}
+.roulette-result-animation-card>p{margin:7px 0 0;color:var(--muted);font-size:11px}
+.roulette-result-animation-icon{display:block;font-size:46px;animation:rouletteResultBounce .65s cubic-bezier(.2,.9,.25,1.2)}
+.roulette-result-overlay.is-positive .roulette-result-animation-card>strong{color:#426f47}
+.roulette-result-overlay.is-negative .roulette-result-animation-card>strong{color:#8b4350}
+.roulette-result-overlay.is-negative .roulette-result-animation-card{animation:rouletteResultShake .4s ease .15s}
+@keyframes rouletteResultBounce{0%{transform:scale(.4) rotate(-12deg)}70%{transform:scale(1.15) rotate(4deg)}100%{transform:scale(1)}}
+@keyframes rouletteResultShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}50%{transform:translateX(7px)}75%{transform:translateX(-4px)}}
+.roulette-confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.roulette-confetti i{position:absolute;left:var(--x);top:-18px;width:7px;height:13px;border-radius:2px;background:#c39a4d;animation:rouletteConfetti 1.35s ease-out calc(var(--i) * 35ms) both}
+.roulette-confetti i:nth-child(3n){background:#5d8265}.roulette-confetti i:nth-child(3n+1){background:#743344}
+@keyframes rouletteConfetti{0%{transform:translateY(-10px) rotate(0);opacity:0}12%{opacity:1}100%{transform:translateY(360px) rotate(520deg);opacity:0}}
+
+/* Guerra: explicación arriba, ranking visible y control de capitanes */
+.war-how-to-play{padding:14px!important;display:grid;gap:10px}
+.war-whatsapp-callout{display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;align-items:center;padding:11px 12px;border:1px solid rgba(116,51,68,.18);border-radius:14px;background:rgba(116,51,68,.055)}
+.war-whatsapp-callout>span{font-size:25px;text-align:center}.war-whatsapp-callout strong{display:block;font-size:12px}.war-whatsapp-callout p{margin:2px 0 0;color:var(--muted);font-size:9px;line-height:1.35}
+.war-mini-rules{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.war-mini-rules>span{padding:9px 10px;border:1px solid var(--line);border-radius:12px;background:rgba(49,83,110,.035)}
+.war-mini-rules b,.war-mini-rules small{display:block}.war-mini-rules b{font-size:10px}.war-mini-rules small{margin-top:2px;color:var(--muted);font-size:7.5px;line-height:1.3}
+.war-how-note{margin:0;text-align:center;color:var(--muted);font-size:8.5px;line-height:1.35}
+.war-live-ranking{padding:13px!important}
+.war-live-ranking-head{display:flex;justify-content:space-between;gap:10px;align-items:end;margin-bottom:9px}.war-live-ranking-head h4{margin:2px 0 0;font-size:17px}.war-live-ranking-head>small{max-width:230px;text-align:right;color:var(--muted);font-size:8px;line-height:1.3}
+.war-live-ranking-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.war-live-ranking-row{position:relative;display:grid;justify-items:center;gap:2px;padding:8px 5px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.4);overflow:hidden}
+.war-live-ranking-row::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--local-accent)}
+.war-live-ranking-row>span{font-size:8px;font-weight:950;color:var(--muted)}.war-live-logo{width:30px;height:30px}.war-live-ranking-row strong{font-size:8.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.war-live-ranking-row small{font-size:7px;color:var(--muted)}.war-live-ranking-row>b{color:var(--gold-deep);font-size:14px}.war-live-ranking-row.is-own{box-shadow:inset 0 0 0 2px rgba(116,51,68,.12)}
+.war-vote-card.is-closed .war-action-options,.war-vote-card.is-closed .war-target-picker{opacity:.62}
+.war-action-options button:disabled,.war-target-picker button:disabled{cursor:not-allowed}
+
+.war-captain-control{padding:14px!important;border-color:rgba(116,51,68,.24)!important;background:linear-gradient(135deg,rgba(116,51,68,.055),rgba(255,253,248,.82))!important}
+.war-captain-control-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.war-captain-control-head h4{margin:2px 0 3px;font-size:18px}.war-captain-control-head p:not(.eyebrow){margin:0;color:var(--muted);font-size:9px;line-height:1.35}.war-captain-control-head>span{padding:6px 9px;border-radius:999px;background:rgba(116,51,68,.08);color:#743344;font-size:8px;font-weight:950;white-space:nowrap}
+.war-captain-toggle{width:100%;min-height:42px;margin-top:10px;border-radius:12px;font-weight:900}.war-captain-toggle.is-close-action{background:#743344;color:#fff;border-color:#743344}.war-captain-toggle.is-open-action{background:rgba(94,140,94,.1);color:#426f47;border-color:rgba(94,140,94,.3)}
+.war-captain-warning{margin:7px 0 0;color:#8b642c;font-size:8px;font-weight:850}
+.war-captain-tiebreak{margin-top:10px;padding:10px;border:1px solid rgba(183,137,69,.25);border-radius:12px;background:rgba(201,170,114,.07)}.war-captain-tiebreak>strong{display:block;font-size:9px;margin-bottom:7px}.war-captain-tiebreak>div{display:flex;flex-wrap:wrap;gap:6px}.war-captain-tiebreak button{min-height:34px;padding:6px 9px;border-radius:10px;background:#fffdf8;color:var(--ink);font-size:8px;font-weight:900}.war-captain-tiebreak button.is-selected{background:#31536e;color:#fff;border-color:#31536e}
+.war-captain-round-state{display:flex;gap:9px;align-items:center;justify-content:space-between;margin-top:10px;padding-top:9px;border-top:1px solid rgba(132,104,68,.12)}.war-captain-round-state>span{font-size:9px;font-weight:900}.war-captain-round-state>small{color:var(--muted);font-size:7.5px;text-align:right}.war-captain-round-state>button{min-height:38px;padding:8px 12px;border-radius:11px;background:#31536e;color:#fff;font-weight:900}
+
+.war-updated-ranking{padding:14px!important}.war-updated-ranking-head h4{margin:2px 0 10px;font-size:19px}.war-updated-ranking-list{display:grid;gap:6px}.war-updated-ranking-list>div{display:grid;grid-template-columns:28px 32px minmax(0,1fr) auto;gap:7px;align-items:center;padding:7px 9px;border:1px solid var(--line);border-left:4px solid var(--local-accent);border-radius:11px;background:rgba(255,255,255,.42)}.war-updated-ranking-list>div.is-own{background:rgba(201,170,114,.09);box-shadow:inset 0 0 0 1px rgba(201,170,114,.12)}.war-updated-logo{width:30px;height:30px}.war-updated-ranking-list span{font-weight:950;color:var(--muted);font-size:9px}.war-updated-ranking-list strong{font-size:10px}.war-updated-ranking-list b{font-size:11px}
+
+@media(max-width:760px){
+  .points-all-game-list .points-challenge-card{grid-template-columns:32px 32px minmax(0,1fr);min-height:96px}
+  .points-all-game-list .points-challenge-card>button,.points-all-game-list .points-challenge-locked{grid-column:3;justify-self:start}
+  .war-mini-rules{grid-template-columns:1fr}
+  .war-live-ranking-head{display:block}.war-live-ranking-head>small{display:block;text-align:left;margin-top:3px}
+  .war-live-ranking-grid{grid-template-columns:repeat(3,1fr)}
+  .new-roulette-rules-compact{grid-template-columns:1fr!important}
+  .war-captain-control-head{display:block}.war-captain-control-head>span{display:inline-flex;margin-top:7px}
+}
+@media(max-width:520px){
+  .new-roulette-stage{width:min(330px,86vw)}
+  .new-roulette-label{font-size:12px!important;min-width:42px!important;padding:4px!important}
+  .war-live-ranking-grid{grid-template-columns:repeat(2,1fr)}
+  .war-captain-round-state{align-items:flex-start;flex-direction:column}.war-captain-round-state>small{text-align:left}.war-captain-round-state>button{width:100%}
+}
+@media(prefers-reduced-motion:reduce){
+  .new-roulette-stage.is-spinning .new-roulette-pointer,.roulette-result-animation-icon,.roulette-confetti i,.roulette-result-overlay.is-negative .roulette-result-animation-card{animation:none!important}
+}
+.war-round-history{padding:11px 13px!important}.war-round-history summary{cursor:pointer;font-size:10px;font-weight:950;color:#31536e}.war-round-history-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:10px}.war-round-history-grid>div{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:7px;align-items:center;padding:7px;border:1px solid var(--line);border-left:3px solid var(--local-accent);border-radius:10px;background:rgba(255,255,255,.38)}.war-history-logo{width:28px;height:28px}.war-round-history-grid strong,.war-round-history-grid small{display:block}.war-round-history-grid strong{font-size:9px}.war-round-history-grid small{font-size:7px;color:var(--muted)}.war-round-history-grid b{font-size:12px}.war-round-history-grid b.is-positive{color:var(--ok)}.war-round-history-grid b.is-negative{color:var(--danger)}
+@media(max-width:520px){.war-round-history-grid{grid-template-columns:1fr}}

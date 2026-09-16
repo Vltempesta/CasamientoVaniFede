@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32515";
+  const CURRENT_APP_VERSION = "32516";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -408,7 +408,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32515"
+        appVersion: CONFIG.APP_VERSION || "32516"
       })
     );
   }
@@ -993,7 +993,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32515",
+      appVersion: "32516",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2970,6 +2970,14 @@
     1: "war-strategy-r1-result",
     2: "war-strategy-r2-result"
   };
+  const WAR_CONTROL_GAME_IDS = {
+    1: "war-control-r1",
+    2: "war-control-r2"
+  };
+  const WAR_TIEBREAK_GAME_IDS = {
+    1: "war-tiebreak-r1",
+    2: "war-tiebreak-r2"
+  };
   const WAR_BOUNTIES = [700, 600, 500, 400, 300, 200];
   const WAR_SUM_POINTS = 300;
   const WAR_BLOCKED_PENALTY = -150;
@@ -4022,6 +4030,67 @@
     return WAR_RESULT_GAME_IDS[Number(round)] || WAR_RESULT_GAME_IDS[1];
   }
 
+  function warControlGameId(round) {
+    return WAR_CONTROL_GAME_IDS[Number(round)] || WAR_CONTROL_GAME_IDS[1];
+  }
+
+  function warTiebreakGameId(round) {
+    return WAR_TIEBREAK_GAME_IDS[Number(round)] || WAR_TIEBREAK_GAME_IDS[1];
+  }
+
+  function teamCaptainGuest(teamId) {
+    return confirmedNewGameMembers(teamId).find(isGuestCaptain) ||
+      teamCompetitionMembers(teamId).find(isGuestCaptain) ||
+      null;
+  }
+
+  function parseWarControlSubmission(submission) {
+    if (!submission) return null;
+    const data = safeJsonObject(submission.answer);
+    const status = String(submission.warStatus ?? data.status ?? "").toLowerCase();
+    if (!["open", "closed"].includes(status)) return null;
+    return {
+      status,
+      round: Number(submission.warRound ?? data.round ?? 0),
+      teamId: String(submission.teamId ?? data.teamId ?? "")
+    };
+  }
+
+  function warTeamControl(teamId, round) {
+    const captain = teamCaptainGuest(teamId);
+    if (!captain) return null;
+    return parseWarControlSubmission(
+      gameSubmissionFor(captain.id, warControlGameId(round))
+    );
+  }
+
+  function warTeamVotingClosed(teamId, round) {
+    return warTeamControl(teamId, round)?.status === "closed";
+  }
+
+  function warTeamVotingOpen(teamId, round) {
+    return warRoundEnabled(round) &&
+      !warRoundRevealed(round) &&
+      !warTeamVotingClosed(teamId, round);
+  }
+
+  function parseWarTiebreakSubmission(submission) {
+    if (!submission) return null;
+    const data = safeJsonObject(submission.answer);
+    const action = String(submission.warAction ?? data.action ?? "");
+    const targetTeamId = String(submission.targetTeamId ?? data.targetTeamId ?? "");
+    if (action && !["sum", "attack", "defend"].includes(action)) return null;
+    return { action, targetTeamId };
+  }
+
+  function warTiebreakForTeam(teamId, round) {
+    const captain = teamCaptainGuest(teamId);
+    if (!captain) return null;
+    return parseWarTiebreakSubmission(
+      gameSubmissionFor(captain.id, warTiebreakGameId(round))
+    );
+  }
+
   function parseWarVoteSubmission(submission) {
     if (!submission) return null;
     const data = safeJsonObject(submission.answer);
@@ -4128,6 +4197,71 @@
     );
   }
 
+  function warTieInfoForTeam(teamId, round) {
+    const votes = warVotesForTeam(teamId, round);
+    const actionCounts = { sum: 0, attack: 0, defend: 0 };
+    votes.forEach(item => {
+      if (item.vote?.action) actionCounts[item.vote.action] += 1;
+    });
+    const maxAction = Math.max(0, ...Object.values(actionCounts));
+    const tiedActions = maxAction > 0
+      ? Object.keys(actionCounts).filter(action => actionCounts[action] === maxAction)
+      : [];
+    const saved = warTiebreakForTeam(teamId, round);
+    const effectiveAction = tiedActions.length === 1
+      ? tiedActions[0]
+      : (saved?.action && tiedActions.includes(saved.action) ? saved.action : "");
+
+    const targetCounts = {};
+    votes.filter(item => item.vote?.action === "attack").forEach(item => {
+      const targetId = item.vote.targetTeamId;
+      if (!DATA.teams[targetId] || targetId === teamId) return;
+      targetCounts[targetId] = (targetCounts[targetId] || 0) + 1;
+    });
+    const targetEntries = Object.entries(targetCounts);
+    const maxTarget = targetEntries.length ? Math.max(...targetEntries.map(([, count]) => count)) : 0;
+    const tiedTargets = maxTarget > 0
+      ? targetEntries.filter(([, count]) => count === maxTarget).map(([id]) => id)
+      : [];
+
+    return { actionCounts, tiedActions, effectiveAction, targetCounts, tiedTargets, tiebreak: saved };
+  }
+
+  function warClosedTeamsCount(round) {
+    return Object.keys(DATA.teams).filter(teamId => warTeamVotingClosed(teamId, round)).length;
+  }
+
+  function warRoundReadyForCaptainReveal(round) {
+    const teamIds = Object.keys(DATA.teams);
+    if (!teamIds.every(teamId => warTeamVotingClosed(teamId, round))) return false;
+    return teamIds.every(teamId => {
+      const tieInfo = warTieInfoForTeam(teamId, round);
+      const savedTie = warTiebreakForTeam(teamId, round);
+      if (tieInfo.tiedActions.length > 1 && !(savedTie?.action && tieInfo.tiedActions.includes(savedTie.action))) {
+        return false;
+      }
+      const effectiveAction = tieInfo.tiedActions.length === 1 ? tieInfo.tiedActions[0] : savedTie?.action;
+      if (effectiveAction === "attack" && tieInfo.tiedTargets.length > 1 && !tieInfo.tiedTargets.includes(savedTie?.targetTeamId)) {
+        return false;
+      }
+      return !warOfficialChoiceForTeam(teamId, round).error;
+    });
+  }
+
+  function currentGuestPreEventChallengesComplete() {
+    if (!currentGuest) return false;
+    const rsvp = state.rsvps?.[currentGuest.id];
+    return Boolean(
+      hasFinalRsvp(rsvp) &&
+      triviaSubmission("music-selection") &&
+      triviaSubmission("couple-trivia-test") &&
+      triviaSubmission("who-is-who-trivia-test") &&
+      rouletteSubmissionFor(currentGuest.id)?.status === "completed" &&
+      warRoundRevealed(1) &&
+      warRoundRevealed(2)
+    );
+  }
+
   function hasNewCompetitionGameData() {
     const ids = new Set([
       ROULETTE_GAME_ID,
@@ -4165,10 +4299,21 @@
     const whoTriviaDone = Boolean(
       triviaSubmission("who-is-who-trivia-test")
     );
+    const rouletteOpen = isTriviaGameOpen("game-roulette");
+    const warOpen = isTriviaGameOpen("game-war");
+    const rouletteDone = rouletteSubmissionFor(currentGuest.id)?.status === "completed";
+    const warDone = warRoundRevealed(2);
     const challengesDone =
       musicDone &&
       coupleTriviaDone &&
       whoTriviaDone;
+    const preEventCompetitionDone = Boolean(
+      rsvpDone && challengesDone && rouletteDone && warDone
+    );
+    const expandedChallengesActive = rouletteOpen || warOpen || hasNewCompetitionGameData();
+    const homeChallengesDone = expandedChallengesActive
+      ? preEventCompetitionDone
+      : challengesDone;
 
     const rank = calculateRanking();
     const deadline =
@@ -4225,7 +4370,7 @@
         button: "Ver lo esencial",
         attr: 'data-scroll="homeEssential"'
       };
-    } else if (!challengesDone) {
+    } else if (!homeChallengesDone) {
       primaryAction = {
         tone: "play",
         icon: "star",
@@ -4304,6 +4449,14 @@
           <button type="button" ${primaryAction.attr}>
             ${escapeHTML(primaryAction.button)}
           </button>
+        </section>
+      ` : ""}
+
+      ${preEventCompetitionDone ? `
+        <section class="home-event-next-banner">
+          <span class="home-event-next-icon">${uiIcon("bus")}</span>
+          <div><small>PRÓXIMO PASO</small><strong>Prepárense para el traslado al evento</strong><p>Los desafíos previos terminaron. Revisá cómo viajás y estate atento: lo próximo empieza camino al casamiento.</p></div>
+          <button type="button" data-go="traslado">Ver traslado</button>
         </section>
       ` : ""}
 
@@ -4458,10 +4611,10 @@
 
       </section>
 
-      ${(rsvpDone || challengesDone) ? `
+      ${(rsvpDone || homeChallengesDone) ? `
         <section
           class="home-completion-status-grid ${
-            rsvpDone && challengesDone
+            rsvpDone && homeChallengesDone
               ? "has-two"
               : "has-one"
           }">
@@ -4481,7 +4634,7 @@
             </button>
           ` : ""}
 
-          ${challengesDone ? `
+          ${homeChallengesDone ? `
             <button
               class="home-rsvp-confirmed home-completion-status home-challenges-confirmed"
               type="button"
@@ -4493,10 +4646,10 @@
         </section>
       ` : ""}
 
-      ${challengesDone ? `
+      ${challengesDone && !preEventCompetitionDone ? `
         <div class="home-more-challenges-note">
-          <span aria-hidden="true">🕒</span>
-          <strong>¡2 nuevos desafíos se habilitarán próximamente!</strong>
+          <span aria-hidden="true">${rouletteOpen || warOpen ? "🔥" : "🕒"}</span>
+          <strong>${rouletteOpen || warOpen ? "¡Hay nuevos desafíos en Sumá puntos!" : "¡2 nuevos desafíos se habilitarán próximamente!"}</strong>
         </div>
       ` : ""}
     `;
@@ -4512,11 +4665,12 @@
       .home-welcome-compact{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(135deg,rgba(255,253,248,.94),rgba(239,228,209,.72));box-shadow:0 7px 18px rgba(76,51,22,.05)}.home-welcome-compact .home-team-logo{width:43px;height:43px;flex:0 0 auto}.home-welcome-compact h3{font-size:clamp(19px,4vw,27px);line-height:1.08}
       .home-rsvp-confirmed{width:max-content;display:flex;align-items:center;gap:6px;margin:7px 0 0;padding:6px 9px;border:1px solid rgba(74,125,79,.2);border-radius:999px;background:rgba(74,125,79,.08);color:#426f47;box-shadow:none;font-size:11px;font-weight:900}.home-rsvp-confirmed .ui-icon{width:15px;height:15px}
       .home-primary-action{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;margin-top:8px;padding:12px 13px;border:1px solid rgba(183,137,69,.25);border-radius:17px;background:rgba(255,253,248,.84);box-shadow:0 6px 16px rgba(76,51,22,.04)}.home-primary-icon{width:37px;height:37px;display:grid;place-items:center;border-radius:12px;background:rgba(122,49,64,.08);color:#743344}.home-primary-icon .ui-icon{width:19px;height:19px}.home-primary-copy small{color:var(--gold-deep);font-size:8px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.home-primary-copy h3{margin:1px 0 2px;font-size:18px}.home-primary-copy p{margin:0;font-size:11px;line-height:1.3}.home-primary-action button{min-height:36px;padding:8px 12px;white-space:nowrap}
+      .home-event-next-banner{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:11px;align-items:center;margin-top:9px;padding:13px 14px;border:1px solid rgba(116,51,68,.32);border-radius:18px;background:linear-gradient(135deg,#743344,#8a4053);color:#fff;box-shadow:0 10px 22px rgba(116,51,68,.15)}.home-event-next-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.12)}.home-event-next-icon .ui-icon{width:21px;height:21px}.home-event-next-banner small,.home-event-next-banner strong{display:block}.home-event-next-banner small{font-size:7px;font-weight:950;letter-spacing:.12em;color:#f1d5dc}.home-event-next-banner strong{margin:2px 0;font-size:14px}.home-event-next-banner p{margin:0;color:rgba(255,255,255,.82);font-size:9.5px;line-height:1.35}.home-event-next-banner button{min-height:36px;padding:8px 11px;border:1px solid rgba(255,255,255,.2);background:#fff;color:#743344;font-weight:900;white-space:nowrap}
       .home-essential{margin-top:15px;scroll-margin-top:82px}.home-section-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}.home-section-heading h3{margin:1px 0 0;font-size:24px}.home-calendar-link{min-height:33px;display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border:1px solid var(--line);border-radius:999px;background:rgba(255,253,248,.72);color:var(--ink);font-size:10px;font-weight:850;text-decoration:none}.home-calendar-link .ui-icon{width:15px;height:15px}
       .home-essential-card{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));overflow:hidden;border:1px solid var(--line);border-radius:18px;background:rgba(255,253,248,.76)}.home-essential-row{display:grid;grid-template-columns:30px minmax(0,1fr);gap:7px;align-items:start;padding:10px 9px;border-right:1px solid var(--line)}.home-essential-row:last-child{border-right:0}.home-essential-icon{width:29px;height:29px;display:grid;place-items:center;border-radius:9px;background:rgba(201,170,114,.12);color:var(--gold-deep)}.home-essential-icon .ui-icon{width:16px;height:16px}.home-essential-row small,.home-essential-row strong{display:block}.home-essential-row small{font-size:8px;text-transform:uppercase;letter-spacing:.06em}.home-essential-row strong{margin:1px 0;font-size:12px;line-height:1.17}.home-essential-row p{margin:0;font-size:9.5px;line-height:1.25}
       .home-team-mini{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto 32px;gap:7px;align-items:center;margin-top:9px;padding:7px 9px;border:1px solid var(--line);border-radius:14px;background:rgba(255,253,248,.78)}.home-team-mini-logo{width:32px;height:32px}.home-team-mini-name small,.home-team-mini-name strong,.home-team-mini-stat small,.home-team-mini-stat b{display:block}.home-team-mini-name small,.home-team-mini-stat small{font-size:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}.home-team-mini-name strong{font-size:13px}.home-team-mini-stat{text-align:center;min-width:31px}.home-team-mini-stat b{font-size:14px}.home-team-mini button{width:30px;height:30px;display:grid;place-items:center;padding:0;border-radius:9px;background:#36556f;color:#fff}.home-team-mini button .ui-icon{width:16px;height:16px}
       @media(max-width:900px){.home-essential-card{grid-template-columns:repeat(2,minmax(0,1fr))}.home-essential-row{border-bottom:1px solid var(--line)}.home-essential-row:nth-child(2n){border-right:0}.home-essential-row:last-child{grid-column:1/-1;border-bottom:0}}
-      @media(max-width:560px){.home-countdown-v2{grid-template-columns:95px minmax(0,1fr);gap:10px;padding:11px 12px}.home-countdown-copy{padding-right:9px}.home-countdown-copy strong{font-size:15px}.home-countdown-values-v2{gap:5px}.home-countdown-values-v2>span{min-height:49px;border-radius:12px}.home-countdown-values-v2 strong{font-size:23px}.home-welcome-compact{padding:9px 11px}.home-welcome-compact .home-team-logo{width:38px;height:38px}.home-welcome-compact h3{font-size:18px}.home-primary-action{grid-template-columns:34px minmax(0,1fr);padding:10px}.home-primary-icon{width:34px;height:34px}.home-primary-copy h3{font-size:16px}.home-primary-action button{grid-column:1/-1;width:100%;min-height:36px}.home-essential{margin-top:13px}.home-section-heading h3{font-size:21px}.home-essential-card{grid-template-columns:1fr}.home-essential-row,.home-essential-row:nth-child(2n),.home-essential-row:last-child{grid-column:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px 10px}.home-essential-row:last-child{border-bottom:0}.home-team-mini{grid-template-columns:31px minmax(0,1fr) auto auto 29px;padding:6px 8px;gap:5px}.home-team-mini-logo{width:29px;height:29px}.home-team-mini-name strong{font-size:12px}.home-team-mini-stat{min-width:28px}.home-team-mini-stat b{font-size:13px}.home-team-mini button{width:28px;height:28px}}
+      @media(max-width:560px){.home-countdown-v2{grid-template-columns:95px minmax(0,1fr);gap:10px;padding:11px 12px}.home-countdown-copy{padding-right:9px}.home-countdown-copy strong{font-size:15px}.home-countdown-values-v2{gap:5px}.home-countdown-values-v2>span{min-height:49px;border-radius:12px}.home-countdown-values-v2 strong{font-size:23px}.home-welcome-compact{padding:9px 11px}.home-welcome-compact .home-team-logo{width:38px;height:38px}.home-welcome-compact h3{font-size:18px}.home-primary-action{grid-template-columns:34px minmax(0,1fr);padding:10px}.home-primary-icon{width:34px;height:34px}.home-primary-copy h3{font-size:16px}.home-primary-action button{grid-column:1/-1;width:100%;min-height:36px}.home-event-next-banner{grid-template-columns:36px minmax(0,1fr);padding:11px}.home-event-next-icon{width:35px;height:35px}.home-event-next-banner button{grid-column:1/-1;width:100%}.home-essential{margin-top:13px}.home-section-heading h3{font-size:21px}.home-essential-card{grid-template-columns:1fr}.home-essential-row,.home-essential-row:nth-child(2n),.home-essential-row:last-child{grid-column:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px 10px}.home-essential-row:last-child{border-bottom:0}.home-team-mini{grid-template-columns:31px minmax(0,1fr) auto auto 29px;padding:6px 8px;gap:5px}.home-team-mini-logo{width:29px;height:29px}.home-team-mini-name strong{font-size:12px}.home-team-mini-stat{min-width:28px}.home-team-mini-stat b{font-size:13px}.home-team-mini button{width:28px;height:28px}}
     </style>`;
   }
 
@@ -6640,15 +6794,33 @@
   function rouletteWheelMarkup(teamId) {
     const team = getTeam(teamId);
     const values = ROULETTE_VALUES_BY_TEAM[teamId] || ROULETTE_VALUES_BY_TEAM.viento;
+    const positivePalette = ["#6f9275", "#668a6d", "#5d8265", "#547a5e", "#4b7256", "#426a4f"];
+    const negativePalette = ["#a65f64", "#7f3f4d"];
+    let positiveIndex = 0;
+    let negativeIndex = 0;
+    const segmentSize = 100 / values.length;
+    const gradient = values.map((value, index) => {
+      const color = value < 0
+        ? negativePalette[Math.min(negativeIndex++, negativePalette.length - 1)]
+        : positivePalette[Math.min(positiveIndex++, positivePalette.length - 1)];
+      return `${color} ${(index * segmentSize).toFixed(4)}% ${((index + 1) * segmentSize).toFixed(4)}%`;
+    }).join(",");
+
     return `
       <div class="new-roulette-stage" style="--local-accent:${team.accent}">
         <span class="new-roulette-pointer" aria-hidden="true"></span>
-        <div id="newRouletteWheel" class="new-roulette-wheel">
-          ${values.map((value, index) => `
-            <span class="new-roulette-label" style="--angle:${index * 45 + 22.5}deg;--inverse-angle:${-(index * 45 + 22.5)}deg">
-              <b>${value > 0 ? "+" : ""}${value}</b>
-            </span>
-          `).join("")}
+        <div id="newRouletteWheel" class="new-roulette-wheel" style="background:conic-gradient(from -22.5deg,${gradient})">
+          ${values.map((value, index) => {
+            const angle = index * (360 / values.length);
+            const radians = angle * Math.PI / 180;
+            const x = 50 + Math.sin(radians) * 38;
+            const y = 50 - Math.cos(radians) * 38;
+            return `
+              <span class="new-roulette-label ${value < 0 ? "is-negative" : "is-positive"}" style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%">
+                <b>${value > 0 ? "+" : ""}${value}</b>
+              </span>
+            `;
+          }).join("")}
         </div>
         <div class="new-roulette-center">
           ${teamLogo(team, "new-roulette-team-logo")}
@@ -6676,47 +6848,26 @@
 
   function renderRouletteGame() {
     if (!isTriviaGameOpen("game-roulette")) {
-      return newGameLockedCard(
-        "Ruleta · Todo o Nada",
-        "Vani y Fede todavía no habilitaron este juego."
-      );
+      return newGameLockedCard("Ruleta · Todo o Nada", "Vani y Fede todavía no habilitaron este juego.");
     }
-
     if (!currentGuestCanPlayNewGames()) {
-      return newGameLockedCard(
-        "Ruleta · Todo o Nada",
-        "Este juego se habilita para quienes confirmaron que asisten."
-      );
+      return newGameLockedCard("Ruleta · Todo o Nada", "Este juego se habilita para quienes confirmaron que asisten.");
     }
 
     const team = getTeam(currentGuest.team);
-    const values = ROULETTE_VALUES_BY_TEAM[team.id] || [];
     const saved = rouletteSubmissionFor(currentGuest.id);
     const pending = saved ? {} : getRoulettePending(currentGuest.id);
-    const pendingBase = Number.isFinite(Number(pending.baseResult))
-      ? Number(pending.baseResult)
-      : null;
+    const pendingBase = Number.isFinite(Number(pending.baseResult)) ? Number(pending.baseResult) : null;
     const participants = confirmedNewGameMembers(team.id);
-    const played = participants.filter(guest => {
-      const record = rouletteSubmissionFor(guest.id);
-      return record?.status === "completed";
-    }).length;
-
-    const decision = pendingBase !== null
-      ? rouletteDecisionCopy(pendingBase)
-      : null;
+    const played = participants.filter(guest => rouletteSubmissionFor(guest.id)?.status === "completed").length;
+    const decision = pendingBase !== null ? rouletteDecisionCopy(pendingBase) : null;
 
     return `
       <div class="new-game-page">
         <button type="button" class="new-game-back" data-go="puntos">‹ Sumá puntos</button>
-
         <section class="section-card new-game-hero" style="--local-accent:${team.accent}">
           <div class="new-game-hero-logo">${teamLogo(team, "new-game-team-logo")}</div>
-          <div>
-            <p class="eyebrow">Desafío 05 · ${escapeHTML(team.name)}</p>
-            <h3>🎡 Ruleta · Todo o Nada</h3>
-            <p>Una sola tirada. Si te toca positivo podés duplicar; si te toca negativo podés intentar recuperarte.</p>
-          </div>
+          <div><p class="eyebrow">Desafío 05 · ${escapeHTML(team.name)}</p><h3>🎡 Ruleta · Todo o Nada</h3><p>Girás una vez y después decidís cuánto riesgo querés asumir.</p></div>
           <span class="new-game-status-chip">${played}/${participants.length} jugaron</span>
         </section>
 
@@ -6724,21 +6875,12 @@
           ${saved?.status === "completed" ? `
             <div class="new-game-result ${saved.finalPoints > 0 ? "is-positive" : saved.finalPoints < 0 ? "is-negative" : ""}">
               <span>${saved.finalPoints > 0 ? "🏆" : saved.finalPoints < 0 ? "😬" : "🤝"}</span>
-              <small>Tu resultado final</small>
-              <strong>${saved.finalPoints > 0 ? "+" : ""}${saved.finalPoints}</strong>
-              <p>${escapeHTML(saved.decision || "Tirada completada")}</p>
+              <small>Resultado final</small><strong>${saved.finalPoints > 0 ? "+" : ""}${saved.finalPoints}</strong><p>${escapeHTML(saved.decision || "Tirada completada")}</p>
             </div>
-            <div class="new-game-note">Tu tirada ya quedó guardada en la base oficial y no puede repetirse.</div>
           ` : pendingBase !== null ? `
             <div class="new-roulette-decision">
-              <span class="new-roulette-base ${pendingBase > 0 ? "is-positive" : pendingBase < 0 ? "is-negative" : ""}">
-                ${pendingBase > 0 ? "+" : ""}${pendingBase}
-              </span>
-              <div>
-                <p class="eyebrow">DECISIÓN FINAL</p>
-                <h4>${escapeHTML(decision.title)}</h4>
-                <p>${escapeHTML(decision.text)}</p>
-              </div>
+              <span class="new-roulette-base ${pendingBase > 0 ? "is-positive" : pendingBase < 0 ? "is-negative" : ""}">${pendingBase > 0 ? "+" : ""}${pendingBase}</span>
+              <div><p class="eyebrow">DECISIÓN FINAL</p><h4>${escapeHTML(decision.title)}</h4><p>${escapeHTML(decision.text)}</p></div>
             </div>
             <div class="new-roulette-decision-actions">
               ${pendingBase > 0 ? `
@@ -6747,9 +6889,7 @@
               ` : pendingBase < 0 ? `
                 <button type="button" data-roulette-decision="accept" class="is-safe">😬 Acepto · ${pendingBase}</button>
                 <button type="button" data-roulette-decision="recover" class="is-risk">🛟 Recupero · 0 / ${pendingBase * 2}</button>
-              ` : `
-                <button type="button" data-roulette-decision="zero" class="is-safe">Guardar resultado 0</button>
-              `}
+              ` : `<button type="button" data-roulette-decision="zero" class="is-safe">Cerrar resultado</button>`}
             </div>
           ` : `
             ${rouletteWheelMarkup(team.id)}
@@ -6758,18 +6898,33 @@
           `}
         </section>
 
-        <section class="section-card new-game-rules">
-          <div><span>✅</span><strong>Positivo</strong><p>Te plantás o arriesgás por el doble.</p></div>
-          <div><span>🛟</span><strong>Negativo</strong><p>Aceptás el golpe o intentás recuperarte.</p></div>
-          <div><span>🔒</span><strong>Una sola vez</strong><p>El resultado final queda guardado en Sheets.</p></div>
-        </section>
-
-        <section class="section-card new-roulette-values">
-          <small>Tu ruleta</small>
-          <div>${values.map(value => `<span class="${value < 0 ? "is-negative" : "is-positive"}">${value > 0 ? "+" : ""}${value}</span>`).join("")}</div>
-        </section>
+        ${!saved ? `
+          <section class="section-card new-game-rules new-roulette-rules-compact">
+            <div><span>✅</span><strong>Si sale positivo</strong><p>Te plantás o arriesgás por el doble.</p></div>
+            <div><span>🛟</span><strong>Si sale negativo</strong><p>Aceptás el golpe o intentás recuperarte.</p></div>
+          </section>
+        ` : ""}
       </div>
     `;
+  }
+
+  function showRouletteFinalAnimation(finalPoints, decision) {
+    document.querySelector(".roulette-result-overlay")?.remove();
+    const overlay = document.createElement("div");
+    const tone = finalPoints > 0 ? "is-positive" : finalPoints < 0 ? "is-negative" : "is-neutral";
+    const headline = finalPoints > 0 ? "¡GANASTE!" : finalPoints < 0 ? "ESTA VEZ PERDISTE" : "QUEDASTE EN 0";
+    const pointsText = finalPoints > 0 ? `+${finalPoints} PUNTOS` : finalPoints < 0 ? `${Math.abs(finalPoints)} PUNTOS` : "0 PUNTOS";
+    overlay.className = `roulette-result-overlay ${tone}`;
+    overlay.innerHTML = `
+      <div class="roulette-result-animation-card" role="status" aria-live="assertive">
+        <span class="roulette-result-animation-icon">${finalPoints > 0 ? "🏆" : finalPoints < 0 ? "💥" : "🤝"}</span>
+        <small>RULETA · ${escapeHTML(getTeam(currentGuest.team).name)}</small>
+        <h3>${headline}</h3><strong>${pointsText}</strong><p>${escapeHTML(decision || "Resultado final")}</p>
+        ${finalPoints > 0 ? `<div class="roulette-confetti" aria-hidden="true">${Array.from({ length: 18 }, (_, i) => `<i style="--i:${i};--x:${(i * 37) % 100}%"></i>`).join("")}</div>` : ""}
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("is-visible"));
+    window.setTimeout(() => { overlay.classList.remove("is-visible"); window.setTimeout(() => overlay.remove(), 280); }, 2200);
   }
 
   function warActionLabel(action) {
@@ -6779,30 +6934,106 @@
     return "Sin decisión";
   }
 
-  function warRoundStatusText(round) {
+  function warRoundStatusText(round, teamId = currentGuest?.team) {
     if (warRoundRevealed(round)) return "Ronda revelada";
     if (!warRoundEnabled(round)) return "Bloqueada";
+    if (teamId && warTeamVotingClosed(teamId, round)) return "Tu equipo cerró la votación";
     return "Votación abierta";
+  }
+
+  function warCompactRankingMarkup(round, title = "Ranking de esta ronda") {
+    const snapshot = warRoundSnapshot(round);
+    const current = Object.fromEntries(calculateRanking().map(row => [row.id, row.total]));
+    return `
+      <section class="section-card war-live-ranking">
+        <div class="war-live-ranking-head">
+          <div><p class="eyebrow">${escapeHTML(title)}</p><h4>Prestá atención a quién conviene atacar</h4></div>
+          <small>El botín se fija por la posición al comenzar la ronda.</small>
+        </div>
+        <div class="war-live-ranking-grid">
+          ${snapshot.map(item => {
+            const rowTeam = getTeam(item.id);
+            return `<div class="war-live-ranking-row ${item.id === currentGuest.team ? "is-own" : ""}" style="--local-accent:${rowTeam.accent}"><span>${item.rank}°</span>${teamLogo(rowTeam,"war-live-logo")}<strong>${escapeHTML(rowTeam.name)}</strong><small>${Number(current[item.id] || 0)} pts</small><b>${item.bounty}</b></div>`;
+          }).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function warUpdatedRankingMarkup(title = "Ranking actualizado") {
+    const ranking = calculateRanking();
+    return `
+      <section class="section-card war-updated-ranking">
+        <div class="war-updated-ranking-head"><p class="eyebrow">${escapeHTML(title)}</p><h4>Así quedó la tabla</h4></div>
+        <div class="war-updated-ranking-list">
+          ${ranking.map((row, index) => {
+            const rowTeam = getTeam(row.id);
+            return `<div class="${row.id === currentGuest.team ? "is-own" : ""}" style="--local-accent:${rowTeam.accent}"><span>${index + 1}°</span>${teamLogo(rowTeam,"war-updated-logo")}<strong>${escapeHTML(rowTeam.name)}</strong><b>${Number(row.total || 0)} pts</b></div>`;
+          }).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function warPreviousRoundMarkup(round) {
+    if (!warRoundRevealed(round)) return "";
+    return `
+      <details class="section-card war-round-history">
+        <summary>👀 Ver jugadas de la Ronda ${round}</summary>
+        <div class="war-round-history-grid">
+          ${Object.values(DATA.teams).map(historyTeam => {
+            const item = warResultForTeam(round, historyTeam.id);
+            return `<div style="--local-accent:${historyTeam.accent}">${teamLogo(historyTeam,"war-history-logo")}<span><strong>${escapeHTML(historyTeam.name)}</strong><small>${escapeHTML(warActionLabel(item?.officialAction))}${item?.officialAction === "attack" && item.targetTeamId ? ` → ${escapeHTML(getTeam(item.targetTeamId).name)}` : ""}</small></span><b class="${Number(item?.delta || 0) > 0 ? "is-positive" : Number(item?.delta || 0) < 0 ? "is-negative" : ""}">${Number(item?.delta || 0) > 0 ? "+" : ""}${Number(item?.delta || 0)}</b></div>`;
+          }).join("")}
+        </div>
+      </details>
+    `;
+  }
+
+  function renderWarCaptainControl(round, team) {
+    if (!isGuestCaptain(currentGuest) || currentGuest.team !== team.id || warRoundRevealed(round)) return "";
+    const closed = warTeamVotingClosed(team.id, round);
+    const votes = warVotesForTeam(team.id, round).length;
+    const eligible = confirmedNewGameMembers(team.id).length;
+    const tieInfo = warTieInfoForTeam(team.id, round);
+    const savedTie = warTiebreakForTeam(team.id, round);
+    const teamsClosed = warClosedTeamsCount(round);
+    const ready = warRoundReadyForCaptainReveal(round);
+    const actionTie = closed && tieInfo.tiedActions.length > 1;
+    const chosenAction = tieInfo.tiedActions.length === 1 ? tieInfo.tiedActions[0] : (savedTie?.action && tieInfo.tiedActions.includes(savedTie.action) ? savedTie.action : "");
+    const targetTie = closed && chosenAction === "attack" && tieInfo.tiedTargets.length > 1;
+
+    return `
+      <section class="section-card war-captain-control">
+        <div class="war-captain-control-head">
+          <div><p class="eyebrow">CONTROL DEL CAPITÁN</p><h4>${escapeHTML(team.name)} · Ronda ${round}</h4><p>Vos cerrás o reabrís la votación de tu equipo. Cuando los 6 equipos cierran, la ronda puede revelarse.</p></div>
+          <span>${votes}/${eligible} votos</span>
+        </div>
+        <button type="button" class="war-captain-toggle ${closed ? "is-open-action" : "is-close-action"}" data-war-team-toggle="${closed ? "open" : "closed"}">${closed ? "🔓 Reabrir votación de mi equipo" : "🔒 Cerrar votación de mi equipo"}</button>
+        ${closed && votes < eligible ? `<p class="war-captain-warning">⚠️ Cerraste con ${eligible - votes} integrante${eligible - votes === 1 ? "" : "s"} sin votar.</p>` : ""}
+        ${actionTie ? `<div class="war-captain-tiebreak"><strong>⚖️ Hay empate de jugada. Desempatá:</strong><div>${tieInfo.tiedActions.map(action => `<button type="button" data-war-tiebreak-action="${action}" class="${savedTie?.action === action ? "is-selected" : ""}">${warActionLabel(action)}</button>`).join("")}</div></div>` : ""}
+        ${targetTie ? `<div class="war-captain-tiebreak"><strong>🎯 Hay empate de objetivo. Elegí:</strong><div>${tieInfo.tiedTargets.map(targetId => `<button type="button" data-war-tiebreak-target="${targetId}" class="${savedTie?.targetTeamId === targetId ? "is-selected" : ""}">${escapeHTML(getTeam(targetId).name)}</button>`).join("")}</div></div>` : ""}
+        <div class="war-captain-round-state">
+          <span>${teamsClosed}/6 equipos cerraron</span>
+          ${ready ? `<button type="button" data-captain-reveal-war="${round}">🔥 Revelar Ronda ${round}</button>` : `<small>El reveal se habilita cuando los seis equipos cierren y no queden empates.</small>`}
+        </div>
+      </section>
+    `;
   }
 
   function renderWarGame() {
     if (!isTriviaGameOpen("game-war")) {
-      return newGameLockedCard(
-        "Guerra de Equipos",
-        "Vani y Fede todavía no habilitaron este juego."
-      );
+      return newGameLockedCard("Guerra de Equipos", "Vani y Fede todavía no habilitaron este juego.");
     }
-
     if (!currentGuestCanPlayNewGames()) {
-      return newGameLockedCard(
-        "Guerra de Equipos",
-        "Este juego es para quienes confirmaron que asisten."
-      );
+      return newGameLockedCard("Guerra de Equipos", "Este juego es para quienes confirmaron que asisten.");
     }
 
-    const round = warRoundNumber();
+    const activeRound = warRoundNumber();
     const round1Done = warRoundRevealed(1);
     const round2Done = warRoundRevealed(2);
+    const round2Enabled = warRoundEnabled(2);
+    const round = activeRound === 2 && round1Done && !round2Enabled && !round2Done ? 1 : activeRound;
     const roundEnabled = warRoundEnabled(round);
     const team = getTeam(currentGuest.team);
     const members = confirmedNewGameMembers(team.id);
@@ -6810,26 +7041,12 @@
     const rawVote = gameSubmissionFor(currentGuest.id, warVoteGameId(round));
     const snapshot = warRoundSnapshot(round);
     const ownSnapshot = snapshot.find(item => item.id === team.id);
-
-    if (round === 2 && !roundEnabled && !round2Done) {
-      return `
-        <div class="new-game-page">
-          <button type="button" class="new-game-back" data-go="puntos">‹ Sumá puntos</button>
-          <section class="section-card new-game-locked-page">
-            <span class="new-game-lock-icon">${uiIcon("lock")}</span>
-            <p class="eyebrow">Guerra de Equipos</p>
-            <h3>Ronda 1 terminada</h3>
-            <p>El ranking ya se actualizó. La Ronda 2 se habilitará cuando Vani y Fede den la señal.</p>
-            <button type="button" data-go="ranking">Ver ranking actualizado</button>
-          </section>
-        </div>
-      `;
-    }
+    const teamVotingClosed = warTeamVotingClosed(team.id, round);
 
     const voteRows = Object.values(DATA.teams).map(otherTeam => {
       const eligible = confirmedNewGameMembers(otherTeam.id);
       const received = warVotesForTeam(otherTeam.id, round).length;
-      return { team: otherTeam, eligible: eligible.length, received };
+      return { team: otherTeam, eligible: eligible.length, received, closed: warTeamVotingClosed(otherTeam.id, round) };
     });
 
     if (warRoundRevealed(round)) {
@@ -6839,17 +7056,12 @@
           <button type="button" class="new-game-back" data-go="puntos">‹ Sumá puntos</button>
           <section class="section-card new-game-hero" style="--local-accent:${team.accent}">
             <div class="new-game-hero-logo">${teamLogo(team, "new-game-team-logo")}</div>
-            <div>
-              <p class="eyebrow">Guerra de Equipos · Ronda ${round}</p>
-              <h3>⚔️ Reveal completo</h3>
-              <p>Las seis decisiones se resolvieron al mismo tiempo y el ranking ya fue actualizado.</p>
-            </div>
+            <div><p class="eyebrow">Guerra de Equipos · Ronda ${round}</p><h3>⚔️ Reveal completo</h3><p>Ya podés ver todas las jugadas y cómo quedó el ranking.</p></div>
             <span class="new-game-status-chip is-open">Finalizada</span>
           </section>
 
           <section class="section-card war-my-result">
-            <small>Resultado de ${escapeHTML(team.name)}</small>
-            <strong>${escapeHTML(warActionLabel(result?.officialAction))}</strong>
+            <small>Resultado de ${escapeHTML(team.name)}</small><strong>${escapeHTML(warActionLabel(result?.officialAction))}</strong>
             ${result?.officialAction === "attack" && result.targetTeamId ? `<p>Objetivo: ${escapeHTML(getTeam(result.targetTeamId).name)}</p>` : ""}
             <b class="${Number(result?.delta || 0) > 0 ? "is-positive" : Number(result?.delta || 0) < 0 ? "is-negative" : ""}">${Number(result?.delta || 0) > 0 ? "+" : ""}${Number(result?.delta || 0)} pts</b>
             <em>${escapeHTML(result?.note || "Ronda resuelta")}</em>
@@ -6858,121 +7070,65 @@
           <section class="war-reveal-grid">
             ${Object.values(DATA.teams).map(otherTeam => {
               const item = warResultForTeam(round, otherTeam.id);
-              return `
-                <article class="section-card war-reveal-team" style="--local-accent:${otherTeam.accent}">
-                  ${teamLogo(otherTeam, "war-reveal-logo")}
-                  <div>
-                    <strong>${escapeHTML(otherTeam.name)}</strong>
-                    <small>${escapeHTML(warActionLabel(item?.officialAction))}${item?.officialAction === "attack" && item.targetTeamId ? ` → ${escapeHTML(getTeam(item.targetTeamId).name)}` : ""}</small>
-                  </div>
-                  <b class="${Number(item?.delta || 0) > 0 ? "is-positive" : Number(item?.delta || 0) < 0 ? "is-negative" : ""}">${Number(item?.delta || 0) > 0 ? "+" : ""}${Number(item?.delta || 0)}</b>
-                </article>
-              `;
+              return `<article class="section-card war-reveal-team" style="--local-accent:${otherTeam.accent}">${teamLogo(otherTeam, "war-reveal-logo")}<div><strong>${escapeHTML(otherTeam.name)}</strong><small>${escapeHTML(warActionLabel(item?.officialAction))}${item?.officialAction === "attack" && item.targetTeamId ? ` → ${escapeHTML(getTeam(item.targetTeamId).name)}` : ""}</small></div><b class="${Number(item?.delta || 0) > 0 ? "is-positive" : Number(item?.delta || 0) < 0 ? "is-negative" : ""}">${Number(item?.delta || 0) > 0 ? "+" : ""}${Number(item?.delta || 0)}</b></article>`;
             }).join("")}
           </section>
 
-          ${round === 1 ? `
-            <section class="section-card new-game-next-round">
-              <span>🏁</span>
-              <div><strong>Ronda 2</strong><p>${isTriviaGameOpen("game-war-r2") ? "Ya está habilitada. Entrá nuevamente para votar." : "Quedará bloqueada hasta que Vani y Fede la habiliten."}</p></div>
-              ${isTriviaGameOpen("game-war-r2") ? `<button type="button" data-go="guerra">Ir a Ronda 2</button>` : ""}
-            </section>
-          ` : `<button type="button" class="new-game-ranking-button" data-go="ranking">Ver ranking final</button>`}
-        </div>
-      `;
+          ${warUpdatedRankingMarkup(round === 1 ? "RANKING DESPUÉS DE LA RONDA 1" : "RANKING FINAL DE LA GUERRA")}
+
+          ${round === 1 ? `<section class="section-card new-game-next-round"><span>🏁</span><div><strong>Ronda 2</strong><p>${round2Enabled ? "Ya está habilitada. Todos vuelven a decidir desde cero." : "Queda bloqueada hasta que Vani y Fede den la señal."}</p></div>${round2Enabled ? `<button type="button" data-go="guerra">Ir a Ronda 2</button>` : ""}</section>` : `<button type="button" class="new-game-ranking-button" data-go="ranking">Ver ranking general</button>`}
+        </div>`;
     }
+
+    if (!roundEnabled) return newGameLockedCard(`Guerra de Equipos · Ronda ${activeRound}`, "La próxima ronda todavía no fue habilitada.");
 
     return `
       <div class="new-game-page">
         <button type="button" class="new-game-back" data-go="puntos">‹ Sumá puntos</button>
-
         <section class="section-card new-game-hero" style="--local-accent:${team.accent}">
           <div class="new-game-hero-logo">${teamLogo(team, "new-game-team-logo")}</div>
-          <div>
-            <p class="eyebrow">Desafío 06 · Ronda ${round} de 2</p>
-            <h3>⚔️ Guerra de Equipos</h3>
-            <p>Todos votan en secreto. La opción más elegida será la jugada oficial del equipo.</p>
-          </div>
-          <span class="new-game-status-chip is-open">${escapeHTML(warRoundStatusText(round))}</span>
+          <div><p class="eyebrow">Desafío 06 · Ronda ${round} de 2</p><h3>⚔️ Guerra de Equipos</h3><p>La estrategia es grupal: debatan primero y después cada integrante vota en secreto.</p></div>
+          <span class="new-game-status-chip ${teamVotingClosed ? "" : "is-open"}">${escapeHTML(warRoundStatusText(round, team.id))}</span>
         </section>
 
-        <section class="section-card war-bounty-board">
-          <div class="war-bounty-head">
-            <div><p class="eyebrow">VALOR DE LOS OBJETIVOS</p><h4>Ranking al inicio de la ronda</h4></div>
-            <small>Si varios atacan al mismo, se reparten el botín.</small>
-          </div>
-          <div class="war-bounty-grid">
-            ${snapshot.map(item => {
-              const targetTeam = getTeam(item.id);
-              return `<div class="war-bounty-item ${item.id === team.id ? "is-own" : ""}" style="--local-accent:${targetTeam.accent}"><span>${item.rank}°</span>${teamLogo(targetTeam,"war-bounty-logo")}<strong>${escapeHTML(targetTeam.name)}</strong><b>${item.bounty}</b><small>pts</small></div>`;
-            }).join("")}
-          </div>
+        <section class="section-card war-how-to-play">
+          <div class="war-whatsapp-callout"><span>📱</span><div><strong>Hablen la estrategia en el WhatsApp de su equipo</strong><p>Lean el ranking, intenten anticipar qué harán los demás y coordinen la jugada antes de votar.</p></div></div>
+          <div class="war-mini-rules"><span><b>➕ SUMAR</b><small>+${WAR_SUM_POINTS} seguros · quedás expuesto</small></span><span><b>⚔️ ATACAR</b><small>Robás el botín si el rival no defiende</small></span><span><b>🛡️ DEFENDER</b><small>0 pts · bloqueás todos los ataques</small></span></div>
+          <p class="war-how-note">Si varios atacan al mismo rival, se reparten el botín. Si atacás a un equipo que defendió, perdés ${Math.abs(WAR_BLOCKED_PENALTY)} puntos.</p>
         </section>
 
-        <section class="section-card war-vote-card">
-          <div class="war-vote-heading">
-            <div><p class="eyebrow">TU VOTO · ${escapeHTML(team.name)}</p><h4>¿Qué debería hacer tu equipo?</h4><p>Tu equipo está ${ownSnapshot?.rank || "-"}° y vale ${ownSnapshot?.bounty || "-"} puntos si alguien lo ataca.</p></div>
-            <span>${warVotesForTeam(team.id, round).length}/${members.length} votos</span>
-          </div>
+        ${round === 2 ? warPreviousRoundMarkup(1) : ""}
+        ${warCompactRankingMarkup(round, "RANKING Y BOTINES")}
 
+        <section class="section-card war-vote-card ${teamVotingClosed ? "is-closed" : ""}">
+          <div class="war-vote-heading"><div><p class="eyebrow">TU VOTO · ${escapeHTML(team.name)}</p><h4>${teamVotingClosed ? "La votación de tu equipo está cerrada" : "¿Qué debería hacer tu equipo?"}</h4><p>Tu equipo está ${ownSnapshot?.rank || "-"}° y vale ${ownSnapshot?.bounty || "-"} puntos si alguien lo ataca.</p></div><span>${warVotesForTeam(team.id, round).length}/${members.length} votos</span></div>
           <div class="war-action-options ${rawVote?.pendingSync ? "is-saving" : ""}">
-            <button type="button" data-war-action="sum" class="${vote?.action === "sum" ? "is-selected" : ""}"><span>➕</span><strong>SUMAR</strong><small>+${WAR_SUM_POINTS} seguros<br>pero quedás expuesto</small></button>
-            <button type="button" data-war-action="attack" class="${vote?.action === "attack" ? "is-selected" : ""}"><span>⚔️</span><strong>ATACAR</strong><small>Robás puntos<br>si el rival no defiende</small></button>
-            <button type="button" data-war-action="defend" class="${vote?.action === "defend" ? "is-selected" : ""}"><span>🛡️</span><strong>DEFENDER</strong><small>0 puntos<br>inmunidad total</small></button>
+            <button type="button" data-war-action="sum" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "sum" ? "is-selected" : ""}"><span>➕</span><strong>SUMAR</strong><small>+${WAR_SUM_POINTS} seguros<br>pero quedás expuesto</small></button>
+            <button type="button" data-war-action="attack" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "attack" ? "is-selected" : ""}"><span>⚔️</span><strong>ATACAR</strong><small>Robás puntos<br>si el rival no defiende</small></button>
+            <button type="button" data-war-action="defend" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "defend" ? "is-selected" : ""}"><span>🛡️</span><strong>DEFENDER</strong><small>0 puntos<br>inmunidad total</small></button>
           </div>
-
-          ${vote?.action === "attack" ? `
-            <div class="war-target-picker">
-              <p>¿A quién atacarías?</p>
-              <div>
-                ${snapshot.filter(item => item.id !== team.id).map(item => {
-                  const targetTeam = getTeam(item.id);
-                  return `<button type="button" data-war-target="${item.id}" class="${vote.targetTeamId === item.id ? "is-selected" : ""}" style="--local-accent:${targetTeam.accent}">${teamLogo(targetTeam,"war-target-logo")}<strong>${escapeHTML(targetTeam.name)}</strong><b>${item.bounty}</b><small>puntos</small></button>`;
-                }).join("")}
-              </div>
-            </div>
-          ` : ""}
-
-          <div class="new-game-note ${rawVote?.pendingSync ? "is-saving" : ""}">
-            ${rawVote?.pendingSync ? "Guardando tu voto…" : vote ? "✅ Tu voto quedó registrado. Podés cambiarlo mientras la ronda siga abierta." : "Nadie puede ver cómo viene la votación. Sólo se muestra cuánta gente ya votó."}
-          </div>
+          ${vote?.action === "attack" ? `<div class="war-target-picker"><p>¿A quién atacarías?</p><div>${snapshot.filter(item => item.id !== team.id).map(item => { const targetTeam = getTeam(item.id); return `<button type="button" data-war-target="${item.id}" ${teamVotingClosed ? "disabled" : ""} class="${vote.targetTeamId === item.id ? "is-selected" : ""}" style="--local-accent:${targetTeam.accent}">${teamLogo(targetTeam,"war-target-logo")}<strong>${escapeHTML(targetTeam.name)}</strong><b>${item.bounty}</b><small>puntos</small></button>`; }).join("")}</div></div>` : ""}
+          <div class="new-game-note ${rawVote?.pendingSync ? "is-saving" : ""}">${teamVotingClosed ? "🔒 Tu capitán cerró la votación. Tu voto ya no puede modificarse salvo que la reabra." : rawVote?.pendingSync ? "Guardando tu voto…" : vote ? "✅ Tu voto quedó registrado. Podés cambiarlo mientras la votación siga abierta." : "Nadie puede ver cómo viene la votación. Sólo se muestra cuánta gente ya votó."}</div>
         </section>
+
+        ${renderWarCaptainControl(round, team)}
 
         <section class="section-card war-public-progress">
-          <div><p class="eyebrow">PARTICIPACIÓN</p><h4>¿Quiénes ya decidieron?</h4><small>Las jugadas permanecen ocultas.</small></div>
-          <div class="war-public-progress-grid">
-            ${voteRows.map(row => `<div style="--local-accent:${row.team.accent}">${teamLogo(row.team,"war-progress-logo")}<span><strong>${escapeHTML(row.team.name)}</strong><small>${row.received}/${row.eligible} votos</small></span><b>${row.eligible && row.received >= row.eligible ? "✓" : "…"}</b></div>`).join("")}
-          </div>
+          <div><p class="eyebrow">PARTICIPACIÓN</p><h4>Estado de los equipos</h4><small>Las jugadas permanecen ocultas hasta el reveal.</small></div>
+          <div class="war-public-progress-grid">${voteRows.map(row => `<div style="--local-accent:${row.team.accent}">${teamLogo(row.team,"war-progress-logo")}<span><strong>${escapeHTML(row.team.name)}</strong><small>${row.received}/${row.eligible} votos${row.closed ? " · cerrado" : ""}</small></span><b>${row.closed ? "🔒" : row.eligible && row.received >= row.eligible ? "✓" : "…"}</b></div>`).join("")}</div>
         </section>
-
-        <section class="section-card new-game-rules war-rules">
-          <div><span>➕</span><strong>Sumar</strong><p>+${WAR_SUM_POINTS} seguros, pero te pueden robar.</p></div>
-          <div><span>⚔️</span><strong>Atacar</strong><p>El 1° vale 700 y el 6° 200. Si varios van al mismo, se divide.</p></div>
-          <div><span>🛡️</span><strong>Defender</strong><p>Bloqueás todos los ataques. Cada atacante fallido pierde 150.</p></div>
-        </section>
-      </div>
-    `;
+      </div>`;
   }
 
 
   function renderPointsHub() {
     const team = getTeam(currentGuest.team);
     const rsvp = state.rsvps[currentGuest.id];
-    const rsvpDone =
-      isCompetitionGuest(currentGuest) &&
-      hasFinalRsvp(rsvp);
+    const rsvpDone = isCompetitionGuest(currentGuest) && hasFinalRsvp(rsvp);
     const attendancePoints = rsvpPointsForTeam(team.id);
     const musicPoints = musicPointsForTeam(team.id);
-    const microBonusPoints =
-      rsvpDone &&
-      rsvp.attendance === "si" &&
-      ["combi", "micro"].includes(rsvp.transport)
-        ? 20
-        : 0;
-    const rsvpTotalPoints =
-      rsvpDone
-        ? attendancePoints + microBonusPoints
-        : 0;
+    const microBonusPoints = rsvpDone && rsvp.attendance === "si" && ["combi", "micro"].includes(rsvp.transport) ? 20 : 0;
+    const rsvpTotalPoints = rsvpDone ? attendancePoints + microBonusPoints : 0;
     const musicOpen = isTriviaGameOpen("trivia-music");
     const triviaOpen = isTriviaGameOpen("trivia-couple");
     const whoTriviaOpen = isTriviaGameOpen("trivia-who");
@@ -6980,264 +7136,51 @@
     const warOpen = isTriviaGameOpen("game-war");
     const rouletteResult = rouletteSubmissionFor(currentGuest.id);
     const rouletteDone = rouletteResult?.status === "completed";
-    const rouletteEarnedPoints = rouletteDone
-      ? Number(rouletteResult.finalPoints || 0)
-      : 0;
+    const rouletteEarnedPoints = rouletteDone ? Number(rouletteResult.finalPoints || 0) : 0;
     const activeWarRound = warRoundNumber();
     const currentWarVote = warVoteForGuest(currentGuest.id, activeWarRound);
     const warDone = warRoundRevealed(2);
-    const musicDone = Boolean(
-      triviaSubmission("music-selection")
-    );
-    const triviaDone = Boolean(
-      triviaSubmission("couple-trivia-test")
-    );
-    const whoTriviaDone = Boolean(
-      triviaSubmission("who-is-who-trivia-test")
-    );
-    const musicSubmission =
-      triviaSubmission("music-selection");
-    const coupleSubmission =
-      triviaSubmission("couple-trivia-test");
-    const whoSubmission =
-      triviaSubmission("who-is-who-trivia-test");
-    const musicEarnedPoints = musicDone
-      ? musicPoints
-      : 0;
-    const coupleEarnedPoints = triviaDone
-      ? triviaPointsFor(
-          "couple-trivia-test",
-          team.id,
-          coupleSubmission?.score ??
-          coupleSubmission?.bestScore ??
-          0
-        )
-      : 0;
-    const whoEarnedPoints = whoTriviaDone
-      ? triviaPointsFor(
-          "who-is-who-trivia-test",
-          team.id,
-          whoSubmission?.score ??
-          whoSubmission?.bestScore ??
-          0
-        )
-      : 0;
-    const coupleMaxPoints = triviaMaxPointsFor(
-      "couple-trivia-test",
-      team.id
-    );
-    const whoMaxPoints = triviaMaxPointsFor(
-      "who-is-who-trivia-test",
-      team.id
-    );
-    const personalContribution =
-      rsvpTotalPoints +
-      musicEarnedPoints +
-      coupleEarnedPoints +
-      whoEarnedPoints +
-      rouletteEarnedPoints;
+    const musicDone = Boolean(triviaSubmission("music-selection"));
+    const triviaDone = Boolean(triviaSubmission("couple-trivia-test"));
+    const whoTriviaDone = Boolean(triviaSubmission("who-is-who-trivia-test"));
+    const musicSubmission = triviaSubmission("music-selection");
+    const coupleSubmission = triviaSubmission("couple-trivia-test");
+    const whoSubmission = triviaSubmission("who-is-who-trivia-test");
+    const musicEarnedPoints = musicDone ? musicPoints : 0;
+    const coupleEarnedPoints = triviaDone ? triviaPointsFor("couple-trivia-test", team.id, coupleSubmission?.score ?? coupleSubmission?.bestScore ?? 0) : 0;
+    const whoEarnedPoints = whoTriviaDone ? triviaPointsFor("who-is-who-trivia-test", team.id, whoSubmission?.score ?? whoSubmission?.bestScore ?? 0) : 0;
+    const coupleMaxPoints = triviaMaxPointsFor("couple-trivia-test", team.id);
+    const whoMaxPoints = triviaMaxPointsFor("who-is-who-trivia-test", team.id);
+    const personalContribution = rsvpTotalPoints + musicEarnedPoints + coupleEarnedPoints + whoEarnedPoints + rouletteEarnedPoints;
+    const allPreEventChallengesDone = rsvpDone && musicDone && triviaDone && whoTriviaDone && rouletteDone && warDone;
 
-    const warRound1Open = warOpen && !warRoundRevealed(1);
-    const warRound2Open =
-      warRoundRevealed(1) &&
-      isTriviaGameOpen("game-war-r2") &&
-      !warRoundRevealed(2);
-    const warActionRequired = warRound1Open || warRound2Open;
-    const currentGamesDone =
-      rsvpDone &&
-      musicDone &&
-      triviaDone &&
-      whoTriviaDone &&
-      (!rouletteOpen || rouletteDone) &&
-      (!warActionRequired || Boolean(currentWarVote));
-
-    const pointsEyebrow = currentGamesDone
-      ? "MISIÓN CUMPLIDA"
-      : "SUMÁ PUNTOS";
-    const pointsTitle = currentGamesDone
-      ? "¡Estás al día con los desafíos!"
-      : "QUE EMPIECE LA COMPETENCIA";
-    const pointsText = currentGamesDone
-      ? "Completaste todo lo disponible."
-      : "Completá desafíos y sumá puntos para tu equipo.";
+    const pointsEyebrow = allPreEventChallengesDone ? "ETAPA COMPLETADA" : "SUMÁ PUNTOS";
+    const pointsTitle = allPreEventChallengesDone ? "¡No quedan más desafíos por ahora!" : "QUE EMPIECE LA COMPETENCIA";
+    const pointsText = allPreEventChallengesDone
+      ? "El próximo capítulo será el día del casamiento. Y sí: van a seguir compitiendo durante toda la noche."
+      : "Completá cada desafío y ayudá a tu equipo a escalar en el ranking.";
 
     return `
       ${pointsHubStyles()}
-
-      <section
-        class="points-compact-head section-card ${
-          currentGamesDone
-            ? "is-completed"
-            : ""
-        }"
-        style="--local-accent:${team.accent}">
+      <section class="points-compact-head section-card ${allPreEventChallengesDone ? "is-completed" : ""}" style="--local-accent:${team.accent}">
         ${teamLogo(team,"points-compact-logo")}
         <div>
-          <p class="eyebrow">${escapeHTML(pointsEyebrow)}</p>
-          <h3>${escapeHTML(pointsTitle)}</h3>
-          <p>${escapeHTML(pointsText)}</p>
-
-          ${
-            currentGamesDone
-              ? `
-                <button
-                  type="button"
-                  class="points-completed-social-button"
-                  data-go="social">
-                  ${uiIcon("chat")}
-                  <span>Ir a Social</span>
-                </button>
-              `
-              : ""
-          }
+          <p class="eyebrow">${escapeHTML(pointsEyebrow)}</p><h3>${escapeHTML(pointsTitle)}</h3><p>${escapeHTML(pointsText)}</p>
+          ${allPreEventChallengesDone ? `<span class="points-event-next-chip">🔥 Próxima etapa: 24/10 · competencia en vivo</span>` : ""}
         </div>
-        <span class="points-personal-counter">
-          <small>Tu aporte</small>
-          <b>${personalContribution}</b>
-          <em>puntos al equipo</em>
-        </span>
+        <span class="points-personal-counter"><small>Tu aporte</small><b>${personalContribution}</b><em>puntos al equipo</em></span>
       </section>
 
-      ${isSectionOpen("reglas") ? `
-        <button
-          type="button"
-          class="points-rules-entry section-card"
-          data-go="reglas">
-          <span>${uiIcon("rules")}</span>
-          <div>
-            <strong>¿Cómo se juega?</strong>
-            <small>Reglas, bonus y puntajes.</small>
-          </div>
-          <b aria-hidden="true">›</b>
-        </button>
-      ` : ""}
+      ${isSectionOpen("reglas") ? `<button type="button" class="points-rules-entry section-card" data-go="reglas"><span>${uiIcon("rules")}</span><div><strong>¿Cómo se juega?</strong><small>Reglas, nuevos desafíos y qué pasa durante la boda.</small></div><b aria-hidden="true">›</b></button>` : ""}
 
-      <div class="points-unified-challenges">
-        <section class="points-unified-challenge points-rsvp-challenge section-card">
-          ${pointsAction({
-            icon:"✉️",
-            title:"Confirmar asistencia",
-            text:rsvpDone
-              ? "Tu respuesta quedó guardada."
-              : "Confirmá asistencia y tus datos.",
-            done:rsvpDone,
-            route:"asistencia",
-            progressText:rsvpDone
-              ? (
-                  microBonusPoints
-                    ? `${attendancePoints} puntos por confirmar`
-                    : `${attendancePoints} puntos obtenidos`
-                )
-              : `${attendancePoints} puntos por completar`,
-            bonusText:microBonusPoints
-              ? `+${microBonusPoints} puntos extra por elegir micro · ${rsvpTotalPoints} puntos totales`
-              : "",
-            editable:true
-          })}
-        </section>
-
-        <section class="points-unified-challenge section-card">
-          ${pointsAction({
-            icon:"🎵",
-            title:"Canciones favoritas",
-            text:musicDone
-              ? "Tus canciones quedaron guardadas."
-              : "Elegí tus 2 canciones.",
-            done:musicDone,
-            route:"musica",
-            progressText:musicDone
-              ? `${musicEarnedPoints} puntos obtenidos`
-              : `${musicPoints} puntos por completar`,
-            editable:true,
-            locked:!rsvpDone || !musicOpen
-          })}
-        </section>
-
-        <section class="points-unified-challenge section-card">
-          ${pointsAction({
-            icon:"🎯",
-            title:"¿Cuánto conocés a Vani y Fede?",
-            text:triviaDone
-              ? "Trivia completada."
-              : "Respondé 5 preguntas.",
-            done:triviaDone,
-            route:"trivia-pareja",
-            progressText:triviaDone
-              ? `${coupleEarnedPoints} puntos obtenidos`
-              : `Hasta ${coupleMaxPoints} puntos`,
-            editable:false,
-            locked:!rsvpDone || !triviaOpen
-          })}
-        </section>
-
-        <section class="points-unified-challenge section-card">
-          ${pointsAction({
-            icon:"⚖️",
-            title:"¿Vani o Fede?",
-            text:whoTriviaDone
-              ? "Trivia completada."
-              : "Elegí: ¿Vani o Fede?",
-            done:whoTriviaDone,
-            route:"trivia-quien",
-            progressText:whoTriviaDone
-              ? `${whoEarnedPoints} puntos obtenidos`
-              : `Hasta ${whoMaxPoints} puntos`,
-            editable:false,
-            locked:!rsvpDone || !whoTriviaOpen
-          })}
-        </section>
-      </div>
-
-      <div class="points-new-game-list">
-        ${pointsChallengeCard({
-          number: "05",
-          icon: "🎡",
-          title: "Ruleta · Todo o Nada",
-          text: rouletteOpen
-            ? (rouletteDone ? "Tu tirada ya quedó registrada." : "Una tirada, una decisión y puntos directos para tu equipo.")
-            : "Nuevo juego · se habilitará próximamente.",
-          done: rouletteDone,
-          route: "ruleta",
-          progressText: rouletteDone
-            ? `${rouletteEarnedPoints > 0 ? "+" : ""}${rouletteEarnedPoints} puntos obtenidos`
-            : "Una sola tirada",
-          actionLabel: rouletteDone ? "Ver resultado" : "Jugar",
-          locked: !rsvpDone || rsvp?.attendance !== "si" || !rouletteOpen
-        })}
-
-        ${pointsChallengeCard({
-          number: "06",
-          icon: "⚔️",
-          title: "Guerra de Equipos",
-          text: warDone
-            ? "Las dos rondas ya fueron resueltas."
-            : warRoundRevealed(1)
-              ? (isTriviaGameOpen("game-war-r2") ? "Ronda 2 abierta: todos vuelven a decidir." : "Ronda 1 terminada. La final sigue bloqueada.")
-              : warOpen
-                ? "Sumar, atacar o defender. Todos votan en secreto."
-                : "Nuevo juego grupal · se habilitará próximamente.",
-          done: warDone,
-          route: "guerra",
-          progressText: warDone
-            ? "Guerra finalizada"
-            : warRoundRevealed(1)
-              ? "Ronda 1 resuelta"
-              : "Hasta +1.400 puntos en 2 rondas",
-          actionLabel: currentWarVote ? "Ver / cambiar voto" : "Entrar",
-          locked: !rsvpDone || rsvp?.attendance !== "si" || !warOpen
-        })}
-
-        ${pointsChallengeCard({
-          number: "07",
-          icon: "🚌",
-          title: "Durante el viaje",
-          text: "Contenido secreto. Lo vamos a revelar más adelante.",
-          done: false,
-          route: "puntos",
-          progressText: "Próximamente",
-          actionLabel: "",
-          locked: true
-        })}
+      <div class="points-new-game-list points-all-game-list">
+        ${pointsChallengeCard({ number:"01", icon:"✉️", title:"Confirmar asistencia", text:rsvpDone ? "Tu respuesta quedó guardada." : "Confirmá asistencia y tus datos.", done:rsvpDone, route:"asistencia", progressText:rsvpDone ? `${rsvpTotalPoints} puntos obtenidos` : `${attendancePoints} puntos por completar`, bonusText:microBonusPoints ? `Incluye +${microBonusPoints} por elegir micro` : "", actionLabel:rsvpDone ? "Ver / editar" : "Comenzar", locked:false })}
+        ${pointsChallengeCard({ number:"02", icon:"🎵", title:"Canciones favoritas", text:musicDone ? "Tus canciones quedaron guardadas." : "Elegí tus 2 canciones.", done:musicDone, route:"musica", progressText:musicDone ? `${musicEarnedPoints} puntos obtenidos` : `${musicPoints} puntos por completar`, actionLabel:musicDone ? "Ver / editar" : "Comenzar", locked:!rsvpDone || !musicOpen })}
+        ${pointsChallengeCard({ number:"03", icon:"🎯", title:"¿Cuánto conocés a Vani y Fede?", text:triviaDone ? "Trivia completada." : "Respondé 5 preguntas.", done:triviaDone, route:"trivia-pareja", progressText:triviaDone ? `${coupleEarnedPoints} puntos obtenidos` : `Hasta ${coupleMaxPoints} puntos`, actionLabel:triviaDone ? "Ver resultado" : "Comenzar", locked:!rsvpDone || !triviaOpen })}
+        ${pointsChallengeCard({ number:"04", icon:"⚖️", title:"¿Vani o Fede?", text:whoTriviaDone ? "Trivia completada." : "Elegí: ¿Vani o Fede?", done:whoTriviaDone, route:"trivia-quien", progressText:whoTriviaDone ? `${whoEarnedPoints} puntos obtenidos` : `Hasta ${whoMaxPoints} puntos`, actionLabel:whoTriviaDone ? "Ver resultado" : "Comenzar", locked:!rsvpDone || !whoTriviaOpen })}
+        ${pointsChallengeCard({ number:"05", icon:"🎡", title:"Ruleta · Todo o Nada", text:rouletteOpen ? (rouletteDone ? "Tu tirada ya quedó registrada." : "Girás una vez y elegís cuánto riesgo asumir.") : "Nuevo juego · se habilitará próximamente.", done:rouletteDone, route:"ruleta", progressText:rouletteDone ? `${rouletteEarnedPoints > 0 ? "+" : ""}${rouletteEarnedPoints} puntos obtenidos` : "Resultado directo al equipo", actionLabel:rouletteDone ? "Ver resultado" : "Jugar", locked:!rsvpDone || rsvp?.attendance !== "si" || !rouletteOpen })}
+        ${pointsChallengeCard({ number:"06", icon:"⚔️", title:"Guerra de Equipos", text:warDone ? "Las dos rondas ya fueron resueltas." : warRoundRevealed(1) ? (isTriviaGameOpen("game-war-r2") ? "Ronda 2 abierta: vuelvan a debatir la estrategia." : "Ronda 1 revelada. La Ronda 2 sigue bloqueada.") : warOpen ? "Debatan en WhatsApp y voten: sumar, atacar o defender." : "Nuevo juego grupal · se habilitará próximamente.", done:warDone, route:"guerra", progressText:warDone ? "Guerra finalizada" : warRoundRevealed(1) ? "Ronda 1 resuelta" : "Hasta +1.400 puntos en 2 rondas", actionLabel:currentWarVote ? "Ver / cambiar voto" : "Entrar", locked:!rsvpDone || rsvp?.attendance !== "si" || !warOpen })}
+        ${pointsChallengeCard({ number:"07", icon:"🚌", title:"Durante el viaje", text:"Contenido secreto. Lo vamos a revelar más adelante.", done:false, route:"puntos", progressText:"Próximamente", actionLabel:"", locked:true })}
       </div>
     `;
   }
@@ -7250,6 +7193,7 @@
     done,
     route,
     progressText,
+    bonusText = "",
     actionLabel,
     locked = false
   }) {
@@ -7275,6 +7219,7 @@
           <strong>${escapeHTML(title)}</strong>
           <p>${escapeHTML(text)}</p>
           <em>${escapeHTML(progressText || "")}</em>
+          ${bonusText ? `<i class="points-challenge-bonus">${escapeHTML(bonusText)}</i>` : ""}
         </div>
         ${
           locked
@@ -8251,6 +8196,10 @@
     if (id === "auto-roulette-risk") return "Ruleta · Todo o Nada";
     if (id === "auto-war-r1") return "Guerra de Equipos · Ronda 1";
     if (id === "auto-war-r2") return "Guerra de Equipos · Ronda 2";
+    if (id === "war-control-r1") return "Guerra R1 · Control de capitán";
+    if (id === "war-control-r2") return "Guerra R2 · Control de capitán";
+    if (id === "war-tiebreak-r1") return "Guerra R1 · Desempate de capitán";
+    if (id === "war-tiebreak-r2") return "Guerra R2 · Desempate de capitán";
     if (id === "discrecional-fede-vani") return "Puntos a discreción";
     if (["reset-discretionary-clear-marker", "reset-discrecional-fede-vani"].includes(id)) return "Limpieza de puntos discrecionales";
     if (["reset-total-clear-marker", "reset-total-fede-vani"].includes(id)) return "Limpieza general de puntos";
@@ -8772,7 +8721,9 @@
           `Hasta +${triviaMaxPointsFor("who-is-who-trivia-test", currentGuest.team)}`,
           "El puntaje depende de los aciertos y está ajustado según la cantidad de integrantes del equipo."
         )}
-        ${rulesRow("Próximos desafíos", "Según consigna", "Cada actividad indicará cuántos puntos entrega.")}
+        ${rulesRow("Ruleta · Todo o Nada", "Variable", "Una tirada por persona. Si sale positivo podés plantarte o duplicar; si sale negativo podés aceptar o intentar recuperarte.")}
+        ${rulesRow("Guerra de Equipos", "Hasta +1.400", "Dos rondas grupales. Debatan la estrategia en WhatsApp y voten entre Sumar, Atacar o Defender. El ranking define cuánto vale cada objetivo.")}
+        ${rulesRow("Durante la boda", "+ / −", "La competencia no termina antes del evento: los seis equipos seguirán sumando y perdiendo puntos durante toda la noche con juegos y consignas en vivo.")}
         ${rulesRow("Bonus o penalizaciones", "+ / −", "Vani y Fede podrán sumar o restar puntos por juegos, actitud o incumplimiento de consignas.")}
       </section>
 
@@ -10232,12 +10183,17 @@
 
     let action = tiedActions[0];
     if (tiedActions.length > 1) {
-      const captain = members.find(isGuestCaptain);
-      const captainVote = captain ? warVoteForGuest(captain.id, round) : null;
-      if (!captainVote || !tiedActions.includes(captainVote.action)) {
-        return { error: `${getTeam(teamId).name}: hay empate y falta un voto de capitán que lo defina.` };
+      const tiebreak = warTiebreakForTeam(teamId, round);
+      if (tiebreak?.action && tiedActions.includes(tiebreak.action)) {
+        action = tiebreak.action;
+      } else {
+        const captain = members.find(isGuestCaptain);
+        const captainVote = captain ? warVoteForGuest(captain.id, round) : null;
+        if (!captainVote || !tiedActions.includes(captainVote.action)) {
+          return { error: `${getTeam(teamId).name}: hay empate y el capitán todavía no lo definió.` };
+        }
+        action = captainVote.action;
       }
-      action = captainVote.action;
     }
 
     let targetTeamId = "";
@@ -10256,22 +10212,34 @@
       const tiedTargets = targetEntries.filter(([, count]) => count === maxTarget).map(([id]) => id);
       targetTeamId = tiedTargets[0];
       if (tiedTargets.length > 1) {
-        const captain = members.find(isGuestCaptain);
-        const captainVote = captain ? warVoteForGuest(captain.id, round) : null;
-        if (!captainVote || captainVote.action !== "attack" || !tiedTargets.includes(captainVote.targetTeamId)) {
-          return { error: `${getTeam(teamId).name}: hay empate de objetivos y el capitán debe definirlo con su voto.` };
+        const tiebreak = warTiebreakForTeam(teamId, round);
+        if (tiebreak?.action === "attack" && tiedTargets.includes(tiebreak.targetTeamId)) {
+          targetTeamId = tiebreak.targetTeamId;
+        } else {
+          const captain = members.find(isGuestCaptain);
+          const captainVote = captain ? warVoteForGuest(captain.id, round) : null;
+          if (!captainVote || captainVote.action !== "attack" || !tiedTargets.includes(captainVote.targetTeamId)) {
+            return { error: `${getTeam(teamId).name}: hay empate de objetivos y el capitán todavía no lo definió.` };
+          }
+          targetTeamId = captainVote.targetTeamId;
         }
-        targetTeamId = captainVote.targetTeamId;
       }
     }
 
     return { action, targetTeamId, voteCount: votes.length, eligibleCount: members.length };
   }
 
-  async function resolveWarRoundAdmin(round) {
-    if (!state.adminUnlocked || !warRoundEnabled(round) || warRoundRevealed(round)) return false;
+  async function resolveWarRound(round, options = {}) {
+    const source = options.source || "admin";
+    const captainAllowed = source === "captain" && isGuestCaptain(currentGuest) && warRoundReadyForCaptainReveal(round);
+    const adminAllowed = source === "admin" && state.adminUnlocked;
+    if ((!captainAllowed && !adminAllowed) || !warRoundEnabled(round) || warRoundRevealed(round)) return false;
 
     await syncFromSheets(false);
+    if (source === "captain" && !warRoundReadyForCaptainReveal(round)) {
+      toast("Todavía falta cerrar algún equipo o resolver un empate.");
+      return false;
+    }
 
     const official = {};
     for (const teamId of Object.keys(DATA.teams)) {
@@ -10394,6 +10362,10 @@
     await syncFromSheets(false);
     toast(`Ronda ${round} revelada y guardada en Sheets.`);
     return savedTeams.length === Object.keys(DATA.teams).length;
+  }
+
+  async function resolveWarRoundAdmin(round) {
+    return resolveWarRound(round, { source: "admin" });
   }
 
   function renderAdmin() {
@@ -11525,20 +11497,23 @@
         button.disabled = true;
         button.textContent = "GIRANDO…";
 
+        const stage = wheel?.closest(".new-roulette-stage");
         if (wheel) {
           const segment = 360 / Math.max(1, values.length);
-          const target = 360 - (index * segment + segment / 2);
-          wheel.style.transition = "transform 1.8s cubic-bezier(.16,.82,.22,1)";
-          wheel.style.transform = `rotate(${1440 + target}deg)`;
+          const target = (360 - (index * segment)) % 360;
+          stage?.classList.add("is-spinning");
+          wheel.style.transition = "transform 3.2s cubic-bezier(.10,.72,.16,1)";
+          wheel.style.transform = `rotate(${2160 + target}deg)`;
         }
 
         window.setTimeout(() => {
+          stage?.classList.remove("is-spinning");
           setRoulettePending({
             baseResult,
             createdAt: new Date().toISOString()
           });
           renderCurrentRoute();
-        }, 1850);
+        }, 3250);
       });
 
       $$('[data-roulette-decision]').forEach(button => {
@@ -11577,6 +11552,7 @@
             status: "completed"
           };
 
+          showRouletteFinalAnimation(finalPoints, decision);
           clearRoulettePending(currentGuest.id);
           void queueOptimisticWrite(
             "saveGameSubmission",
@@ -11610,7 +11586,10 @@
       const voteGameId = warVoteGameId(round);
 
       const saveWarVote = (action, targetTeamId = "") => {
-        if (!warRoundEnabled(round) || warRoundRevealed(round)) return;
+        if (!warTeamVotingOpen(currentGuest.team, round) || warRoundRevealed(round)) {
+          toast("La votación de tu equipo está cerrada.");
+          return;
+        }
         const existingRaw = gameSubmissionFor(currentGuest.id, voteGameId);
         if (existingRaw?.pendingSync) {
           toast("Esperá un segundo: estamos guardando tu voto.");
@@ -11660,6 +11639,69 @@
         button.addEventListener("click", () => {
           saveWarVote("attack", button.dataset.warTarget);
         });
+      });
+
+      $('[data-war-team-toggle]')?.addEventListener("click", event => {
+        if (!isGuestCaptain(currentGuest)) return;
+        const status = event.currentTarget.dataset.warTeamToggle === "open" ? "open" : "closed";
+        const votes = warVotesForTeam(currentGuest.team, round).length;
+        const eligible = confirmedNewGameMembers(currentGuest.team).length;
+        if (status === "closed" && votes < eligible) {
+          const missing = eligible - votes;
+          if (!confirm(`Faltan ${missing} voto${missing === 1 ? "" : "s"} en ${getTeam(currentGuest.team).name}. ¿Cerrar igual?`)) return;
+        }
+        const answer = { status, round, teamId: currentGuest.team };
+        void queueOptimisticWrite("saveGameSubmission", {
+          gameId: warControlGameId(round),
+          guestId: currentGuest.id,
+          teamId: currentGuest.team,
+          answer: JSON.stringify(answer),
+          comment: status === "closed" ? "Votación cerrada por capitán" : "Votación reabierta por capitán",
+          earnedPoints: 0,
+          warStatus: status,
+          warRound: round,
+          updatedAt: new Date().toISOString()
+        }, {
+          writeKey: `game:${currentGuest.id}:${warControlGameId(round)}`,
+          successMessage: status === "closed" ? "Votación de tu equipo cerrada 🔒" : "Votación reabierta 🔓"
+        });
+      });
+
+      $$('[data-war-tiebreak-action]').forEach(button => {
+        button.addEventListener("click", () => {
+          if (!isGuestCaptain(currentGuest) || !warTeamVotingClosed(currentGuest.team, round)) return;
+          const previous = warTiebreakForTeam(currentGuest.team, round) || {};
+          const action = button.dataset.warTiebreakAction;
+          const answer = { action, targetTeamId: action === "attack" ? (previous.targetTeamId || "") : "", round, teamId: currentGuest.team };
+          void queueOptimisticWrite("saveGameSubmission", {
+            gameId: warTiebreakGameId(round), guestId: currentGuest.id, teamId: currentGuest.team,
+            answer: JSON.stringify(answer), comment: `Desempate capitán: ${action}`, earnedPoints: 0,
+            warAction: action, targetTeamId: answer.targetTeamId, warRound: round, updatedAt: new Date().toISOString()
+          }, { writeKey: `game:${currentGuest.id}:${warTiebreakGameId(round)}`, successMessage: "Desempate guardado ✓" });
+        });
+      });
+
+      $$('[data-war-tiebreak-target]').forEach(button => {
+        button.addEventListener("click", () => {
+          if (!isGuestCaptain(currentGuest) || !warTeamVotingClosed(currentGuest.team, round)) return;
+          const targetTeamId = button.dataset.warTiebreakTarget;
+          const answer = { action: "attack", targetTeamId, round, teamId: currentGuest.team };
+          void queueOptimisticWrite("saveGameSubmission", {
+            gameId: warTiebreakGameId(round), guestId: currentGuest.id, teamId: currentGuest.team,
+            answer: JSON.stringify(answer), comment: `Desempate objetivo: ${getTeam(targetTeamId).name}`, earnedPoints: 0,
+            warAction: "attack", targetTeamId, warRound: round, updatedAt: new Date().toISOString()
+          }, { writeKey: `game:${currentGuest.id}:${warTiebreakGameId(round)}`, successMessage: "Objetivo de desempate guardado ✓" });
+        });
+      });
+
+      $('[data-captain-reveal-war]')?.addEventListener("click", async event => {
+        if (!isGuestCaptain(currentGuest)) return;
+        const revealRound = Number(event.currentTarget.dataset.captainRevealWar || round);
+        event.currentTarget.disabled = true;
+        event.currentTarget.textContent = "Revelando…";
+        const ok = await resolveWarRound(revealRound, { source: "captain" });
+        if (!ok) { renderCurrentRoute(); return; }
+        renderCurrentRoute();
       });
     }
 
