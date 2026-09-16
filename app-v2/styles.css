@@ -13986,7 +13986,7 @@ summary > b {
 }
 
 /* =========================================================
-   v32518 · Timers automáticos + UX Sumá puntos / Guerra
+   v32519 · Timers automáticos + UX Sumá puntos / Guerra
    ========================================================= */
 
 /* Sumá puntos: sin numeración, iconos grandes y CTA real */
@@ -14197,3 +14197,84 @@ summary > b {
   .war-confirm-actions{grid-template-columns:1fr!important}
 }
 @media(prefers-reduced-motion:reduce){.war-decision-card>span{animation:none!important}}
+
+
+/* ============================================================
+   v32519 · Sumá puntos + Ruleta + Admin de prueba
+   ============================================================ */
+.admin-test-login-row{display:grid;gap:6px;margin-top:10px;padding:12px;border:1px solid rgba(116,51,68,.16);border-radius:14px;background:rgba(116,51,68,.05)}
+.admin-test-login-row.hidden{display:none!important}.admin-test-login-row label{font-size:9px;font-weight:950;color:#743344}.admin-test-login-row input{height:45px;margin:0;border-radius:12px}.admin-test-login-row small{font-size:8px;line-height:1.35;color:var(--muted)}
+
+/* Evita que el hero de los juegos quede visualmente debajo del header sticky */
+#view .new-game-page{padding-top:16px!important}
+
+/* Cabecera de Sumá puntos más chica: el foco pasa al desafío activo */
+#view .points-compact-head{grid-template-columns:42px minmax(0,1fr) auto!important;gap:10px!important;padding:12px 14px!important;min-height:0!important}
+#view .points-compact-logo{width:40px!important;height:40px!important}
+#view .points-compact-head h3{font-size:19px!important;line-height:1.05!important;margin:2px 0 3px!important}
+#view .points-compact-head p:not(.eyebrow){font-size:9.5px!important;line-height:1.35!important;margin:0!important}
+#view .points-personal-counter{min-width:82px!important;padding:8px 9px!important}
+#view .points-personal-counter b{font-size:20px!important}
+#view .points-compact-head.is-test-mode{background:linear-gradient(135deg,#31536e,#243f56)!important;border-color:rgba(49,83,110,.4)!important}
+
+/* Activo primero, grande y claramente bordó */
+#view .points-all-game-list .points-challenge-card.is-active{padding:18px!important;min-height:126px!important;border-left:7px solid #743344!important;background:radial-gradient(circle at 95% 0,rgba(204,164,89,.18),transparent 34%),linear-gradient(135deg,#fff9f2,#f4e3df)!important;box-shadow:0 15px 30px rgba(116,51,68,.18)!important}
+#view .points-all-game-list .points-challenge-card.is-active .points-challenge-icon{width:70px!important;height:70px!important;min-width:70px!important;font-size:40px!important;background:#743344!important;color:#fff!important;border-color:#743344!important;box-shadow:0 8px 18px rgba(116,51,68,.18)!important}
+#view .points-all-game-list .points-challenge-card.is-active .points-challenge-copy>strong{font-size:20px!important;color:#20384f!important}
+#view .points-all-game-list .points-challenge-card.is-active .points-challenge-copy>p{font-size:11px!important}
+#view .points-all-game-list .points-challenge-card.is-active>button{min-height:54px!important;padding:12px 18px!important;font-size:12px!important;border-radius:14px!important;min-width:150px!important}
+
+/* Los completados vuelven a la paleta crema, compactos y sin azul */
+#view .points-completed-group{margin-top:18px}
+#view .points-completed-group-head{display:flex;align-items:center;gap:9px;margin:0 2px 8px;color:#5e5549}
+#view .points-completed-group-head>span{width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:rgba(183,137,69,.12);color:#9a7136;font-weight:1000}
+#view .points-completed-group-head strong,#view .points-completed-group-head small{display:block}.points-completed-group-head strong{font-size:11px}.points-completed-group-head small{margin-top:1px;font-size:8px;color:var(--muted)}
+#view .points-all-game-list.is-completed-list{gap:7px!important}
+#view .points-all-game-list .points-challenge-card.is-done{background:linear-gradient(135deg,rgba(255,253,248,.94),rgba(239,230,214,.90))!important;border:1px solid rgba(126,105,75,.15)!important;border-left:3px solid rgba(183,137,69,.58)!important;color:var(--ink)!important;box-shadow:0 5px 12px rgba(76,59,37,.06)!important}
+#view .points-all-game-list .points-challenge-card.is-done .points-challenge-icon{background:rgba(183,137,69,.09)!important;border-color:rgba(183,137,69,.16)!important;color:var(--ink)!important}
+#view .points-all-game-list .points-challenge-card.is-done .points-challenge-copy>small{color:#9a7136!important}
+#view .points-all-game-list .points-challenge-card.is-done .points-challenge-copy>strong{color:var(--ink)!important}
+#view .points-all-game-list .points-challenge-card.is-done .points-challenge-copy>p{color:var(--muted)!important}
+#view .points-all-game-list .points-challenge-card.is-done .points-challenge-copy>em{color:#8c6d3f!important}
+#view .points-all-game-list .points-challenge-card.is-done>button{background:#31536e!important;color:#fff!important;border-color:#31536e!important;box-shadow:none!important;min-height:44px!important;font-size:10px!important}
+#view .points-all-game-list .points-challenge-card.is-compact-done{grid-template-columns:46px minmax(0,1fr) auto!important;gap:10px!important;padding:10px 12px!important;min-height:70px!important}
+#view .points-all-game-list .points-challenge-card.is-compact-done .points-challenge-icon{width:44px!important;height:44px!important;min-width:44px!important;font-size:25px!important}
+#view .points-all-game-list .points-challenge-card.is-compact-done .points-challenge-copy>strong{font-size:13px!important}
+#view .points-all-game-list .points-challenge-card.is-compact-done .points-challenge-copy>em{font-size:8.5px!important}
+#view .points-all-game-list .points-challenge-card.is-compact-done>button{min-width:92px!important}
+
+/* CTA de juegos siempre cómodo para tocar */
+#view .points-all-game-list .points-challenge-card>button{min-height:50px!important;padding:11px 15px!important;font-size:11px!important;font-weight:1000!important;border-radius:13px!important}
+
+/* Ruleta: segmentos intercalados y etiquetas más limpias */
+#view .new-roulette-card{padding:16px!important}
+#view .new-roulette-stage{width:min(365px,86vw)!important;margin:10px auto 20px!important}
+#view .new-roulette-wheel{border-width:7px!important;box-shadow:0 16px 32px rgba(44,38,29,.16),inset 0 0 0 2px rgba(255,255,255,.22)!important}
+#view .new-roulette-wheel::after{inset:16%!important;border-color:rgba(255,255,255,.28)!important}
+#view .new-roulette-label{min-width:38px!important;max-width:48px!important;padding:4px 5px!important;border-radius:999px!important;background:rgba(21,29,34,.35)!important;box-shadow:0 2px 7px rgba(0,0,0,.12)!important}
+#view .new-roulette-label.is-negative{background:rgba(90,24,43,.76)!important}
+#view .new-roulette-label.is-positive{background:rgba(31,82,51,.72)!important}
+#view .new-roulette-label.is-zero{background:#31536e!important}
+#view .new-roulette-label b{font-size:11px!important;color:#fff!important;text-shadow:none!important}
+#view .new-roulette-center{width:96px!important;height:96px!important;border:4px solid rgba(255,255,255,.7)!important}
+#view .new-roulette-pointer{top:-8px!important;border-left-width:16px!important;border-right-width:16px!important;border-top-width:31px!important}
+#view .new-roulette-spin{min-height:55px!important;font-size:15px!important;border-radius:15px!important}
+.admin-test-reset-game{display:block;width:min(360px,100%);margin:12px auto 0;min-height:46px;border:1px solid rgba(49,83,110,.24);border-radius:13px;background:#31536e;color:#fff;font-weight:950;font-size:10px}
+
+@media(max-width:760px){
+  #view .points-compact-head{grid-template-columns:38px minmax(0,1fr)!important;padding:11px 12px!important}
+  #view .points-personal-counter{grid-column:2!important;justify-self:start!important;display:flex!important;align-items:baseline!important;gap:5px!important;min-width:0!important;padding:0!important;background:transparent!important;border:0!important}
+  #view .points-personal-counter b{font-size:16px!important}.points-personal-counter em{font-size:7px!important}
+  #view .points-all-game-list .points-challenge-card.is-active{grid-template-columns:66px minmax(0,1fr)!important;padding:16px!important}
+  #view .points-all-game-list .points-challenge-card.is-active .points-challenge-icon{width:62px!important;height:62px!important;min-width:62px!important;font-size:36px!important}
+  #view .points-all-game-list .points-challenge-card.is-active>button{grid-column:1/-1!important;width:100%!important}
+  #view .points-all-game-list .points-challenge-card.is-compact-done{grid-template-columns:44px minmax(0,1fr) auto!important;padding:9px 10px!important}
+  #view .points-all-game-list .points-challenge-card.is-compact-done>button{grid-column:auto!important;width:auto!important;min-width:78px!important;margin:0!important}
+}
+@media(max-width:520px){
+  #view .new-roulette-stage{width:min(325px,84vw)!important}
+  #view .new-roulette-label{min-width:34px!important;max-width:42px!important;padding:3px 4px!important}
+  #view .new-roulette-label b{font-size:9.5px!important}
+  #view .points-all-game-list .points-challenge-card.is-compact-done{grid-template-columns:42px minmax(0,1fr)!important}
+  #view .points-all-game-list .points-challenge-card.is-compact-done>button{grid-column:2!important;justify-self:start!important;min-width:105px!important}
+}

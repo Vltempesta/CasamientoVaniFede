@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32518";
+  const CURRENT_APP_VERSION = "32519";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -48,6 +48,20 @@
     "capital-obelisco": { shortLabel: "Capital · Obelisco", beThere: "16:30", departure: "16:45" },
     "wilde": { shortLabel: "Wilde", beThere: "16:15", departure: "16:30" },
     "longchamps": { shortLabel: "Longchamps", beThere: "15:45", departure: "16:00" }
+  };
+
+  const ADMIN_TEST_GUEST = {
+    id: "admin-test",
+    firstName: "Admin",
+    lastName: "",
+    team: "fuego",
+    role: "admin-test",
+    alias: "Admin"
+  };
+  const ADMIN_TEST_PASSWORD = "simba1265";
+  const adminTestSession = {
+    rouletteResult: null,
+    warVotes: { 1: null, 2: null }
   };
 
   let currentGuest = null;
@@ -412,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32518"
+        appVersion: CONFIG.APP_VERSION || "32519"
       })
     );
   }
@@ -655,6 +669,12 @@
   }
 
   async function queueOptimisticWrite(action, payload, options = {}) {
+    if (isAdminTestMode()) {
+      options.beforeRender?.({ action, payload, testMode: true });
+      options.afterRender?.({ action, payload, testMode: true });
+      toast("Modo prueba: no se guardó nada ni se sumaron puntos.");
+      return true;
+    }
     if (adminPreviewActive) {
       toast("La vista previa es de solo lectura.");
       return false;
@@ -811,7 +831,21 @@
   }
 
   function getGuestById(id) {
+    if (String(id || "") === ADMIN_TEST_GUEST.id) return ADMIN_TEST_GUEST;
     return DATA.guests.find(guest => guest.id === id);
+  }
+
+  function isAdminTestMode(guest = currentGuest) {
+    return String(guest?.id || "") === ADMIN_TEST_GUEST.id;
+  }
+
+  function updateAdminTestLoginUi() {
+    const row = $("#adminTestLoginRow");
+    const input = $("#guestName");
+    if (!row || !input) return;
+    const visible = normalize(input.value) === "admin";
+    row.classList.toggle("hidden", !visible);
+    if (!visible) $("#adminTestPassword") && ($("#adminTestPassword").value = "");
   }
 
 
@@ -822,7 +856,7 @@
   }
 
   function isCompetitionGuest(guest) {
-    if (!guest) return false;
+    if (!guest || isAdminTestMode(guest)) return false;
     const id = normalize(guest.id || "");
     const fullName = normalize(`${guest.firstName || ""} ${guest.lastName || ""}`);
     const role = normalize(guest.role || "");
@@ -908,6 +942,7 @@
   function guestSuggestionsFor(query) {
     if (loginPrivacyEnabled()) return [];
     const wanted = normalize(query);
+    if (wanted === "admin") return [];
     if (wanted.length < 2) return [];
 
     return DATA.guests
@@ -997,7 +1032,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32518",
+      appVersion: "32519",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -1971,6 +2006,7 @@
     history.replaceState({ screen: "login" }, "", basePageUrl());
     applyPendingWritesToState();
     updateLoginPrivacyUi();
+    updateAdminTestLoginUi();
     fillGuestSuggestions();
     configureNavigation();
     preloadTeamLogos();
@@ -2025,8 +2061,9 @@
       (guest.firstName || guest.lastName || "V")
         .charAt(0)
         .toUpperCase();
-    $("#welcomeTeam").textContent =
-      `Equipo ${team.name}`;
+    $("#welcomeTeam").textContent = isAdminTestMode(guest)
+      ? "Modo prueba · sin puntos"
+      : `Equipo ${team.name}`;
 
     migrateSectionNotificationBaselineBeforeSync();
     updateNotificationUi();
@@ -2142,6 +2179,7 @@
       selectedGuestId = null;
       input.removeAttribute("aria-invalid");
       $("#loginMessage").textContent = "";
+      updateAdminTestLoginUi();
       renderSuggestions();
     });
 
@@ -2303,7 +2341,7 @@
       const button = $("#loginButton");
       const buttonLabel = $("span", button);
       const message = $("#loginMessage");
-      const guest = (selectedGuestId && getGuestById(selectedGuestId)) || findGuest(input.value);
+      const isAdminLogin = normalize(input.value) === "admin";
 
       if (!normalize(input.value)) {
         input.setAttribute("aria-invalid", "true");
@@ -2312,6 +2350,31 @@
         return;
       }
 
+      if (isAdminLogin) {
+        const passwordInput = $("#adminTestPassword");
+        const password = String(passwordInput?.value || "");
+        updateAdminTestLoginUi();
+        if (password !== ADMIN_TEST_PASSWORD) {
+          input.setAttribute("aria-invalid", "true");
+          message.textContent = "Contraseña incorrecta para el usuario Admin.";
+          passwordInput?.focus();
+          passwordInput?.select();
+          return;
+        }
+        input.removeAttribute("aria-invalid");
+        message.textContent = "";
+        button.disabled = true;
+        buttonLabel.textContent = "Ingresando…";
+        window.setTimeout(() => {
+          enterApp(ADMIN_TEST_GUEST, false);
+          button.disabled = false;
+          buttonLabel.textContent = "Ingresar";
+          toast("Modo prueba activado · nada se guarda ni suma puntos.");
+        }, 120);
+        return;
+      }
+
+      const guest = (selectedGuestId && getGuestById(selectedGuestId)) || findGuest(input.value);
       if (!guest) {
         input.setAttribute("aria-invalid", "true");
         message.textContent = loginPrivacyEnabled()
@@ -2351,6 +2414,10 @@
       activeSuggestionIndex = -1;
       $("#guestName").value = "";
       $("#guestName").removeAttribute("aria-invalid");
+      $("#adminTestPassword") && ($("#adminTestPassword").value = "");
+      $("#adminTestLoginRow")?.classList.add("hidden");
+      adminTestSession.rouletteResult = null;
+      adminTestSession.warVotes = { 1: null, 2: null };
       $("#loginMessage").textContent = "";
       $("#guestName").focus();
     });
@@ -2406,7 +2473,8 @@
     if (route === "torneo") route = "puntos";
 
     const gameRoutes = ["musica", "trivia-pareja", "trivia-quien", "trivia", "ruleta", "guerra"];
-    if (currentGuest && gameRoutes.includes(route) && !hasFinalRsvp(state.rsvps[currentGuest.id])) {
+    const testMode = isAdminTestMode();
+    if (currentGuest && !testMode && gameRoutes.includes(route) && !hasFinalRsvp(state.rsvps[currentGuest.id])) {
       toast("Primero confirmá tu asistencia por sí o por no.");
       route = "asistencia";
     }
@@ -2414,18 +2482,18 @@
     const requestedWarRound = warRoundViewOverride || warRoundNumber();
     const requestedWarStage = requestedWarRound === 2 ? "war2" : "war1";
     const rouletteTiming = timedStageStatus("roulette");
-    if (route === "ruleta" && !rouletteTiming.active && !rouletteSubmissionFor(currentGuest?.id)) {
+    if (!testMode && route === "ruleta" && !rouletteTiming.active && !rouletteSubmissionFor(currentGuest?.id)) {
       toast(rouletteTiming.expired ? "La Ruleta ya finalizó." : "La Ruleta todavía está bloqueada.");
       route = "puntos";
     }
 
     const requestedWarTiming = timedStageStatus(requestedWarStage);
-    if (route === "guerra" && !requestedWarTiming.active && !warRoundRevealed(requestedWarRound)) {
+    if (!testMode && route === "guerra" && !requestedWarTiming.active && !warRoundRevealed(requestedWarRound)) {
       toast(requestedWarTiming.expired ? `La Ronda ${requestedWarRound} terminó y se está procesando.` : `La Ronda ${requestedWarRound} todavía está bloqueada.`);
       route = "puntos";
     }
 
-    if (["ruleta", "guerra"].includes(route) && currentGuest && state.rsvps[currentGuest.id]?.attendance !== "si") {
+    if (!testMode && ["ruleta", "guerra"].includes(route) && currentGuest && state.rsvps[currentGuest.id]?.attendance !== "si") {
       toast("Este juego es para quienes confirmaron asistencia.");
       route = "puntos";
     }
@@ -2998,15 +3066,15 @@
   const PRE_EVENT_SEQUENCE_GUEST_ID = "system-pre-event-sequence";
   const PRE_EVENT_STAGE_MS = 48 * 60 * 60 * 1000;
 
-  // Más exigente: 4 negativos, 1 cero y 7 positivos.
-  // Aun así, la expectativa total se mantiene cerca de 800 pts por equipo.
+  // Ruleta v32519: 5 negativos, 1 cero y 6 positivos.
+  // Los signos se intercalan visualmente y la expectativa total sigue cerca de 800 pts por equipo.
   const ROULETTE_VALUES_BY_TEAM = {
-    bosque: [-50, -30, -15, -5, 0, 20, 35, 55, 75, 95, 125, 150],
-    fuego: [-50, -30, -15, -5, 0, 15, 30, 50, 70, 90, 110, 135],
-    luz: [-70, -40, -20, -10, 0, 25, 50, 75, 100, 130, 170, 190],
-    noche: [-80, -45, -25, -10, 0, 30, 55, 80, 115, 150, 190, 225],
-    agua: [-60, -35, -20, -10, 0, 20, 45, 65, 90, 120, 145, 175],
-    viento: [-55, -35, -15, -5, 0, 20, 40, 60, 85, 110, 140, 160]
+    bosque: [-55, 40, -30, 90, 0, 135, -25, 65, -15, 110, -10, 150],
+    fuego: [-55, 35, -35, 80, 0, 120, -20, 60, -10, 100, -5, 130],
+    luz: [-70, 50, -40, 110, 0, 175, -30, 80, -15, 140, -10, 210],
+    noche: [-80, 55, -45, 125, 0, 200, -30, 90, -15, 160, -10, 235],
+    agua: [-65, 45, -35, 100, 0, 155, -25, 75, -15, 125, -10, 185],
+    viento: [-60, 40, -35, 95, 0, 145, -25, 70, -15, 120, -10, 180]
   };
 
   function manualGameFlag(key) {
@@ -4035,6 +4103,7 @@
 
 
   function isTriviaGameOpen(key) {
+    if (isAdminTestMode()) return true;
     if (key === "game-roulette") return timedStageStatus("roulette").active;
     if (key === "game-war") return timedStageStatus("war1").active;
     if (key === "game-war-r2") return timedStageStatus("war2").active;
@@ -4068,6 +4137,7 @@
   }
 
   function currentGuestCanPlayNewGames() {
+    if (isAdminTestMode()) return true;
     return Boolean(
       currentGuest &&
       isCompetitionGuest(currentGuest) &&
@@ -4093,6 +4163,7 @@
   }
 
   function rouletteSubmissionFor(guestId = currentGuest?.id) {
+    if (String(guestId || "") === ADMIN_TEST_GUEST.id) return adminTestSession.rouletteResult;
     return parseRouletteSubmission(
       gameSubmissionFor(guestId, ROULETTE_GAME_ID)
     );
@@ -4188,6 +4259,7 @@
   }
 
   function warTeamVotingClosed(teamId, round) {
+    if (isAdminTestMode()) return false;
     return warTeamControl(teamId, round)?.status === "closed";
   }
 
@@ -4275,11 +4347,13 @@
   }
 
   function warRoundEnabled(round) {
+    if (isAdminTestMode()) return true;
     if (Number(round) === 1) return timedStageStatus("war1").active;
     return timedStageStatus("war2").active && warRoundRevealed(1);
   }
 
   function warVoteForGuest(guestId, round) {
+    if (String(guestId || "") === ADMIN_TEST_GUEST.id) return adminTestSession.warVotes[Number(round)] || null;
     return parseWarVoteSubmission(
       gameSubmissionFor(guestId, warVoteGameId(round))
     );
@@ -6951,8 +7025,8 @@
           ${values.map((value, index) => {
             const angle = index * (360 / values.length);
             const radians = angle * Math.PI / 180;
-            const x = 50 + Math.sin(radians) * 39;
-            const y = 50 - Math.cos(radians) * 39;
+            const x = 50 + Math.sin(radians) * 35.5;
+            const y = 50 - Math.cos(radians) * 35.5;
             return `
               <span class="new-roulette-label ${value < 0 ? "is-negative" : value > 0 ? "is-positive" : "is-zero"}" style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%">
                 <b>${value > 0 ? "+" : ""}${value}</b>
@@ -6986,9 +7060,10 @@
   }
 
   function renderRouletteGame() {
+    const testMode = isAdminTestMode();
     const rouletteStage = timedStageStatus("roulette");
     const existingResult = rouletteSubmissionFor(currentGuest?.id);
-    if (!rouletteStage.active && !existingResult) {
+    if (!testMode && !rouletteStage.active && !existingResult) {
       return newGameLockedCard("Ruleta · Todo o Nada", rouletteStage.expired ? "El plazo de 48 horas terminó. La competencia continúa con Guerra de Equipos." : "Vani y Fede todavía no habilitaron este juego.");
     }
     if (!currentGuestCanPlayNewGames()) {
@@ -7009,7 +7084,7 @@
         <section class="section-card new-game-hero" style="--local-accent:${team.accent}">
           <div class="new-game-hero-logo">${teamLogo(team, "new-game-team-logo")}</div>
           <div><p class="eyebrow">RULETA · ${escapeHTML(team.name)}</p><h3>🎡 Ruleta · Todo o Nada</h3><p>Girás una vez y después decidís cuánto riesgo querés asumir.</p></div>
-          <span class="new-game-status-chip ${rouletteStage.active ? "is-open" : ""}">${rouletteStage.active ? escapeHTML(timedStageChip("roulette")) : `${played}/${participants.length} jugaron`}</span>
+          <span class="new-game-status-chip ${testMode || rouletteStage.active ? "is-open" : ""}">${testMode ? "🧪 MODO PRUEBA" : rouletteStage.active ? escapeHTML(timedStageChip("roulette")) : `${played}/${participants.length} jugaron`}</span>
         </section>
 
         <section class="section-card new-roulette-card">
@@ -7020,8 +7095,9 @@
             </div>
             <div class="roulette-team-next-note">
               <span>⏳</span>
-              <div><strong>Tu parte ya está hecha</strong><p>La Ruleta queda abierta durante 48 horas. Cuando venza, la Ronda 1 de Guerra de Equipos se habilitará automáticamente.</p></div>
+              <div><strong>${testMode ? "Prueba completada" : "Tu parte ya está hecha"}</strong><p>${testMode ? "Este resultado es sólo de prueba: no se guarda ni suma puntos." : "La Ruleta queda abierta durante 48 horas. Cuando venza, la Ronda 1 de Guerra de Equipos se habilitará automáticamente."}</p></div>
             </div>
+            ${testMode ? `<button type="button" class="admin-test-reset-game" data-reset-admin-test="roulette">↻ Probar la Ruleta de nuevo</button>` : ""}
           ` : pendingBase !== null ? `
             <div class="new-roulette-decision">
               <span class="new-roulette-base ${pendingBase > 0 ? "is-positive" : pendingBase < 0 ? "is-negative" : ""}">${pendingBase > 0 ? "+" : ""}${pendingBase}</span>
@@ -7133,7 +7209,7 @@
     overlay.innerHTML = `
       <div class="war-decision-card" role="status" aria-live="assertive">
         <span>${icon}</span><small>VOTO CONFIRMADO</small><h3>${title}</h3>
-        <strong>${escapeHTML(detail)}</strong><p>Tu voto ya quedó registrado para ${escapeHTML(getTeam(currentGuest.team).name)}.</p>
+        <strong>${escapeHTML(detail)}</strong><p>${isAdminTestMode() ? "Modo prueba: este voto no se guarda ni modifica puntos." : `Tu voto ya quedó registrado para ${escapeHTML(getTeam(currentGuest.team).name)}.`}</p>
       </div>`;
     document.body.appendChild(overlay);
     requestAnimationFrame(() => overlay.classList.add("is-visible"));
@@ -7242,9 +7318,10 @@
     const activeRound = warRoundNumber();
     const round = [1, 2].includes(Number(warRoundViewOverride)) ? Number(warRoundViewOverride) : activeRound;
     const stage = round === 2 ? "war2" : "war1";
+    const testMode = isAdminTestMode();
     const timing = timedStageStatus(stage);
-    const roundEnabled = warRoundEnabled(round);
-    const revealed = warRoundRevealed(round);
+    const roundEnabled = testMode ? true : warRoundEnabled(round);
+    const revealed = testMode ? false : warRoundRevealed(round);
     const team = getTeam(currentGuest.team);
 
     if (!revealed && !roundEnabled) {
@@ -7258,7 +7335,7 @@
 
     const members = confirmedNewGameMembers(team.id);
     const vote = warVoteForGuest(currentGuest.id, round);
-    const rawVote = gameSubmissionFor(currentGuest.id, warVoteGameId(round));
+    const rawVote = testMode ? null : gameSubmissionFor(currentGuest.id, warVoteGameId(round));
     const snapshot = warRoundSnapshot(round);
     const ownSnapshot = snapshot.find(item => item.id === team.id);
     const teamVotingClosed = warTeamVotingClosed(team.id, round);
@@ -7306,7 +7383,7 @@
         <section class="section-card new-game-hero" style="--local-accent:${team.accent}">
           <div class="new-game-hero-logo">${teamLogo(team, "new-game-team-logo")}</div>
           <div><p class="eyebrow">RONDA ${round} DE 2</p><h3>⚔️ Guerra de Equipos</h3><p>La estrategia es grupal: debatan primero en WhatsApp y después cada integrante vota en secreto.</p></div>
-          <span class="new-game-status-chip is-open">${escapeHTML(timedStageChip(stage))}</span>
+          <span class="new-game-status-chip is-open">${testMode ? "🧪 MODO PRUEBA" : escapeHTML(timedStageChip(stage))}</span>
         </section>
 
         <section class="section-card war-how-to-play">
@@ -7319,14 +7396,14 @@
         ${warCompactRankingMarkup(round, "RANKING Y BOTINES")}
 
         <section class="section-card war-vote-card ${teamVotingClosed ? "is-closed" : ""}">
-          <div class="war-vote-heading"><div><p class="eyebrow">TU VOTO · ${escapeHTML(team.name)}</p><h4>${teamVotingClosed ? "La votación de tu equipo está cerrada" : "¿Qué debería hacer tu equipo?"}</h4><p>Tu equipo está ${ownSnapshot?.rank || "-"}° y vale ${ownSnapshot?.bounty || "-"} puntos si alguien lo ataca.</p></div>${state.adminUnlocked ? `<span>${warVotesForTeam(team.id, round).length}/${members.length} votos</span>` : `<span>${escapeHTML(timedStageChip(stage))}</span>`}</div>
+          <div class="war-vote-heading"><div><p class="eyebrow">TU VOTO · ${escapeHTML(team.name)}</p><h4>${teamVotingClosed ? "La votación de tu equipo está cerrada" : "¿Qué debería hacer tu equipo?"}</h4><p>Tu equipo está ${ownSnapshot?.rank || "-"}° y vale ${ownSnapshot?.bounty || "-"} puntos si alguien lo ataca.</p></div>${state.adminUnlocked ? `<span>${warVotesForTeam(team.id, round).length}/${members.length} votos</span>` : `<span>${testMode ? "🧪 PRUEBA" : escapeHTML(timedStageChip(stage))}</span>`}</div>
           <div class="war-action-options ${rawVote?.pendingSync ? "is-saving" : ""}">
             <button type="button" data-war-action="sum" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "sum" ? "is-selected" : ""}"><span>➕</span><strong>SUMAR</strong><small>+${WAR_SUM_POINTS} seguros<br>pero quedás expuesto</small></button>
             <button type="button" data-war-action="attack" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "attack" ? "is-selected" : ""}"><span>⚔️</span><strong>ATACAR</strong><small>Robás puntos<br>si el rival no defiende</small></button>
             <button type="button" data-war-action="defend" ${teamVotingClosed ? "disabled" : ""} class="${vote?.action === "defend" ? "is-selected" : ""}"><span>🛡️</span><strong>DEFENDER</strong><small>Inmunidad total<br>+${WAR_DEFEND_REWARD} por ataque bloqueado</small></button>
           </div>
           <div class="war-target-picker" ${vote?.action === "attack" ? "" : "hidden"}><p>¿A quién atacarías?</p><div>${snapshot.filter(item => item.id !== team.id).map(item => { const targetTeam = getTeam(item.id); return `<button type="button" data-war-target="${item.id}" ${teamVotingClosed ? "disabled" : ""} class="${vote?.targetTeamId === item.id ? "is-selected" : ""}" style="--local-accent:${targetTeam.accent}">${teamLogo(targetTeam, "war-target-logo")}<strong>${escapeHTML(targetTeam.name)}</strong><b>${item.bounty}</b><small>puntos</small></button>`; }).join("")}</div></div>
-          <div class="new-game-note ${rawVote?.pendingSync ? "is-saving" : ""}">${teamVotingClosed ? "🔒 Tu capitán cerró la votación. Tu voto ya no puede modificarse salvo que la reabra." : rawVote?.pendingSync ? "Guardando tu voto…" : vote ? "✅ Tu voto quedó registrado. Podés cambiarlo mientras la votación siga abierta." : "Tu voto es secreto. La jugada oficial se define con los votos del equipo."}</div>
+          <div class="new-game-note ${rawVote?.pendingSync ? "is-saving" : ""}">${testMode ? (vote ? "🧪 Voto de prueba confirmado. Podés cambiarlo todas las veces que quieras; no se guarda ni suma puntos." : "🧪 Modo prueba: elegí una jugada. Nada de lo que hagas acá modifica la competencia real.") : teamVotingClosed ? "🔒 Tu capitán cerró la votación. Tu voto ya no puede modificarse salvo que la reabra." : rawVote?.pendingSync ? "Guardando tu voto…" : vote ? "✅ Tu voto quedó registrado. Podés cambiarlo mientras la votación siga abierta." : "Tu voto es secreto. La jugada oficial se define con los votos del equipo."}</div>
         </section>
 
         ${renderWarCaptainControl(round, team)}
@@ -7336,61 +7413,64 @@
   }
 
   function renderPointsHub() {
+    const testMode = isAdminTestMode();
     const team = getTeam(currentGuest.team);
     const rsvp = state.rsvps[currentGuest.id];
-    const rsvpDone = isCompetitionGuest(currentGuest) && hasFinalRsvp(rsvp);
+    const rsvpDone = testMode ? false : isCompetitionGuest(currentGuest) && hasFinalRsvp(rsvp);
     const attendancePoints = rsvpPointsForTeam(team.id);
     const musicPoints = musicPointsForTeam(team.id);
-    const microBonusPoints = rsvpDone && rsvp.attendance === "si" && ["combi", "micro"].includes(rsvp.transport) ? 20 : 0;
+    const microBonusPoints = !testMode && rsvpDone && rsvp.attendance === "si" && ["combi", "micro"].includes(rsvp.transport) ? 20 : 0;
     const rsvpTotalPoints = rsvpDone ? attendancePoints + microBonusPoints : 0;
-    const musicOpen = isTriviaGameOpen("trivia-music");
-    const triviaOpen = isTriviaGameOpen("trivia-couple");
-    const whoTriviaOpen = isTriviaGameOpen("trivia-who");
+    const musicOpen = testMode || isTriviaGameOpen("trivia-music");
+    const triviaOpen = testMode || isTriviaGameOpen("trivia-couple");
+    const whoTriviaOpen = testMode || isTriviaGameOpen("trivia-who");
     const rouletteTiming = timedStageStatus("roulette");
     const war1Timing = timedStageStatus("war1");
     const war2Timing = timedStageStatus("war2");
-    const rouletteOpen = rouletteTiming.active;
-    const war1Open = war1Timing.active;
-    const war2Open = war2Timing.active && warRoundRevealed(1);
+    const rouletteOpen = testMode || rouletteTiming.active;
+    const war1Open = testMode || war1Timing.active;
+    const war2Open = testMode || (war2Timing.active && warRoundRevealed(1));
     const rouletteResult = rouletteSubmissionFor(currentGuest.id);
-    const rouletteDone = rouletteResult?.status === "completed";
+    const rouletteDone = Boolean(rouletteResult?.status === "completed");
     const rouletteEarnedPoints = rouletteDone ? Number(rouletteResult.finalPoints || 0) : 0;
-    const war1Done = warRoundRevealed(1);
-    const war2Done = warRoundRevealed(2);
+    const war1Done = testMode ? false : warRoundRevealed(1);
+    const war2Done = testMode ? false : warRoundRevealed(2);
     const war1Vote = warVoteForGuest(currentGuest.id, 1);
     const war2Vote = warVoteForGuest(currentGuest.id, 2);
     const warDone = war2Done;
-    const musicDone = Boolean(triviaSubmission("music-selection"));
-    const triviaDone = Boolean(triviaSubmission("couple-trivia-test"));
-    const whoTriviaDone = Boolean(triviaSubmission("who-is-who-trivia-test"));
-    const coupleSubmission = triviaSubmission("couple-trivia-test");
-    const whoSubmission = triviaSubmission("who-is-who-trivia-test");
+    const musicDone = testMode ? false : Boolean(triviaSubmission("music-selection"));
+    const triviaDone = testMode ? false : Boolean(triviaSubmission("couple-trivia-test"));
+    const whoTriviaDone = testMode ? false : Boolean(triviaSubmission("who-is-who-trivia-test"));
+    const coupleSubmission = testMode ? null : triviaSubmission("couple-trivia-test");
+    const whoSubmission = testMode ? null : triviaSubmission("who-is-who-trivia-test");
     const musicEarnedPoints = musicDone ? musicPoints : 0;
     const coupleEarnedPoints = triviaDone ? triviaPointsFor("couple-trivia-test", team.id, coupleSubmission?.score ?? coupleSubmission?.bestScore ?? 0) : 0;
     const whoEarnedPoints = whoTriviaDone ? triviaPointsFor("who-is-who-trivia-test", team.id, whoSubmission?.score ?? whoSubmission?.bestScore ?? 0) : 0;
     const coupleMaxPoints = triviaMaxPointsFor("couple-trivia-test", team.id);
     const whoMaxPoints = triviaMaxPointsFor("who-is-who-trivia-test", team.id);
-    const personalContribution = rsvpTotalPoints + musicEarnedPoints + coupleEarnedPoints + whoEarnedPoints + rouletteEarnedPoints;
-    const allPreEventChallengesDone = rsvpDone && musicDone && triviaDone && whoTriviaDone && rouletteDone && warDone;
-    const attending = rsvpDone && rsvp?.attendance === "si";
+    const personalContribution = testMode ? 0 : rsvpTotalPoints + musicEarnedPoints + coupleEarnedPoints + whoEarnedPoints + rouletteEarnedPoints;
+    const allPreEventChallengesDone = !testMode && rsvpDone && musicDone && triviaDone && whoTriviaDone && rouletteDone && warDone;
+    const attending = testMode || (rsvpDone && rsvp?.attendance === "si");
     const seqLaunched = manualGameFlag("game-roulette") && Boolean(preEventSequenceSchedule());
 
-    const pointsEyebrow = allPreEventChallengesDone ? "ETAPA COMPLETADA" : "SUMÁ PUNTOS";
-    const pointsTitle = allPreEventChallengesDone ? "¡No quedan más desafíos por ahora!" : "QUE EMPIECE LA COMPETENCIA";
-    const pointsText = allPreEventChallengesDone
-      ? "El próximo capítulo será el día del casamiento. Y sí: van a seguir compitiendo durante toda la noche."
-      : "Completá cada desafío y ayudá a tu equipo a escalar en el ranking.";
+    const pointsEyebrow = testMode ? "MODO PRUEBA" : allPreEventChallengesDone ? "ETAPA COMPLETADA" : "SUMÁ PUNTOS";
+    const pointsTitle = testMode ? "Probá todos los juegos" : allPreEventChallengesDone ? "¡No quedan más desafíos por ahora!" : "QUE EMPIECE LA COMPETENCIA";
+    const pointsText = testMode
+      ? "Este usuario no guarda respuestas, no aparece en el ranking y no suma ni resta puntos."
+      : allPreEventChallengesDone
+        ? "El próximo capítulo será el día del casamiento. Y sí: van a seguir compitiendo durante toda la noche."
+        : "Completá cada desafío y ayudá a tu equipo a escalar en el ranking.";
 
     const rouletteText = rouletteDone
-      ? "Tu resultado quedó registrado."
+      ? (testMode ? "Prueba completada. Podés entrar y reiniciarla." : "Tu resultado quedó registrado.")
       : rouletteOpen
         ? "La ruleta está abierta: girá y elegí cuánto riesgo asumir."
         : rouletteTiming.expired
           ? "La ventana de 48 horas ya terminó."
           : seqLaunched && rouletteTiming.state === "waiting" ? `Se abre automáticamente en ${formatTimedStageRemaining(rouletteTiming.remainingMs)}.` : "Nuevo juego · se habilitará próximamente.";
     const rouletteProgress = rouletteDone
-      ? `${rouletteEarnedPoints > 0 ? "+" : ""}${rouletteEarnedPoints} puntos obtenidos`
-      : rouletteOpen ? timedStageChip("roulette") : "48 horas para jugar";
+      ? `${rouletteEarnedPoints > 0 ? "+" : ""}${rouletteEarnedPoints} puntos${testMode ? " de prueba" : " obtenidos"}`
+      : testMode ? "Disponible para test" : rouletteOpen ? timedStageChip("roulette") : "48 horas para jugar";
 
     const war1Text = war1Done
       ? "Ronda revelada: podés revisar las jugadas y el ranking."
@@ -7403,29 +7483,40 @@
         ? "Nueva estrategia, nuevo ranking y todos vuelven a decidir."
         : war2Timing.expired ? "La ronda terminó y se está procesando." : seqLaunched ? `Se habilita después de la Ronda 1 · ${timedStageChip("war2")}` : "Se habilita automáticamente después de la Ronda 1.";
 
+    const cards = [
+      { order:10, icon:"✉️", title:"Confirmar asistencia", text:rsvpDone ? "Tu respuesta quedó guardada." : "Confirmá asistencia y tus datos.", done:rsvpDone, active:false, route:"asistencia", progressText:rsvpDone ? `${rsvpTotalPoints} puntos obtenidos` : `${attendancePoints} puntos por completar`, bonusText:microBonusPoints ? `Incluye +${microBonusPoints} por elegir micro` : "", actionLabel:rsvpDone ? "REVISAR" : "COMENZAR", locked:false },
+      { order:20, icon:"🎵", title:"Canciones favoritas", text:musicDone ? "Tus canciones quedaron guardadas." : "Elegí tus 2 canciones.", done:musicDone, active:false, route:"musica", progressText:musicDone ? `${musicEarnedPoints} puntos obtenidos` : `${musicPoints} puntos por completar`, actionLabel:musicDone ? "REVISAR" : "COMENZAR", locked:!rsvpDone && !testMode || !musicOpen },
+      { order:30, icon:"🎯", title:"¿Cuánto conocés a Vani y Fede?", text:triviaDone ? "Trivia completada." : "Respondé 5 preguntas.", done:triviaDone, active:false, route:"trivia-pareja", progressText:triviaDone ? `${coupleEarnedPoints} puntos obtenidos` : `Hasta ${coupleMaxPoints} puntos`, actionLabel:triviaDone ? "ABRIR RESULTADO" : "COMENZAR", locked:(!rsvpDone && !testMode) || !triviaOpen },
+      { order:40, icon:"⚖️", title:"¿Vani o Fede?", text:whoTriviaDone ? "Trivia completada." : "Elegí: ¿Vani o Fede?", done:whoTriviaDone, active:false, route:"trivia-quien", progressText:whoTriviaDone ? `${whoEarnedPoints} puntos obtenidos` : `Hasta ${whoMaxPoints} puntos`, actionLabel:whoTriviaDone ? "ABRIR RESULTADO" : "COMENZAR", locked:(!rsvpDone && !testMode) || !whoTriviaOpen },
+      { order:50, icon:"🎡", title:"Ruleta · Todo o Nada", text:rouletteText, done:rouletteDone, active:rouletteOpen && !rouletteDone, route:"ruleta", progressText:rouletteProgress, actionLabel:rouletteDone ? "ABRIR RULETA" : "ENTRAR AHORA", locked:!attending || (!rouletteOpen && !rouletteDone) },
+      { order:60, icon:"⚔️", title:"Guerra de Equipos · Ronda 1", text:war1Text, done:war1Done, active:war1Open && !war1Done, route:"guerra", warRound:1, progressText:war1Done ? "Ronda 1 finalizada" : testMode ? "Disponible para test" : war1Open ? timedStageChip("war1") : "48 horas para votar", actionLabel:war1Done ? "ABRIR RONDA" : war1Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 1", locked:!attending || (!war1Open && !war1Done) },
+      { order:70, icon:"🛡️", title:"Guerra de Equipos · Ronda 2", text:war2Text, done:war2Done, active:war2Open && !war2Done, route:"guerra", warRound:2, progressText:war2Done ? "Ronda 2 finalizada" : testMode ? "Disponible para test" : war2Open ? timedStageChip("war2") : "48 horas para votar", actionLabel:war2Done ? "ABRIR RONDA" : war2Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 2", locked:!attending || (!war2Open && !war2Done) }
+    ];
+
+    const pendingCards = cards.filter(card => !card.done).sort((a,b) => Number(b.active)-Number(a.active) || Number(a.locked)-Number(b.locked) || b.order-a.order);
+    const completedCards = cards.filter(card => card.done).sort((a,b) => b.order-a.order);
+
     return `
       ${pointsHubStyles()}
-      <section class="points-compact-head section-card ${allPreEventChallengesDone ? "is-completed" : ""}" style="--local-accent:${team.accent}">
+      <section class="points-compact-head section-card ${allPreEventChallengesDone ? "is-completed" : ""} ${testMode ? "is-test-mode" : ""}" style="--local-accent:${team.accent}">
         ${teamLogo(team,"points-compact-logo")}
         <div>
           <p class="eyebrow">${escapeHTML(pointsEyebrow)}</p><h3>${escapeHTML(pointsTitle)}</h3><p>${escapeHTML(pointsText)}</p>
           ${allPreEventChallengesDone ? `<span class="points-event-next-chip">🔥 Próxima etapa: 24/10 · competencia en vivo</span>` : ""}
         </div>
-        <span class="points-personal-counter"><small>Tu aporte</small><b>${personalContribution}</b><em>puntos al equipo</em></span>
+        <span class="points-personal-counter"><small>${testMode ? "Prueba" : "Tu aporte"}</small><b>${personalContribution}</b><em>${testMode ? "sin impacto real" : "puntos al equipo"}</em></span>
       </section>
 
       ${isSectionOpen("reglas") ? `<button type="button" class="points-rules-entry section-card" data-go="reglas"><span>${uiIcon("rules")}</span><div><strong>¿Cómo se juega?</strong><small>Reglas, nuevos desafíos y cómo sigue la competencia durante toda la noche del casamiento.</small></div><b aria-hidden="true">›</b></button>` : ""}
 
       <div class="points-new-game-list points-all-game-list">
-        ${pointsChallengeCard({ icon:"✉️", title:"Confirmar asistencia", text:rsvpDone ? "Tu respuesta quedó guardada." : "Confirmá asistencia y tus datos.", done:rsvpDone, route:"asistencia", progressText:rsvpDone ? `${rsvpTotalPoints} puntos obtenidos` : `${attendancePoints} puntos por completar`, bonusText:microBonusPoints ? `Incluye +${microBonusPoints} por elegir micro` : "", actionLabel:rsvpDone ? "REVISAR / EDITAR" : "COMENZAR", locked:false })}
-        ${pointsChallengeCard({ icon:"🎵", title:"Canciones favoritas", text:musicDone ? "Tus canciones quedaron guardadas." : "Elegí tus 2 canciones.", done:musicDone, route:"musica", progressText:musicDone ? `${musicEarnedPoints} puntos obtenidos` : `${musicPoints} puntos por completar`, actionLabel:musicDone ? "REVISAR / EDITAR" : "COMENZAR", locked:!rsvpDone || !musicOpen })}
-        ${pointsChallengeCard({ icon:"🎯", title:"¿Cuánto conocés a Vani y Fede?", text:triviaDone ? "Trivia completada." : "Respondé 5 preguntas.", done:triviaDone, route:"trivia-pareja", progressText:triviaDone ? `${coupleEarnedPoints} puntos obtenidos` : `Hasta ${coupleMaxPoints} puntos`, actionLabel:triviaDone ? "VER RESULTADO" : "COMENZAR", locked:!rsvpDone || !triviaOpen })}
-        ${pointsChallengeCard({ icon:"⚖️", title:"¿Vani o Fede?", text:whoTriviaDone ? "Trivia completada." : "Elegí: ¿Vani o Fede?", done:whoTriviaDone, route:"trivia-quien", progressText:whoTriviaDone ? `${whoEarnedPoints} puntos obtenidos` : `Hasta ${whoMaxPoints} puntos`, actionLabel:whoTriviaDone ? "VER RESULTADO" : "COMENZAR", locked:!rsvpDone || !whoTriviaOpen })}
-        ${pointsChallengeCard({ icon:"🎡", title:"Ruleta · Todo o Nada", text:rouletteText, done:rouletteDone, active:rouletteOpen && !rouletteDone, route:"ruleta", progressText:rouletteProgress, actionLabel:rouletteDone ? "VER RESULTADO" : "ABRIR RULETA", locked:!attending || (!rouletteOpen && !rouletteDone) })}
-        ${pointsChallengeCard({ icon:"⚔️", title:"Guerra de Equipos · Ronda 1", text:war1Text, done:war1Done, active:war1Open && !war1Done, route:"guerra", warRound:1, progressText:war1Done ? "Ronda 1 finalizada" : war1Open ? timedStageChip("war1") : "48 horas para votar", actionLabel:war1Done ? "VER RESULTADOS" : war1Vote ? "VER / CAMBIAR VOTO" : "ENTRAR A RONDA 1", locked:!attending || (!war1Open && !war1Done) })}
-        ${pointsChallengeCard({ icon:"🛡️", title:"Guerra de Equipos · Ronda 2", text:war2Text, done:war2Done, active:war2Open && !war2Done, route:"guerra", warRound:2, progressText:war2Done ? "Ronda 2 finalizada" : war2Open ? timedStageChip("war2") : "48 horas para votar", actionLabel:war2Done ? "VER RESULTADOS" : war2Vote ? "VER / CAMBIAR VOTO" : "ENTRAR A RONDA 2", locked:!attending || (!war2Open && !war2Done) })}
-        ${pointsChallengeCard({ icon:"🚌", title:"Durante el viaje", text:"Contenido secreto. Lo vamos a revelar más adelante.", done:false, route:"puntos", progressText:"Próximamente", actionLabel:"", locked:true })}
-      </div>`;
+        ${pendingCards.map(pointsChallengeCard).join("")}
+      </div>
+      ${completedCards.length ? `
+        <div class="points-completed-group">
+          <div class="points-completed-group-head"><span>✓</span><div><strong>Desafíos realizados</strong><small>Del más nuevo al más viejo</small></div></div>
+          <div class="points-new-game-list points-all-game-list is-completed-list">${completedCards.map(card => pointsChallengeCard({...card, compact:true})).join("")}</div>
+        </div>` : ""}`;
   }
 
   function pointsChallengeCard({
@@ -7439,15 +7530,16 @@
     progressText,
     bonusText = "",
     actionLabel,
-    locked = false
+    locked = false,
+    compact = false
   }) {
     return `
-      <section class="points-challenge-card section-card ${done ? "is-done" : ""} ${locked ? "is-locked" : ""} ${active ? "is-new is-active" : ""}">
+      <section class="points-challenge-card section-card ${done ? "is-done" : ""} ${compact ? "is-compact-done" : ""} ${locked ? "is-locked" : ""} ${active ? "is-new is-active" : ""}">
         <span class="points-challenge-icon" aria-hidden="true">${icon}</span>
         <div class="points-challenge-copy">
           <small>${done ? "✓ COMPLETADO" : active ? "● ACTIVO AHORA" : locked ? "PRÓXIMAMENTE" : "DESAFÍO DISPONIBLE"}</small>
           <strong>${escapeHTML(title)}</strong>
-          <p>${escapeHTML(text)}</p>
+          ${compact ? "" : `<p>${escapeHTML(text)}</p>`}
           <em>${escapeHTML(progressText || "")}</em>
           ${bonusText ? `<i class="points-challenge-bonus">${escapeHTML(bonusText)}</i>` : ""}
         </div>
@@ -11663,6 +11755,16 @@
       target?.scrollIntoView({ behavior: "smooth", block: "start" });
     }));
 
+    $$('[data-reset-admin-test]').forEach(button => button.addEventListener("click", () => {
+      if (!isAdminTestMode()) return;
+      if (button.dataset.resetAdminTest === "roulette") {
+        adminTestSession.rouletteResult = null;
+        clearRoulettePending(currentGuest.id);
+        renderCurrentRoute();
+        toast("Ruleta de prueba reiniciada.");
+      }
+    }));
+
 
     if (route === "ruleta") {
       $("#newRouletteSpin")?.addEventListener("click", event => {
@@ -11741,6 +11843,11 @@
 
           showRouletteFinalAnimation(finalPoints, decision);
           clearRoulettePending(currentGuest.id);
+          if (isAdminTestMode()) {
+            adminTestSession.rouletteResult = { baseResult, decision, finalPoints, status: "completed" };
+            window.setTimeout(() => renderCurrentRoute(), 1850);
+            return;
+          }
           void queueOptimisticWrite(
             "saveGameSubmission",
             {
@@ -11773,6 +11880,11 @@
       const voteGameId = warVoteGameId(round);
 
       const saveWarVote = async (action, targetTeamId = "") => {
+        if (isAdminTestMode()) {
+          adminTestSession.warVotes[round] = { action, targetTeamId };
+          renderCurrentRoute();
+          return true;
+        }
         if (!warTeamVotingOpen(currentGuest.team, round) || warRoundRevealed(round)) {
           toast("La votación de tu equipo está cerrada.");
           return false;
