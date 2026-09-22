@@ -1,0 +1,30 @@
+VANI & FEDE · V2 · v32600
+Base real: v32524. No se reescribió la app desde cero.
+
+FRONTEND
+- Mantener en el repositorio los assets existentes de producción: config.js, assets/, icons/ y preview-whatsapp.jpg.
+- Reemplazar/añadir los archivos raíz de este paquete.
+- Nuevos archivos: ui-v2.css y photos.js.
+- Navegación V2: Inicio · Juegos · Fotos · Ranking · Más.
+- Nuevo deep-link para QR: ?seccion=fotos
+
+JUEGOS NUEVOS
+- Al tocar “Lanzar nuevos juegos” empieza el reloj de la Ruleta.
+- Ruleta: 24 horas, sin Guerra simultánea.
+- Al vencer Ruleta: abre Guerra R1 por 24 horas.
+- Al vencer R1: se procesa automáticamente, se congela el nuevo ranking/botines y abre R2 por 24 horas.
+- Al vencer R2: se procesa automáticamente.
+- Ningún capitán/admin necesita cerrar rondas manualmente. Si hay empate al cierre, el capitán puede dejar definido el desempate desde su pantalla sin cerrar la ronda.
+- Ranking y botines de cada Guerra quedan congelados al inicio de esa ronda.
+- La nómina y balance de participantes se congelan al lanzar la secuencia.
+
+FOTOS
+- Frontend integrado en la misma app y acceso público directo por QR.
+- Las cargas tienen photoId idempotente: si el navegador no puede leer la respuesta de Apps Script, verifica por JSONP antes de reintentar para evitar duplicados.
+- Las fotos se procesan de a una y se previsualizan con Object URL para evitar cargar todos los originales en memoria.
+- El frontend NO da acceso a Drive a los invitados.
+- Para habilitar la subida real a Drive, integrar backend/PhotosBackend.gs en el Apps Script existente y seguir backend/INTEGRACION_FOTOS.txt.
+- El proyecto frontend v32524 recibido no contenía el código fuente del Apps Script actual, por eso el módulo se entrega aislado para incorporarlo sin reemplazar el router/backend existente.
+
+IMPORTANTE
+Este ZIP conserva la misma estructura del paquete v32524: no incluye config.js, logos, íconos ni otros assets externos que ya viven en el repositorio de producción.

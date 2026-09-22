@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32524";
+  const CURRENT_APP_VERSION = "32600";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32524"
+        appVersion: CONFIG.APP_VERSION || "32600"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32524",
+      appVersion: "32600",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2046,9 +2046,40 @@
     });
   }
 
+  function requestedInitialSection() {
+    try {
+      const query = new URLSearchParams(location.search).get("seccion");
+      if (query) return String(query).toLowerCase();
+    } catch (_) {}
+    const hash = String(location.hash || "").replace(/^#/, "").toLowerCase();
+    return hash || "";
+  }
+
+  function showPublicPhotosEntry() {
+    const host = document.getElementById("photoPublicScreen");
+    if (!host || !window.WeddingPhotoUploader) return false;
+    document.getElementById("loginScreen")?.classList.add("hidden");
+    document.getElementById("mainScreen")?.classList.add("hidden");
+    window.WeddingPhotoUploader.mountPublic(host, {
+      onEnterApp: () => {
+        host.classList.add("hidden");
+        host.innerHTML = "";
+        document.getElementById("loginScreen")?.classList.remove("hidden");
+        const url = new URL(location.href);
+        url.searchParams.delete("seccion");
+        url.hash = "";
+        history.replaceState({ screen:"login" }, "", url.pathname + url.search);
+        document.getElementById("guestName")?.focus();
+      }
+    });
+    return true;
+  }
+
   function boot() {
+    const initialSection = requestedInitialSection();
+    const photoDeepLink = initialSection === "fotos";
     setRemoteStatus(isConfigured() ? "connecting" : "idle");
-    history.replaceState({ screen: "login" }, "", basePageUrl());
+    if (!photoDeepLink) history.replaceState({ screen: "login" }, "", basePageUrl());
     applyPendingWritesToState();
     updateLoginPrivacyUi();
     updateAdminTestLoginUi();
@@ -2087,10 +2118,15 @@
     startUnlockAutoSync();
     startTimedCompetitionWatcher();
 
+    let restored = false;
     if (state.currentGuestId) {
       const guest = getGuestById(state.currentGuestId);
-      if (guest && isCompetitionGuest(guest)) enterApp(guest, false, "push");
+      if (guest && isCompetitionGuest(guest)) {
+        restored = true;
+        enterApp(guest, false, photoDeepLink ? "replace" : "push", photoDeepLink ? "fotos" : "inicio");
+      }
     }
+    if (!restored && photoDeepLink) showPublicPhotosEntry();
     syncFromSheets(false);
   }
 
@@ -2350,6 +2386,11 @@
       setMenuOpen(!isOpen);
     });
 
+    $$('[data-open-menu]').forEach(button => button.addEventListener("click", () => {
+      setNotificationPanelOpen(false);
+      setMenuOpen(true);
+    }));
+
     $("#menuCloseButton")?.addEventListener("click", closeMenu);
     $("#menuBackdrop")?.addEventListener("click", closeMenu);
 
@@ -2487,13 +2528,14 @@
   function enterApp(
     guest,
     showWelcome,
-    historyMode = "push"
+    historyMode = "push",
+    initialRoute = "inicio"
   ) {
     const openApp = () => {
       applyGuestShell(guest);
       state.currentGuestId = guest.id;
       saveState();
-      navigate("inicio", { historyMode });
+      navigate(initialRoute || "inicio", { historyMode });
 
       if (showWelcome) {
         toast(
@@ -2566,8 +2608,8 @@
     const activeBottomRoute =
       ["trivia", "ruleta", "guerra"].includes(route)
         ? "puntos"
-        : ["equipo", "invitados"].includes(route)
-          ? "ranking"
+        : ["equipo", "invitados", "cronograma", "asistencia", "traslado", "ubicacion", "social", "regalos", "reglas", "admin"].includes(route)
+          ? ""
           : route;
 
     $$(".nav-tabs button[data-route]").forEach(
@@ -2747,6 +2789,8 @@
 
     const routes = {
       inicio: renderHome,
+      cronograma: renderTimelineV2,
+      fotos: renderPhotosV2,
       asistencia: renderRSVP,
       traslado: renderTransport,
       ubicacion: renderLocation,
@@ -2999,6 +3043,7 @@
       dress: '<path d="M10 3h4l1 4-2 2 4 11H7l4-11-2-2 1-4Z"/><path d="M9 7h6"/>',
       food: '<path d="M7 3v7M4.5 3v4.5A2.5 2.5 0 0 0 7 10M9.5 3v4.5A2.5 2.5 0 0 1 7 10v11"/><path d="M15 3v18"/><path d="M15 3c3.2 0 5 2.1 5 5.2 0 3.2-1.8 5.3-5 5.3"/>',
       calendarPlus: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18M12 13v5M9.5 15.5h5"/>',
+      camera: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="m8 6 1.5-2h5L16 6"/><circle cx="12" cy="13" r="3.2"/>',
       checkCircle: '<circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.6L16.5 9"/>',
       ranking: '<path d="M5 20V10h4v10"/><path d="M10 20V4h4v16"/><path d="M15 20v-7h4v7"/>',
       play: '<path d="M8 5v14l11-7-11-7Z"/>',
@@ -3103,6 +3148,14 @@
     1: "war-tiebreak-r1",
     2: "war-tiebreak-r2"
   };
+  const WAR_SNAPSHOT_GAME_IDS = {
+    1: "war-ranking-snapshot-r1",
+    2: "war-ranking-snapshot-r2"
+  };
+  const WAR_SNAPSHOT_GUEST_IDS = {
+    1: "system-war-snapshot-r1",
+    2: "system-war-snapshot-r2"
+  };
   const WAR_BOUNTIES = [700, 600, 500, 400, 300, 200];
   const WAR_SUM_POINTS = 300;
   const WAR_BLOCKED_PENALTY = 0;
@@ -3153,18 +3206,59 @@
     return { raw, data, start };
   }
 
+  function rouletteEligibilityGuestIds() {
+    const saved = preEventSequenceRecord()?.data?.eligibleGuestIdsByTeam;
+    if (saved && typeof saved === "object") {
+      const complete = Object.keys(DATA.teams).every(teamId => Array.isArray(saved[teamId]));
+      if (complete) return saved;
+    }
+    return Object.keys(DATA.teams).reduce((acc, teamId) => {
+      acc[teamId] = confirmedNewGameMembers(teamId).map(guest => guest.id);
+      return acc;
+    }, {});
+  }
+
+  function rouletteAllParticipantsCompletedAt() {
+    const byTeam = rouletteEligibilityGuestIds();
+    let latest = 0;
+    for (const teamId of Object.keys(DATA.teams)) {
+      const ids = byTeam[teamId] || [];
+      if (!ids.length) return 0;
+      for (const guestId of ids) {
+        const raw = gameSubmissionFor(guestId, ROULETTE_GAME_ID);
+        const parsed = rouletteSubmissionFor(guestId);
+        if (!raw || parsed?.status !== "completed") return 0;
+        const stamp = new Date(raw.submittedAt || raw.updatedAt || raw.timestamp || 0).getTime();
+        latest = Math.max(latest, Number.isFinite(stamp) ? stamp : 0);
+      }
+    }
+    return latest;
+  }
+
+  function rouletteProgressSnapshot() {
+    const byTeam = rouletteEligibilityGuestIds();
+    return Object.keys(DATA.teams).reduce((acc, teamId) => {
+      const ids = byTeam[teamId] || [];
+      const played = ids.filter(id => rouletteSubmissionFor(id)?.status === "completed").length;
+      acc[teamId] = { played, eligible: ids.length, complete: ids.length > 0 && played >= ids.length };
+      return acc;
+    }, {});
+  }
+
   function preEventSequenceSchedule() {
     const record = preEventSequenceRecord();
     if (!record) return null;
     const rouletteStart = record.start;
+    // V2: tres etapas consecutivas de 24 horas. La Guerra nunca corre al mismo tiempo que la Ruleta.
+    // Esto evita que el ranking/botín de Guerra cambie mientras todavía entran resultados de la Ruleta
+    // y, al mismo tiempo, impide que una persona que no juegue bloquee a todos indefinidamente.
     const rouletteEnd = rouletteStart + PRE_EVENT_DAY_MS;
-    // Día 1: Ruleta y Guerra R1 corren en paralelo durante 24 horas.
-    const war1Start = rouletteStart;
-    const war1End = rouletteEnd;
-    // Día 2: Ronda 2 se abre al vencer el primer día, una vez procesada R1.
-    const war2Start = rouletteEnd;
+    const rouletteDeadline = rouletteEnd;
+    const war1Start = rouletteEnd;
+    const war1End = war1Start + PRE_EVENT_DAY_MS;
+    const war2Start = war1End;
     const war2End = war2Start + PRE_EVENT_DAY_MS;
-    return { rouletteStart, rouletteEnd, war1Start, war1End, war2Start, war2End };
+    return { rouletteStart, rouletteEnd, rouletteDeadline, war1Start, war1End, war2Start, war2End };
   }
 
   function timedStageStatus(stage, now = Date.now()) {
@@ -3217,19 +3311,24 @@
   async function startTimedPreEventSequence() {
     if (!state.adminUnlocked || !currentGuest) return false;
     const nowIso = new Date().toISOString();
+    const eligibleGuestIdsByTeam = Object.keys(DATA.teams).reduce((acc, teamId) => {
+      acc[teamId] = confirmedNewGameMembers(teamId).map(guest => guest.id);
+      return acc;
+    }, {});
     const answer = {
       activatedAt: nowIso,
-      dayOneHours: 24,
-      dayTwoHours: 24,
-      mode: "roulette+war1-then-war2",
-      eligibleCounts: competitionEligibilitySnapshot()
+      rouletteHours: 24,
+      warRoundHours: 24,
+      mode: "roulette-then-war1-then-war2",
+      eligibleCounts: competitionEligibilitySnapshot(),
+      eligibleGuestIdsByTeam
     };
     const payload = {
       gameId: PRE_EVENT_SEQUENCE_GAME_ID,
       guestId: PRE_EVENT_SEQUENCE_GUEST_ID,
       teamId: "system",
       answer: JSON.stringify(answer),
-      comment: "Secuencia automática: Día 1 Ruleta + Guerra R1 (24h) → Día 2 Guerra R2 (24h)",
+      comment: "Secuencia: Ruleta 24h → Guerra R1 24h → Guerra R2 24h",
       earnedPoints: 0,
       status: "active",
       activatedAt: nowIso,
@@ -3249,6 +3348,8 @@
 
 
   const SECTION_DEFINITIONS = [
+    { route: "cronograma", key: "section-cronograma", title: "Cronograma", text: "Horarios y momentos de la fiesta.", defaultOpen: true },
+    { route: "fotos", key: "section-fotos", title: "Fotos", text: "Álbum colaborativo del casamiento.", defaultOpen: true },
     { route: "asistencia", key: "section-asistencia", title: "Asistencia", text: "Confirmación, traslado y restricciones.", defaultOpen: true },
     { route: "traslado", key: "transport-info", title: "Traslados", text: "Información de micros y viaje particular.", defaultOpen: true },
     { route: "ubicacion", key: "location-section", title: "Ubicación", text: "Locación, mapa e indicaciones para llegar.", defaultOpen: false },
@@ -4200,6 +4301,18 @@
     return eligibleCompetitionMembers(teamId);
   }
 
+  // Desde que se lanza la secuencia, la nómina de participantes queda congelada.
+  // Evita que un cambio tardío de RSVP altere quién puede votar o el denominador de participación.
+  function timedCompetitionMembers(teamId) {
+    const frozen = preEventSequenceRecord()?.data?.eligibleGuestIdsByTeam;
+    if (frozen && Array.isArray(frozen[teamId])) {
+      return frozen[teamId]
+        .map(id => getGuestById(id))
+        .filter(Boolean);
+    }
+    return confirmedNewGameMembers(teamId);
+  }
+
   function currentGuestCanPlayNewGames() {
     if (isAdminTestMode()) return true;
     return Boolean(
@@ -4321,8 +4434,8 @@
   }
 
   function warTeamVotingClosed(teamId, round) {
-    if (isAdminTestMode()) return false;
-    return warTeamControl(teamId, round)?.status === "closed";
+    // V2: la ronda la controla exclusivamente el reloj. Ningún capitán/admin la cierra antes.
+    return false;
   }
 
   function warTeamVotingOpen(teamId, round) {
@@ -4422,7 +4535,7 @@
   }
 
   function warVotesForTeam(teamId, round) {
-    return confirmedNewGameMembers(teamId)
+    return timedCompetitionMembers(teamId)
       .map(guest => ({
         guest,
         vote: warVoteForGuest(guest.id, round),
@@ -4431,23 +4544,60 @@
       .filter(item => item.vote);
   }
 
+  function warSnapshotSubmission(round) {
+    return gameSubmissionFor(WAR_SNAPSHOT_GUEST_IDS[Number(round)], WAR_SNAPSHOT_GAME_IDS[Number(round)]);
+  }
+
+  function parsedWarStoredSnapshot(round) {
+    const raw = warSnapshotSubmission(round);
+    const data = safeJsonObject(raw?.answer);
+    const ranking = Array.isArray(data.ranking) ? data.ranking : [];
+    const valid = ranking
+      .map(item => ({ id:String(item.id || ""), rank:Number(item.rank || 0), bounty:Number(item.bounty || 0) }))
+      .filter(item => DATA.teams[item.id] && item.rank > 0 && item.bounty > 0)
+      .sort((a,b) => a.rank - b.rank);
+    return valid.length === Object.keys(DATA.teams).length ? valid : null;
+  }
+
+  async function ensureWarRoundSnapshot(round) {
+    round = Number(round);
+    if (![1,2].includes(round) || parsedWarStoredSnapshot(round) || warRoundRevealed(round)) return true;
+    const stage = round === 2 ? "war2" : "war1";
+    const timing = timedStageStatus(stage);
+    if (!timing.active) return false;
+    await syncFromSheets(false);
+    if (parsedWarStoredSnapshot(round)) return true;
+    const ranking = calculateRanking().map((row,index) => ({ id:row.id, rank:index+1, bounty:WAR_BOUNTIES[index] || 200 }));
+    const nowIso = new Date().toISOString();
+    const payload = {
+      gameId: WAR_SNAPSHOT_GAME_IDS[round],
+      guestId: WAR_SNAPSHOT_GUEST_IDS[round],
+      teamId: "system",
+      answer: JSON.stringify({ round, ranking, frozenAt:nowIso }),
+      comment: `Ranking congelado para Guerra R${round}`,
+      earnedPoints: 0,
+      status: "frozen",
+      warRound: round,
+      updatedAt: nowIso,
+      requestId: newRequestId(`war-snapshot-r${round}`)
+    };
+    const result = await writeToSheets("saveGameSubmission", payload, { silent:true, allowPreview:true });
+    if (!result) return false;
+    state.gameSubmissions[`${payload.guestId}::${payload.gameId}`] = { ...payload, ...(result.record || {}), pendingSync:false };
+    saveState();
+    return true;
+  }
+
   function warRoundSnapshot(round) {
     if (warRoundRevealed(round)) {
       return warRoundResultRecords(round)
-        .map(item => ({
-          id: item.parsed.teamId,
-          rank: item.parsed.roundRank,
-          bounty: item.parsed.bounty
-        }))
+        .map(item => ({ id:item.parsed.teamId, rank:item.parsed.roundRank, bounty:item.parsed.bounty }))
         .filter(item => item.rank)
-        .sort((a, b) => a.rank - b.rank);
+        .sort((a,b) => a.rank - b.rank);
     }
-
-    return calculateRanking().map((row, index) => ({
-      id: row.id,
-      rank: index + 1,
-      bounty: WAR_BOUNTIES[index] || 200
-    }));
+    const stored = parsedWarStoredSnapshot(round);
+    if (stored) return stored;
+    return calculateRanking().map((row,index) => ({ id:row.id, rank:index+1, bounty:WAR_BOUNTIES[index] || 200 }));
   }
 
   function warBountyForTeam(teamId, round) {
@@ -4531,6 +4681,23 @@
       .some(record => ids.has(record?.gameId));
   }
 
+  function renderTimelineV2() {
+    const items = Array.isArray(DATA.info?.timeline) ? DATA.info.timeline : [];
+    return `
+      <section class="timeline-v2-hero">
+        <span aria-hidden="true">🕒</span>
+        <div><small>24 · 10 · 2026</small><h3>Cronograma</h3><p>Los momentos principales de la noche, todos en un solo lugar.</p></div>
+      </section>
+      <section class="timeline-v2-list" aria-label="Cronograma del casamiento">
+        ${items.map(item => `<article class="timeline-v2-item"><span class="timeline-v2-time">${escapeHTML(item.time || "")}</span><div class="timeline-v2-copy"><strong>${escapeHTML(item.title || "")}</strong><p>${escapeHTML(item.detail || "")}</p></div></article>`).join("")}
+      </section>`;
+  }
+
+  function renderPhotosV2() {
+    if (!window.WeddingPhotoUploader) return `<section class="section-card"><h3>Fotos del casamiento</h3><p>El módulo de fotos no pudo cargarse. Actualizá la app e intentá de nuevo.</p></section>`;
+    return window.WeddingPhotoUploader.renderView({ guest: currentGuest, publicMode:false });
+  }
+
   function renderHome() {
     const team = getTeam(currentGuest.team);
     const rsvp = state.rsvps[currentGuest.id];
@@ -4576,6 +4743,9 @@
       : challengesDone;
 
     const rank = calculateRanking();
+    const ownRankIndex = Math.max(0, rank.findIndex(row => row.id === team.id));
+    const ownRank = rank[ownRankIndex] || { id: team.id, points: 0 };
+    const ownRankLabel = ownRankIndex >= 0 ? `${ownRankIndex + 1}°` : "—";
     const deadline =
       "24 de septiembre de 2026";
 
@@ -4654,27 +4824,38 @@
 
     return `
       ${homeStyles()}
-      <section
-        id="homeCountdown"
-        class="home-countdown-v2"
-        aria-label="Cuenta regresiva para el casamiento">
-        <div class="home-countdown-copy">
-          <span id="countdownLabel">Faltan</span>
+      <section id="homeCountdown" class="home-v2-identity" aria-label="Inicio Vani y Fede">
+        <div class="home-v2-brand">
+          <div>
+            <h1>VANI &amp; FEDE</h1>
+            <p>24 · 10 · 2026</p>
+          </div>
+          <div class="home-v2-countdown" aria-label="Cuenta regresiva">
+            <span><b id="countdownDays">—</b><small>días</small></span>
+            <span><b id="countdownHours">—</b><small>horas</small></span>
+            <span><b id="countdownMinutes">—</b><small>min</small></span>
+            <i id="countdownLabel" class="sr-only">Faltan</i>
+          </div>
         </div>
-        <div class="home-countdown-values-v2">
-          <span>
-            <strong id="countdownDays">—</strong>
-            <small>días</small>
-          </span>
-          <span>
-            <strong id="countdownHours">—</strong>
-            <small>horas</small>
-          </span>
-          <span>
-            <strong id="countdownMinutes">—</strong>
-            <small>min</small>
-          </span>
+        <div class="home-v2-user">
+          ${teamLogo(team,"home-v2-team-logo")}
+          <div>
+            <small>Equipo ${escapeHTML(team.name)}</small>
+            <h2>Hola, ${escapeHTML(currentGuest.firstName || guestFullName(currentGuest))} 👋</h2>
+            <p>${escapeHTML(team.group || team.motto || "")}</p>
+          </div>
+          <div class="home-v2-rank">
+            <span><small>Posición</small><b>${ownRankLabel}</b></span>
+            <span><small>Puntos</small><b>${Number(ownRank.points || 0)}</b></span>
+          </div>
         </div>
+      </section>
+
+      <section class="home-v2-actions" aria-label="Accesos principales">
+        <button type="button" class="home-v2-action" data-go="puntos"><span>🎮</span><strong>Juegos</strong><small>Desafíos y puntos</small></button>
+        <button type="button" class="home-v2-action is-photo" data-go="fotos"><span>📸</span><strong>Fotos</strong><small>Subí al álbum</small></button>
+        <button type="button" class="home-v2-action" data-go="cronograma"><span>🕒</span><strong>Cronograma</strong><small>Todo el timing</small></button>
+        <button type="button" class="home-v2-action" data-go="equipo"><span>🛡️</span><strong>Equipos</strong><small>Tu grupo</small></button>
       </section>
 
       <button
@@ -7162,7 +7343,7 @@
     const rouletteStage = timedStageStatus("roulette");
     const existingResult = rouletteSubmissionFor(currentGuest?.id);
     if (!testMode && !rouletteStage.active && !existingResult) {
-      return newGameLockedCard("Ruleta · Todo o Nada", rouletteStage.expired ? "El plazo de 24 horas terminó. La competencia continúa con la Ronda 2 de Guerra de Equipos." : "Vani y Fede todavía no habilitaron este juego.");
+      return newGameLockedCard("Ruleta · Todo o Nada", rouletteStage.expired ? "El plazo de la Ruleta terminó. La competencia continúa con Guerra de Equipos · Ronda 1." : "Vani y Fede todavía no habilitaron este juego.");
     }
     if (!currentGuestCanPlayNewGames()) {
       return newGameLockedCard("Ruleta · Todo o Nada", "Este juego es para quienes asisten o todavía no confirmaron. Quienes respondieron NO quedan fuera.");
@@ -7173,7 +7354,7 @@
     const pending = saved ? {} : getRoulettePending(currentGuest.id);
     const pendingBase = Number.isFinite(Number(pending.baseResult)) ? Number(pending.baseResult) : null;
     const pendingIndex = pendingBase !== null ? rouletteResultIndex(team.id, pendingBase, pending.wheelIndex) : -1;
-    const participants = confirmedNewGameMembers(team.id);
+    const participants = timedCompetitionMembers(team.id);
     const played = participants.filter(guest => rouletteSubmissionFor(guest.id)?.status === "completed").length;
     const decision = pendingBase !== null ? rouletteDecisionCopy(pendingBase) : null;
 
@@ -7194,7 +7375,7 @@
             </div>
             <div class="roulette-team-next-note">
               <span>⏳</span>
-              <div><strong>${testMode ? "Prueba completada" : "Tu parte ya está hecha"}</strong><p>${testMode ? "Este resultado es sólo de prueba: no se guarda ni suma puntos." : "La Ruleta y la Ronda 1 quedan abiertas durante las primeras 24 horas. Al terminar ese día, se procesa la Ronda 1 y se habilita automáticamente la Ronda 2."}</p></div>
+              <div><strong>${testMode ? "Prueba completada" : "Tu parte ya está hecha"}</strong><p>${testMode ? "Este resultado es sólo de prueba: no se guarda ni suma puntos." : "Tu parte ya está hecha. Guerra de Equipos · Ronda 1 se habilita cuando termina el reloj de la Ruleta. Primero todos prueban su suerte; después empieza la estrategia por equipos."}</p></div>
             </div>
             ${testMode ? `<button type="button" class="admin-test-reset-game" data-reset-admin-test="roulette">↻ Probar la Ruleta de nuevo</button>` : ""}
           ` : pendingBase !== null ? `
@@ -7331,7 +7512,7 @@
   function warRoundStatusText(round, teamId = currentGuest?.team) {
     if (warRoundRevealed(round)) return "Ronda revelada";
     if (!warRoundEnabled(round)) return "Bloqueada";
-    if (teamId && warTeamVotingClosed(teamId, round)) return "Tu equipo cerró la votación";
+    if (teamId && warTeamVotingClosed(teamId, round)) return "Votación cerrada";
     return "Votación abierta";
   }
 
@@ -7386,28 +7567,36 @@
 
   function renderWarCaptainControl(round, team) {
     if (!isGuestCaptain(currentGuest) || currentGuest.team !== team.id || warRoundRevealed(round)) return "";
-    const closed = warTeamVotingClosed(team.id, round);
-    const votes = warVotesForTeam(team.id, round).length;
-    const eligible = confirmedNewGameMembers(team.id).length;
     const tieInfo = warTieInfoForTeam(team.id, round);
-    const savedTie = warTiebreakForTeam(team.id, round);
-    const teamsClosed = warClosedTeamsCount(round);
-    const actionTie = closed && tieInfo.tiedActions.length > 1;
-    const chosenAction = tieInfo.tiedActions.length === 1 ? tieInfo.tiedActions[0] : (savedTie?.action && tieInfo.tiedActions.includes(savedTie.action) ? savedTie.action : "");
-    const targetTie = closed && chosenAction === "attack" && tieInfo.tiedTargets.length > 1;
-    const stage = round === 2 ? "war2" : "war1";
+    const savedTie = warTiebreakForTeam(team.id, round) || {};
+    const actionTie = tieInfo.tiedActions.length > 1;
+    const effectiveAction = actionTie
+      ? (savedTie.action && tieInfo.tiedActions.includes(savedTie.action) ? savedTie.action : "")
+      : tieInfo.tiedActions[0] || "";
+    const targetTie = effectiveAction === "attack" && tieInfo.tiedTargets.length > 1;
 
     return `
-      <section class="section-card war-captain-control">
+      <section class="section-card war-captain-control war-captain-v2">
         <div class="war-captain-control-head">
-          <div><p class="eyebrow">CONTROL DEL CAPITÁN</p><h4>${escapeHTML(team.name)} · Ronda ${round}</h4><p>Podés cerrar la votación de tu equipo cuando ya hayan debatido, reabrirla si hace falta y desempatar. La ronda global vence sola.</p></div>
-          <span>${votes}/${eligible} votos</span>
+          <div><p class="eyebrow">MISIÓN DEL CAPITÁN</p><h4>Coordinen la estrategia de ${escapeHTML(team.name)}</h4><p>Usá el grupo de WhatsApp para discutir si conviene SUMAR, ATACAR o DEFENDER. Cada integrante vota individualmente y el reloj cierra la ronda automáticamente.</p></div>
+          <span>Ronda ${round}</span>
         </div>
-        <button type="button" class="war-captain-toggle ${closed ? "is-open-action" : "is-close-action"}" data-war-team-toggle="${closed ? "open" : "closed"}">${closed ? "🔓 Reabrir votación de mi equipo" : "🔒 Cerrar votación de mi equipo"}</button>
-        ${closed && votes < eligible ? `<p class="war-captain-warning">⚠️ Cerraste con ${eligible - votes} integrante${eligible - votes === 1 ? "" : "s"} sin votar.</p>` : ""}
-        ${actionTie ? `<div class="war-captain-tiebreak"><strong>⚖️ Hay empate de jugada. Desempatá:</strong><div>${tieInfo.tiedActions.map(action => `<button type="button" data-war-tiebreak-action="${action}" class="${savedTie?.action === action ? "is-selected" : ""}">${warActionLabel(action)}</button>`).join("")}</div></div>` : ""}
-        ${targetTie ? `<div class="war-captain-tiebreak"><strong>🎯 Hay empate de objetivo. Elegí:</strong><div>${tieInfo.tiedTargets.map(targetId => `<button type="button" data-war-tiebreak-target="${targetId}" class="${savedTie?.targetTeamId === targetId ? "is-selected" : ""}">${escapeHTML(getTeam(targetId).name)}</button>`).join("")}</div></div>` : ""}
-        <div class="war-captain-round-state"><span>${teamsClosed}/6 equipos cerraron</span><small>${escapeHTML(timedStageChip(stage))} · el reveal y el ranking se publican automáticamente cuando termina el tiempo.</small></div>
+        ${actionTie ? `
+          <div class="war-captain-tie-v2">
+            <strong>⚖️ Hay empate en la decisión del equipo</strong>
+            <p>No necesitás cerrar la ronda. Si el empate sigue cuando llegue a cero, tu elección define la jugada oficial.</p>
+            <div class="war-captain-tie-actions">
+              ${tieInfo.tiedActions.map(action => `<button type="button" data-war-tiebreak-action="${action}" class="${savedTie.action === action ? "is-selected" : ""}">${escapeHTML(warActionLabel(action))}</button>`).join("")}
+            </div>
+          </div>` : ""}
+        ${targetTie ? `
+          <div class="war-captain-tie-v2">
+            <strong>🎯 También hay empate de objetivo</strong>
+            <p>Elegí a cuál de los rivales empatados atacaría ${escapeHTML(team.name)} si el empate se mantiene.</p>
+            <div class="war-captain-tie-actions">
+              ${tieInfo.tiedTargets.map(targetId => `<button type="button" data-war-tiebreak-target="${targetId}" class="${savedTie.targetTeamId === targetId ? "is-selected" : ""}">${escapeHTML(getTeam(targetId).name)}</button>`).join("")}
+            </div>
+          </div>` : ""}
       </section>`;
   }
 
@@ -7434,14 +7623,14 @@
       return newGameLockedCard(`Guerra de Equipos · Ronda ${round}`, message);
     }
 
-    const members = confirmedNewGameMembers(team.id);
+    const members = timedCompetitionMembers(team.id);
     const vote = warVoteForGuest(currentGuest.id, round);
     const rawVote = testMode ? null : gameSubmissionFor(currentGuest.id, warVoteGameId(round));
     const snapshot = warRoundSnapshot(round);
     const ownSnapshot = snapshot.find(item => item.id === team.id);
     const teamVotingClosed = warTeamVotingClosed(team.id, round);
     const voteRows = Object.values(DATA.teams).map(otherTeam => {
-      const eligible = confirmedNewGameMembers(otherTeam.id);
+      const eligible = timedCompetitionMembers(otherTeam.id);
       const received = warVotesForTeam(otherTeam.id, round).length;
       return { team: otherTeam, eligible: eligible.length, received, closed: warTeamVotingClosed(otherTeam.id, round) };
     });
@@ -7577,7 +7766,7 @@
       ? "Ronda revelada: podés revisar las jugadas y el ranking."
       : war1Open
         ? "Debatan en WhatsApp y voten: sumar, atacar o defender."
-        : war1Timing.expired ? "La ronda terminó y se está procesando." : seqLaunched ? `Se habilita junto con la Ruleta · ${timedStageChip("war1")}` : "Se habilita automáticamente junto con la Ruleta.";
+        : war1Timing.expired ? "La ronda terminó y se está procesando." : seqLaunched ? `Primero termina la Ruleta · ${timedStageChip("war1")}` : "Se habilita después de la Ruleta.";
     const war2Text = war2Done
       ? "Ronda final revelada."
       : war2Open
@@ -10527,7 +10716,7 @@
 
   function warAdminProgress(round) {
     const teams = Object.values(DATA.teams).map(team => {
-      const eligible = confirmedNewGameMembers(team.id).length;
+      const eligible = timedCompetitionMembers(team.id).length;
       const votes = warVotesForTeam(team.id, round).length;
       return { team, eligible, votes };
     });
@@ -10545,8 +10734,9 @@
     const war1 = timedStageStatus("war1");
     const war2 = timedStageStatus("war2");
     const launched = manualGameFlag("game-roulette") && Boolean(preEventSequenceSchedule());
-    const rouletteEligible = Object.keys(DATA.teams).reduce((sum, id) => sum + confirmedNewGameMembers(id).length, 0);
-    const roulettePlayed = Object.keys(DATA.teams).reduce((sum, id) => sum + confirmedNewGameMembers(id).filter(g => rouletteSubmissionFor(g.id)?.status === "completed").length, 0);
+    const rouletteIdsByTeam = rouletteEligibilityGuestIds();
+    const rouletteEligible = Object.keys(DATA.teams).reduce((sum, id) => sum + (rouletteIdsByTeam[id] || []).length, 0);
+    const roulettePlayed = Object.keys(DATA.teams).reduce((sum, id) => sum + (rouletteIdsByTeam[id] || []).filter(guestId => rouletteSubmissionFor(guestId)?.status === "completed").length, 0);
     const rows = [
       { label:"Ruleta", status:roulette, detail:`${roulettePlayed}/${rouletteEligible} jugaron` },
       { label:"Guerra R1", status:war1, detail:`${r1.votes}/${r1.eligible} votos${warRoundRevealed(1) ? " · revelada" : ""}` },
@@ -10555,19 +10745,19 @@
     return `
       <section class="section-card admin-war-control admin-timed-sequence">
         <div class="admin-war-control-head">
-          <div><p class="eyebrow">Juegos nuevos</p><h4>Secuencia automática de 2 días</h4><p>Al lanzar los juegos empieza el reloj: durante las primeras 24h están abiertas la Ruleta y Guerra R1; al vencer, se procesa R1 y se abre Guerra R2 por otras 24h. No hace falta cerrar ni revelar rondas desde Admin.</p></div>
+          <div><p class="eyebrow">Juegos nuevos</p><h4>Ruleta primero · Guerra después</h4><p>Al lanzar los juegos se abre únicamente la Ruleta durante 24h. Al vencer, se habilita Guerra R1 por 24h y, después, Guerra R2 por otras 24h. El ranking y los botines quedan congelados al abrir cada ronda.</p></div>
           <span>${!launched ? "Sin lanzar" : warRoundRevealed(2) ? "Finalizada" : "⏱ Automático"}</span>
         </div>
         <div class="admin-timed-sequence-grid">
           ${rows.map(row => `<div class="admin-timed-sequence-row ${row.status.active ? "is-active" : row.status.expired ? "is-done" : ""}"><strong>${row.label}</strong><span>${escapeHTML(row.status.active || row.status.state === "waiting" ? timedStageChip(row.status.stage) : row.status.expired ? "Tiempo finalizado" : "Bloqueado")}</span><small>${escapeHTML(row.detail)}</small></div>`).join("")}
         </div>
-        <p class="admin-section-note">Las rondas de Guerra se resuelven automáticamente al vencimiento. Los capitanes coordinan, pueden cerrar/reabrir su equipo y desempatar.</p>
+        <p class="admin-section-note">Las rondas de Guerra se resuelven automáticamente al vencimiento. Los capitanes coordinan la estrategia; nadie puede cerrar la ronda antes del reloj.</p>
       </section>`;
   }
 
   function warOfficialChoiceForTeam(teamId, round, options = {}) {
     const allowExpiredFallback = Boolean(options.allowExpiredFallback);
-    const members = confirmedNewGameMembers(teamId);
+    const members = timedCompetitionMembers(teamId);
     const votes = members.map(guest => ({ guest, vote: warVoteForGuest(guest.id, round) })).filter(item => item.vote);
 
     if (!votes.length) {
@@ -10632,23 +10822,18 @@
     const stage = Number(round) === 2 ? "war2" : "war1";
     const timing = timedStageStatus(stage);
     const autoAllowed = source === "auto" && timing.expired;
-    const captainAllowed = source === "captain" && isGuestCaptain(currentGuest) && warRoundReadyForCaptainReveal(round);
+    const captainAllowed = false;
     const adminAllowed = source === "admin" && state.adminUnlocked;
     if ((!autoAllowed && !captainAllowed && !adminAllowed) || warRoundRevealed(round)) return false;
     if (!autoAllowed && !warRoundEnabled(round)) return false;
 
     await syncFromSheets(false);
     if (warRoundRevealed(round)) return true;
-    if (source === "captain" && !warRoundReadyForCaptainReveal(round)) {
-      toast("Todavía falta cerrar algún equipo o resolver un empate.");
-      return false;
-    }
-
     const official = {};
     for (const teamId of Object.keys(DATA.teams)) {
       const choice = warOfficialChoiceForTeam(teamId, round, { allowExpiredFallback: autoAllowed });
       if (choice.error) {
-        if (autoAllowed) official[teamId] = { action:"none", targetTeamId:"", voteCount:0, eligibleCount:confirmedNewGameMembers(teamId).length };
+        if (autoAllowed) official[teamId] = { action:"none", targetTeamId:"", voteCount:0, eligibleCount:timedCompetitionMembers(teamId).length };
         else { toast(choice.error); return false; }
       } else official[teamId] = choice;
     }
@@ -10659,7 +10844,7 @@
       if (!confirm(`Todavía faltan ${missing} votos. ¿Cerrar y revelar la ronda igualmente?`)) return false;
     }
 
-    const snapshot = calculateRanking().map((row, index) => ({ id:row.id, rank:index + 1, bounty:WAR_BOUNTIES[index] || 200 }));
+    const snapshot = warRoundSnapshot(round);
     const deltas = Object.fromEntries(Object.keys(DATA.teams).map(id => [id, 0]));
     const notes = Object.fromEntries(Object.keys(DATA.teams).map(id => [id, []]));
 
@@ -10731,8 +10916,10 @@
       const stageChanged = Boolean(timedStageUiSignature && timedStageUiSignature !== beforeSignature);
       timedStageUiSignature = beforeSignature;
       const war1 = timedStageStatus("war1");
+      if (war1.active && !parsedWarStoredSnapshot(1) && !warRoundRevealed(1)) changed = (await ensureWarRoundSnapshot(1)) || changed;
       if (war1.expired && !warRoundRevealed(1)) changed = (await resolveWarRound(1, { source:"auto" })) || changed;
       const war2 = timedStageStatus("war2");
+      if (war2.active && warRoundRevealed(1) && !parsedWarStoredSnapshot(2) && !warRoundRevealed(2)) changed = (await ensureWarRoundSnapshot(2)) || changed;
       if (war2.expired && warRoundRevealed(1) && !warRoundRevealed(2)) changed = (await resolveWarRound(2, { source:"auto" })) || changed;
       const afterSignature = ["roulette", "war1", "war2"].map(stage => timedStageStatus(stage).state).join("|") + `|${warRoundRevealed(1)}|${warRoundRevealed(2)}`;
       timedStageUiSignature = afterSignature;
@@ -11082,6 +11269,19 @@
       `;
     }
 
+    if (adminSubsection === "photos") {
+      return `
+        ${adminHeader}
+        ${renderAdminSubsectionHeader({
+          icon: "camera",
+          eyebrow: "Administración",
+          title: "Fotos",
+          text: "Cantidad recibida, últimas cargas y acceso a la carpeta privada de Drive."
+        })}
+        ${window.WeddingPhotoUploader?.renderAdminView?.() || `<section class="section-card"><p>El módulo de fotos no está disponible.</p></section>`}
+      `;
+    }
+
     if (adminSubsection === "settings") {
       return `
         ${adminHeader}
@@ -11315,7 +11515,7 @@
               {
                 key: "game-roulette",
                 title: "Lanzar nuevos juegos",
-                text: "Inicia la secuencia automática de 2 días: Día 1 Ruleta + Guerra R1 (24h) → Día 2 Guerra R2 (24h). La Ruleta congela el balance por participantes activos al momento del lanzamiento."
+                text: "Lanza la Ruleta por 24h. Recién cuando termina ese reloj se libera Guerra R1 por 24h; después se abre R2 por otras 24h. El balance y la nómina de participantes quedan congelados al lanzamiento."
               }
             ].map(game => {
               const open = game.key === "game-roulette" ? manualGameFlag(game.key) : isTriviaGameOpen(game.key);
@@ -11679,6 +11879,19 @@
 
         <button
           type="button"
+          class="admin-subsection-launcher admin-subsection-launcher-photos"
+          data-admin-subsection="photos">
+          <span class="admin-subsection-launcher-icon">📸</span>
+          <span>
+            <small>Mini sección</small>
+            <strong>Fotos</strong>
+            <em>Resumen de cargas y acceso al álbum privado</em>
+          </span>
+          <b aria-hidden="true">›</b>
+        </button>
+
+        <button
+          type="button"
           class="admin-subsection-launcher admin-subsection-launcher-settings"
           data-admin-subsection="settings">
           <span class="admin-subsection-launcher-icon">
@@ -11850,6 +12063,10 @@
       countdownTimer = null;
     }
     if (route === "inicio") startHomeCountdown();
+    if (route === "fotos") {
+      const photoRoot = document.querySelector("[data-photo-root]");
+      window.WeddingPhotoUploader?.bindView?.(photoRoot, { guest: currentGuest, publicMode:false });
+    }
 
     $$('[data-go]').forEach(button => button.addEventListener("click", () => {
       if (button.dataset.go === "equipo") {
@@ -12073,7 +12290,7 @@
         if (!isGuestCaptain(currentGuest)) return;
         const status = event.currentTarget.dataset.warTeamToggle === "open" ? "open" : "closed";
         const votes = warVotesForTeam(currentGuest.team, round).length;
-        const eligible = confirmedNewGameMembers(currentGuest.team).length;
+        const eligible = timedCompetitionMembers(currentGuest.team).length;
         if (status === "closed" && votes < eligible) {
           const missing = eligible - votes;
           if (!confirm(`Faltan ${missing} voto${missing === 1 ? "" : "s"} en ${getTeam(currentGuest.team).name}. ¿Cerrar igual?`)) return;
@@ -12097,7 +12314,7 @@
 
       $$('[data-war-tiebreak-action]').forEach(button => {
         button.addEventListener("click", () => {
-          if (!isGuestCaptain(currentGuest) || !warTeamVotingClosed(currentGuest.team, round)) return;
+          if (!isGuestCaptain(currentGuest) || !warRoundEnabled(round) || warRoundRevealed(round)) return;
           const previous = warTiebreakForTeam(currentGuest.team, round) || {};
           const action = button.dataset.warTiebreakAction;
           const answer = { action, targetTeamId: action === "attack" ? (previous.targetTeamId || "") : "", round, teamId: currentGuest.team };
@@ -12111,7 +12328,7 @@
 
       $$('[data-war-tiebreak-target]').forEach(button => {
         button.addEventListener("click", () => {
-          if (!isGuestCaptain(currentGuest) || !warTeamVotingClosed(currentGuest.team, round)) return;
+          if (!isGuestCaptain(currentGuest) || !warRoundEnabled(round) || warRoundRevealed(round)) return;
           const targetTeamId = button.dataset.warTiebreakTarget;
           const answer = { action: "attack", targetTeamId, round, teamId: currentGuest.team };
           void queueOptimisticWrite("saveGameSubmission", {
@@ -13391,6 +13608,10 @@
 
   function bindAdminEvents() {
 
+    if (adminSubsection === "photos") {
+      void window.WeddingPhotoUploader?.bindAdminView?.(document.getElementById("view"), { adminPassword: state.adminPassword });
+    }
+
     $$("[data-admin-subsection]").forEach(button => {
       button.addEventListener("click", () => {
         const requested =
@@ -13400,6 +13621,7 @@
           "dashboard",
           "points",
           "responses",
+          "photos",
           "settings"
         ].includes(requested)
           ? requested
@@ -14107,7 +14329,7 @@
       const featureMessage = isSectionKey
         ? `${sectionName} ${open ? "habilitada" : "oculta"}.`
         : key === "game-roulette"
-          ? (open ? "Nuevos juegos lanzados: empiezan la Ruleta y Guerra R1 por 24 horas." : "Secuencia de nuevos juegos desactivada.")
+          ? (open ? "Ruleta lanzada: el reloj ya está corriendo. Guerra R1 queda bloqueada hasta que termine esta etapa." : "Secuencia de nuevos juegos desactivada.")
           : (open ? "Juego habilitado." : "Juego oculto.");
 
       toast(featureMessage);

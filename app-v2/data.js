@@ -1,5 +1,5 @@
 window.WEDDING_APP_DATA = {
-  "appVersion": "Real v2.7 · Balance por asistentes + Ruleta dinámica",
+  "appVersion": "Real V2 · UX móvil + Fotos + Ruleta/Guerra secuencial",
   "couple": {
     "bride": "Vani",
     "groom": "Fede",

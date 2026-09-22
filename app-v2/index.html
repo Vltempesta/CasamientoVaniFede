@@ -17,10 +17,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Vani & Fede" />
-  <link rel="manifest" href="manifest.webmanifest?v=32524" />
-  <link rel="icon" href="icons/favicon.ico?v=32524" sizes="any" />
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=32524" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=32524" />
+  <link rel="manifest" href="manifest.webmanifest?v=32600" />
+  <link rel="icon" href="icons/favicon.ico?v=32600" sizes="any" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=32600" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=32600" />
   <link rel="preload" as="image" href="assets/team-logos/bosque.png" fetchpriority="high" />
   <link rel="preload" as="image" href="assets/team-logos/fuego.png" fetchpriority="high" />
   <link rel="preload" as="image" href="assets/team-logos/luz.png" fetchpriority="high" />
@@ -30,7 +30,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=32524" />
+  <link rel="stylesheet" href="styles.css?v=32600" />
+  <link rel="stylesheet" href="ui-v2.css?v=32600" />
 </head>
 <body>
   <div class="scene" aria-hidden="true">
@@ -42,10 +43,11 @@
   </div>
 
   <main id="app" class="app-shell">
+    <section id="photoPublicScreen" class="hidden" aria-label="Fotos del casamiento"></section>
     <section id="loginScreen" class="login-screen">
       <div class="login-frame">
         <header class="login-brand">
-          <img class="seal-image" src="assets/branding/vyf-seal.png?v=32524" alt="Sello de Vani y Fede" width="105" height="113" />
+          <img class="seal-image" src="assets/branding/vyf-seal.png?v=32600" alt="Sello de Vani y Fede" width="105" height="113" />
 
           <h1 class="couple-wordmark couple-wordmark--elegant" aria-label="Vani y Fede">
             <span>VANI</span>
@@ -166,37 +168,32 @@
 
         <nav class="nav-tabs menu-nav-clean" aria-label="Secciones principales">
           <div class="menu-group" aria-label="Casamiento">
-            <button data-route="inicio" class="active"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-6h5v6"/></svg></span><span>Inicio</span></button>
-            <button data-route="asistencia" class="menu-assistance"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8"/><path d="M9 2v3M15 2v3"/><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 9h16"/><path d="m8.5 14 2 2 5-5"/></svg></span><span>Asistencia</span></button>
-            <button data-route="traslado" class="menu-transport"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="16" rx="3"/><path d="M4 11h16M8 7h8"/><path d="M7 21v-2M17 21v-2"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/></svg></span><span>Traslados</span></button>
+            <button data-route="inicio" class="active"><span class="menu-item-icon">⌂</span><span>Inicio</span></button>
+            <button data-route="cronograma"><span class="menu-item-icon">🕒</span><span>Cronograma</span></button>
+            <button data-route="fotos"><span class="menu-item-icon">📸</span><span>Fotos del casamiento</span></button>
+            <button data-route="asistencia" class="menu-assistance"><span class="menu-item-icon">✓</span><span>Asistencia</span></button>
+            <button data-route="traslado" class="menu-transport"><span class="menu-item-icon">🚌</span><span>Traslados</span></button>
+            <button data-route="ubicacion"><span class="menu-item-icon">⌖</span><span>Ubicación</span></button>
           </div>
 
           <div class="menu-group" aria-label="Competencia">
-            <button data-route="puntos"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 14.6 8.3 20.5 9.2 16.2 13.3 17.2 19.2 12 16.4 6.8 19.2 7.8 13.3 3.5 9.2 9.4 8.3 12 3Z"/></svg></span><span>Sumá puntos!</span></button>
-            <button data-route="ranking"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10h4v10"/><path d="M10 20V4h4v16"/><path d="M15 20v-7h4v7"/></svg></span><span>Ranking</span></button>
-            <button data-route="equipo"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 6v6c0 4.7-3.1 7.5-8 9-4.9-1.5-8-4.3-8-9V6l8-3Z"/><circle cx="12" cy="9" r="2.2"/><path d="M8.5 15.5c.6-2.2 1.7-3.3 3.5-3.3s2.9 1.1 3.5 3.3"/></svg></span><span>Mi equipo</span></button>
+            <button data-route="puntos"><span class="menu-item-icon">★</span><span>Juegos y puntos</span></button>
+            <button data-route="ranking"><span class="menu-item-icon">🏆</span><span>Ranking</span></button>
+            <button data-route="equipo"><span class="menu-item-icon">🛡️</span><span>Mi equipo</span></button>
           </div>
 
           <div class="menu-group" aria-label="Comunidad">
-            <button data-route="social"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h11a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H9l-5 4v-4a4 4 0 0 1-2-3.5V9a4 4 0 0 1 2-4Z"/><path d="M7 9h7M7 12h4"/></svg></span><span>Social</span></button>
-            <button data-route="regalos"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h16v10H4z"/><path d="M3 7h18v3H3zM12 7v13"/><path d="M12 7c-3.5 0-5-1.1-5-2.6C7 3.2 8 3 8.8 3 10.3 3 12 5.2 12 7ZM12 7c3.5 0 5-1.1 5-2.6C17 3.2 16 3 15.2 3 13.7 3 12 5.2 12 7Z"/></svg></span><span>Regalos</span></button>
+            <button data-route="social"><span class="menu-item-icon">♡</span><span>Social</span></button>
+            <button data-route="regalos"><span class="menu-item-icon">🎁</span><span>Regalos</span></button>
+            <button data-route="reglas"><span class="menu-item-icon">?</span><span>Reglas</span></button>
           </div>
 
           <div class="menu-group menu-install-group hidden" aria-label="Aplicación">
-            <button type="button" data-install-app>
-              <span class="menu-item-icon">
-                <svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 3v11"/>
-                  <path d="m8 10 4 4 4-4"/>
-                  <path d="M5 20h14"/>
-                </svg>
-              </span>
-              <span>Instalar app</span>
-            </button>
+            <button type="button" data-install-app><span class="menu-item-icon">↓</span><span>Instalar app</span></button>
           </div>
 
           <div class="menu-group menu-group-admin" aria-label="Administración">
-            <button data-route="admin"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1H21v4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></span><span>Administración</span></button>
+            <button data-route="admin"><span class="menu-item-icon">⚙</span><span>Administración</span></button>
           </div>
         </nav>
 
@@ -211,49 +208,20 @@
       </div>
 
       <nav class="bottom-nav" aria-label="Accesos principales">
-        <button type="button" class="bottom-nav-item" data-route="asistencia">
-          <span class="bottom-nav-dot" aria-hidden="true"></span>
-          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8 3h8"/><path d="M9 2v3M15 2v3"/><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 9h16"/><path d="m8.5 14 2 2 5-5"/>
-          </svg>
-          <span>Asistencia</span>
+        <button type="button" class="bottom-nav-item active" data-route="inicio">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg><span>Inicio</span>
         </button>
-
-        <button type="button" class="bottom-nav-item" data-route="traslado">
-          <span class="bottom-nav-dot" aria-hidden="true"></span>
-          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="4" y="3.5" width="16" height="15" rx="3"/>
-            <path d="M6.5 7h11M6.5 10h11M4 14h16"/>
-            <circle cx="7.5" cy="18.5" r="1.5"/>
-            <circle cx="16.5" cy="18.5" r="1.5"/>
-            <path d="M2.5 9.5H4M20 9.5h1.5"/>
-          </svg>
-          <span>Traslados</span>
-        </button>
-
-        <button type="button" class="bottom-nav-item bottom-nav-main active" data-route="inicio">
-          <span class="bottom-nav-main-circle">
-            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>
-            </svg>
-          </span>
-          <span>Inicio</span>
-        </button>
-
         <button type="button" class="bottom-nav-item" data-route="puntos">
-          <span class="bottom-nav-dot" aria-hidden="true"></span>
-          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3 14.6 8.3 20.5 9.2 16.2 13.3 17.2 19.2 12 16.4 6.8 19.2 7.8 13.3 3.5 9.2 9.4 8.3 12 3Z"/>
-          </svg>
-          <span>Sumá puntos</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 14.6 8.3 20.5 9.2 16.2 13.3 17.2 19.2 12 16.4 6.8 19.2 7.8 13.3 3.5 9.2 9.4 8.3 12 3Z"/></svg><span>Juegos</span>
         </button>
-
+        <button type="button" class="bottom-nav-item" data-route="fotos">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="m8 6 1.5-2h5L16 6"/><circle cx="12" cy="13" r="3.2"/></svg><span>Fotos</span>
+        </button>
         <button type="button" class="bottom-nav-item" data-route="ranking">
-          <span class="bottom-nav-dot" aria-hidden="true"></span>
-          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 20V10h4v10"/><path d="M10 20V4h4v16"/><path d="M15 20v-7h4v7"/>
-          </svg>
-          <span>Ranking</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10h4v10"/><path d="M10 20V4h4v16"/><path d="M15 20v-7h4v7"/></svg><span>Ranking</span>
+        </button>
+        <button type="button" class="bottom-nav-item" data-open-menu>
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg><span>Más</span>
         </button>
       </nav>
     </section>
@@ -261,8 +229,9 @@
 
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
 
-  <script src="config.js?v=32524"></script>
-  <script src="data.js?v=32524"></script>
-  <script src="app.js?v=32524"></script>
+  <script src="config.js?v=32600"></script>
+  <script src="data.js?v=32600"></script>
+  <script src="photos.js?v=32600"></script>
+  <script src="app.js?v=32600"></script>
 </body>
 </html>

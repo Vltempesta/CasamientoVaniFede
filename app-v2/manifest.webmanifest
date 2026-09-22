@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Vani & Fede · Casamiento",
   "short_name": "Vani & Fede",
-  "description": "Todo lo que necesitás para el gran día… y algunas sorpresas.",
+  "description": "Vani & Fede · juegos, fotos, cronograma y todo para el casamiento.",
   "lang": "es-AR",
   "start_url": "./",
   "scope": "./",
@@ -44,9 +44,9 @@
       ]
     },
     {
-      "name": "Confirmar asistencia",
-      "short_name": "Asistencia",
-      "url": "./#asistencia",
+      "name": "Fotos del casamiento",
+      "short_name": "Fotos",
+      "url": "./?seccion=fotos",
       "icons": [
         {
           "src": "icons/icon-192.png",
@@ -56,8 +56,8 @@
       ]
     },
     {
-      "name": "Sumá puntos",
-      "short_name": "Puntos",
+      "name": "Juegos",
+      "short_name": "Juegos",
       "url": "./#puntos",
       "icons": [
         {
