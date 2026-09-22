@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32522";
+  const CURRENT_APP_VERSION = "32523";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -17,8 +17,8 @@
     error: "Sin conexión"
   };
 
-  // Asistencia y Canciones mantienen los valores vigentes por equipo.
-  // Las trivias se recalibran por jugadores competitivos activos.
+  // Los desafíos históricos mantienen sus valores para no reescribir el ranking ya jugado.
+  // Desde v32523, los juegos futuros y las cargas individuales se compensan por participantes activos.
   // Fede, Vani y registros no jugadores/mascota quedan fuera del cálculo.
   const RSVP_POINTS_BY_TEAM = {
     bosque: 13,
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32522"
+        appVersion: CONFIG.APP_VERSION || "32523"
       })
     );
   }
@@ -890,8 +890,53 @@
     return rsvp.attendance !== "no";
   }
 
+  // Participantes activos para los juegos futuros: quienes dijeron que sí + quienes todavía no respondieron.
+  // Quienes respondieron que NO quedan fuera de la competencia futura.
+  const FUTURE_ELIGIBLE_COUNT_FALLBACK = {
+    bosque: 19,
+    fuego: 24,
+    luz: 17,
+    noche: 13,
+    agua: 18,
+    viento: 19
+  };
+
+  function eligibleCompetitionMembers(teamId) {
+    return teamCompetitionMembers(teamId)
+      .filter(guest => state.rsvps?.[guest.id]?.attendance !== "no");
+  }
+
+  function competitionEligibleCount(teamId) {
+    const hasAnyRsvpData = Object.keys(state.rsvps || {}).length > 0;
+    if (!hasAnyRsvpData && FUTURE_ELIGIBLE_COUNT_FALLBACK[teamId]) {
+      return FUTURE_ELIGIBLE_COUNT_FALLBACK[teamId];
+    }
+    return Math.max(1, eligibleCompetitionMembers(teamId).length || FUTURE_ELIGIBLE_COUNT_FALLBACK[teamId] || 1);
+  }
+
+  function competitionEligibilitySnapshot() {
+    return Object.keys(DATA.teams).reduce((acc, teamId) => {
+      acc[teamId] = competitionEligibleCount(teamId);
+      return acc;
+    }, {});
+  }
+
+  function competitionPointFactor(teamId, countsOverride = null) {
+    const counts = countsOverride && typeof countsOverride === "object" ? countsOverride : competitionEligibilitySnapshot();
+    const values = Object.keys(DATA.teams).map(id => Math.max(1, Number(counts[id] || competitionEligibleCount(id))));
+    const referenceCount = Math.max(1, ...values);
+    const teamCount = Math.max(1, Number(counts[teamId] || competitionEligibleCount(teamId)));
+    return referenceCount / teamCount;
+  }
+
+  function adjustedIndividualPoints(rawPoints, teamId, countsOverride = null) {
+    const raw = Number(rawPoints || 0);
+    if (!Number.isFinite(raw)) return 0;
+    return Math.round(raw * competitionPointFactor(teamId, countsOverride));
+  }
+
   function teamSizeForPoints(teamId) {
-    return teamCompetitionMembers(teamId).length || 1;
+    return competitionEligibleCount(teamId);
   }
 
   function rsvpPointsForTeam(teamId) {
@@ -1032,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32522",
+      appVersion: "32523",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2472,9 +2517,9 @@
     if (route === "ficha" || route === "juegos" || route === "info") route = "inicio";
     if (route === "torneo") route = "puntos";
 
-    const gameRoutes = ["musica", "trivia-pareja", "trivia-quien", "trivia", "ruleta", "guerra"];
+    const legacyGameRoutes = ["musica", "trivia-pareja", "trivia-quien", "trivia"];
     const testMode = isAdminTestMode();
-    if (currentGuest && !testMode && gameRoutes.includes(route) && !hasFinalRsvp(state.rsvps[currentGuest.id])) {
+    if (currentGuest && !testMode && legacyGameRoutes.includes(route) && !hasFinalRsvp(state.rsvps[currentGuest.id])) {
       toast("Primero confirmá tu asistencia por sí o por no.");
       route = "asistencia";
     }
@@ -2493,8 +2538,8 @@
       route = "puntos";
     }
 
-    if (!testMode && ["ruleta", "guerra"].includes(route) && currentGuest && state.rsvps[currentGuest.id]?.attendance !== "si") {
-      toast("Este juego es para quienes confirmaron asistencia.");
+    if (!testMode && ["ruleta", "guerra"].includes(route) && currentGuest && state.rsvps[currentGuest.id]?.attendance === "no") {
+      toast("Este juego es para quienes asisten o todavía no confirmaron.");
       route = "puntos";
     }
 
@@ -3066,17 +3111,30 @@
   const PRE_EVENT_SEQUENCE_GUEST_ID = "system-pre-event-sequence";
   const PRE_EVENT_STAGE_MS = 48 * 60 * 60 * 1000;
 
-  // Ruleta v32522: 8 positivos y 4 negativos (12 casilleros equiprobables, sin cero).
-  // Se mantiene la expectativa total ~800 pts por equipo, y el diseño/UX de la rueda permanecen iguales.
-  // Orden visual: los negativos quedan espaciados para evitar bloques de color y mejorar lectura.
-  const ROULETTE_VALUES_BY_TEAM = {
-    bosque: [-60, 40, 125, -35, 75, 10, -20, 160, 55, -10, 95, 20],
-    fuego: [-55, 35, 105, -30, 65, 10, -15, 140, 50, -5, 85, 15],
-    luz: [-75, 55, 165, -45, 100, 10, -25, 200, 75, -10, 125, 25],
-    noche: [-85, 60, 185, -50, 115, 10, -30, 235, 85, -15, 145, 30],
-    agua: [-65, 45, 145, -35, 85, 10, -20, 185, 65, -10, 110, 20],
-    viento: [-60, 45, 135, -35, 80, 10, -20, 175, 60, -10, 105, 20]
-  };
+  // Ruleta v32523: 8 positivos y 4 negativos, sin cero.
+  // La rueda parte de una tabla base calibrada para el equipo activo más grande y se escala
+  // según la cantidad de participantes activos (ASISTE + pendiente) de cada equipo.
+  // Así, si todos juegan, la expectativa ronda ~800 puntos por equipo aunque tengan tamaños distintos.
+  const ROULETTE_BASE_VALUES = [-55, 35, 105, -30, 65, 10, -15, 140, 50, -5, 85, 15];
+
+  function rouletteEligibilityCounts() {
+    const saved = preEventSequenceRecord()?.data?.eligibleCounts;
+    if (saved && typeof saved === "object") {
+      const valid = Object.keys(DATA.teams).every(teamId => Number(saved[teamId]) > 0);
+      if (valid) return saved;
+    }
+    return competitionEligibilitySnapshot();
+  }
+
+  function rouletteValuesForTeam(teamId) {
+    const counts = rouletteEligibilityCounts();
+    const factor = competitionPointFactor(teamId, counts);
+    return ROULETTE_BASE_VALUES.map(value => {
+      const scaled = Math.round((Number(value) * factor) / 5) * 5;
+      if (scaled !== 0) return scaled;
+      return Number(value) >= 0 ? 5 : -5;
+    });
+  }
 
   function manualGameFlag(key) {
     if (Object.prototype.hasOwnProperty.call(state.manualUnlocks || {}, key)) {
@@ -3160,7 +3218,8 @@
     const answer = {
       activatedAt: nowIso,
       durationHoursPerStage: 48,
-      mode: "roulette-war1-war2"
+      mode: "roulette-war1-war2",
+      eligibleCounts: competitionEligibilitySnapshot()
     };
     const payload = {
       gameId: PRE_EVENT_SEQUENCE_GAME_ID,
@@ -4132,9 +4191,10 @@
     return state.gameSubmissions?.[`${guestId}::${gameId}`] || null;
   }
 
+  // Compatibilidad con el resto de la lógica: para los juegos nuevos, "confirmados" significa
+  // participantes activos (ASISTE + pendiente). Sólo queda afuera quien respondió NO.
   function confirmedNewGameMembers(teamId) {
-    return teamCompetitionMembers(teamId)
-      .filter(guest => state.rsvps?.[guest.id]?.attendance === "si");
+    return eligibleCompetitionMembers(teamId);
   }
 
   function currentGuestCanPlayNewGames() {
@@ -4142,7 +4202,7 @@
     return Boolean(
       currentGuest &&
       isCompetitionGuest(currentGuest) &&
-      state.rsvps?.[currentGuest.id]?.attendance === "si"
+      state.rsvps?.[currentGuest.id]?.attendance !== "no"
     );
   }
 
@@ -4234,9 +4294,7 @@
   }
 
   function teamCaptainGuest(teamId) {
-    return confirmedNewGameMembers(teamId).find(isGuestCaptain) ||
-      teamCompetitionMembers(teamId).find(isGuestCaptain) ||
-      null;
+    return confirmedNewGameMembers(teamId).find(isGuestCaptain) || null;
   }
 
   function parseWarControlSubmission(submission) {
@@ -6021,8 +6079,9 @@
       }
       if (submission.gameId === ROULETTE_GAME_ID) {
         const parsed = parseRouletteSubmission(submission);
-        if (parsed?.status === "completed") {
-          const guest = getGuestById(submission.guestId);
+        const guest = getGuestById(submission.guestId);
+        const stillEligible = guest && state.rsvps?.[guest.id]?.attendance !== "no";
+        if (parsed?.status === "completed" && stillEligible) {
           entries.push({
             timestamp: submission.updatedAt,
             gameId: "auto-roulette-risk",
@@ -7018,7 +7077,7 @@
   }
 
   function rouletteResultIndex(teamId, baseResult, explicitIndex = null) {
-    const values = ROULETTE_VALUES_BY_TEAM[teamId] || ROULETTE_VALUES_BY_TEAM.viento;
+    const values = rouletteValuesForTeam(teamId);
     const parsedIndex = Number(explicitIndex);
     if (Number.isInteger(parsedIndex) && parsedIndex >= 0 && parsedIndex < values.length) return parsedIndex;
     const parsedResult = Number(baseResult);
@@ -7027,7 +7086,7 @@
 
   function rouletteWheelMarkup(teamId, settledIndex = null) {
     const team = getTeam(teamId);
-    const values = ROULETTE_VALUES_BY_TEAM[teamId] || ROULETTE_VALUES_BY_TEAM.viento;
+    const values = rouletteValuesForTeam(teamId);
     const positivePalette = ["#315f49", "#3a6b51", "#46785d", "#356349", "#527f64", "#416f57", "#5a8669"];
     const negativePalette = ["#6b273b", "#7a3045", "#87394c", "#5d2034"];
     const zeroColor = "#31536e";
@@ -7103,7 +7162,7 @@
       return newGameLockedCard("Ruleta · Todo o Nada", rouletteStage.expired ? "El plazo de 48 horas terminó. La competencia continúa con Guerra de Equipos." : "Vani y Fede todavía no habilitaron este juego.");
     }
     if (!currentGuestCanPlayNewGames()) {
-      return newGameLockedCard("Ruleta · Todo o Nada", "Este juego se habilita para quienes confirmaron que asisten.");
+      return newGameLockedCard("Ruleta · Todo o Nada", "Este juego es para quienes asisten o todavía no confirmaron. Quienes respondieron NO quedan fuera.");
     }
 
     const team = getTeam(currentGuest.team);
@@ -7154,7 +7213,7 @@
           ` : `
             ${rouletteWheelMarkup(team.id)}
             <button id="newRouletteSpin" type="button" class="new-roulette-spin">GIRAR RULETA</button>
-            <p class="new-game-note"><strong>58% de los casilleros suman.</strong> Los valores cambian por equipo para mantener la competencia equilibrada.</p>
+            <p class="new-game-note"><strong>67% de los casilleros suman.</strong> Los valores se ajustan automáticamente según la cantidad de participantes activos de cada equipo.</p>
           `}
         </section>
 
@@ -7351,7 +7410,7 @@
 
   function renderWarGame() {
     if (!currentGuestCanPlayNewGames()) {
-      return newGameLockedCard("Guerra de Equipos", "Este juego es para quienes confirmaron que asisten.");
+      return newGameLockedCard("Guerra de Equipos", "Este juego es para quienes asisten o todavía no confirmaron. Quienes respondieron NO quedan fuera.");
     }
 
     const activeRound = warRoundNumber();
@@ -7489,7 +7548,7 @@
     const whoMaxPoints = triviaMaxPointsFor("who-is-who-trivia-test", team.id);
     const personalContribution = testMode ? 0 : rsvpTotalPoints + musicEarnedPoints + coupleEarnedPoints + whoEarnedPoints + rouletteEarnedPoints;
     const allPreEventChallengesDone = !testMode && rsvpDone && musicDone && triviaDone && whoTriviaDone && rouletteDone && warDone;
-    const attending = testMode || (rsvpDone && rsvp?.attendance === "si");
+    const attending = testMode || currentGuestCanPlayNewGames();
     const seqLaunched = manualGameFlag("game-roulette") && Boolean(preEventSequenceSchedule());
 
     const pointsEyebrow = testMode ? "MODO PRUEBA" : allPreEventChallengesDone ? "ETAPA COMPLETADA" : "SUMÁ PUNTOS";
@@ -9071,9 +9130,9 @@
           `Hasta +${triviaMaxPointsFor("who-is-who-trivia-test", currentGuest.team)}`,
           "El puntaje depende de los aciertos y está ajustado según la cantidad de integrantes del equipo."
         )}
-        ${rulesRow("Ruleta · Todo o Nada", "Variable", "Una tirada por persona. Si sale positivo podés plantarte o duplicar; si sale negativo podés aceptar o intentar recuperarte.")}
+        ${rulesRow("Ruleta · Todo o Nada", "Variable", "Una tirada por participante activo. Los valores se ajustan por tamaño de equipo para igualar la oportunidad total de puntos.")}
         ${rulesRow("Guerra de Equipos", "Variable", `Dos rondas grupales. Debatan en WhatsApp y voten entre Sumar, Atacar o Defender. Defender no suma puntos: simplemente bloquea todos los ataques. Un ataque bloqueado queda en 0.`)}
-        ${rulesRow("Durante la boda", "+ / −", "La competencia no termina antes del evento: los seis equipos seguirán sumando y perdiendo puntos durante toda la noche con juegos y consignas en vivo.")}
+        ${rulesRow("Durante la boda", "+ / −", "Los puntos ganados por una persona se ajustan automáticamente por cantidad de participantes activos del equipo. Los premios grupales mantienen su valor fijo.")}
         ${rulesRow("Bonus o penalizaciones", "+ / −", "Vani y Fede podrán sumar o restar puntos por juegos, actitud o incumplimiento de consignas.")}
       </section>
 
@@ -10892,8 +10951,8 @@
               <p class="eyebrow">Ajuste discrecional</p>
               <h4>Sumar o restar puntos</h4>
               <p>
-                Carga rápida para bonus, penalizaciones
-                o actividades de la fiesta.
+                Para puntajes individuales, la app compensa automáticamente
+                la diferencia de tamaño entre equipos. Los premios grupales quedan exactos.
               </p>
             </div>
             <span
@@ -10928,7 +10987,22 @@
           </fieldset>
 
           <fieldset class="admin-score-fieldset">
-            <legend>2. Movimiento</legend>
+            <legend>2. Tipo de puntaje</legend>
+            <div class="admin-point-mode-picker">
+              <label>
+                <input type="radio" name="scoreMode" value="individual" checked>
+                <span><b>👤 Individual</b><small>Ajustado por cantidad de participantes</small></span>
+              </label>
+              <label>
+                <input type="radio" name="scoreMode" value="team">
+                <span><b>🏆 Equipo</b><small>Usa exactamente el valor cargado</small></span>
+              </label>
+            </div>
+            <p id="adminPointBalanceHint" class="admin-point-balance-hint">Elegí un equipo para ver su factor de compensación.</p>
+          </fieldset>
+
+          <fieldset class="admin-score-fieldset">
+            <legend>3. Movimiento</legend>
             <div class="admin-sign-picker">
               <label>
                 <input
@@ -10949,7 +11023,7 @@
           </fieldset>
 
           <fieldset class="admin-score-fieldset">
-            <legend>3. Cantidad</legend>
+            <legend>4. Cantidad base</legend>
             <div class="admin-points-input">
               <input
                 name="points"
@@ -11238,7 +11312,7 @@
               {
                 key: "game-roulette",
                 title: "Lanzar nuevos juegos",
-                text: "Inicia la secuencia automática: Ruleta 48h → Guerra R1 48h → Guerra R2 48h."
+                text: "Inicia la secuencia automática: Ruleta 48h → Guerra R1 48h → Guerra R2 48h. La Ruleta congela el balance por participantes activos al momento del lanzamiento."
               }
             ].map(game => {
               const open = game.key === "game-roulette" ? manualGameFlag(game.key) : isTriviaGameOpen(game.key);
@@ -11738,7 +11812,7 @@
       .admin-official-export{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:16px;align-items:center;margin-top:15px;padding:20px 22px;border-color:rgba(74,125,79,.22);background:linear-gradient(135deg,rgba(74,125,79,.06),rgba(255,253,248,.86))}.admin-official-export-icon{width:50px;height:50px;display:grid;place-items:center;border-radius:15px;background:rgba(74,125,79,.10);color:#426f47}.admin-official-export-icon .ui-icon{width:24px;height:24px}.admin-official-export h4{margin:4px 0 5px;font-size:22px}.admin-official-export p:not(.eyebrow){margin:0;font-size:13px}.admin-official-export button{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}.admin-official-export button .ui-icon{width:18px;height:18px}
       .admin-score-card{display:grid;gap:22px;margin-top:16px;padding:26px}.admin-score-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.admin-score-heading h4{margin:5px 0 6px;font-size:28px}.admin-score-heading p{margin:0}.admin-score-preview{display:inline-flex;align-items:center;min-height:36px;padding:8px 12px;border-radius:999px;background:rgba(201,170,114,.13);color:var(--gold-deep);font-size:12px;font-weight:900;white-space:nowrap}
       .admin-score-fieldset{margin:0;padding:0;border:0}.admin-score-fieldset legend{margin-bottom:11px;color:var(--ink);font-weight:900}.admin-team-picker{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.admin-team-option{position:relative;display:grid;justify-items:center;gap:7px;min-height:104px;margin:0;padding:13px 8px;border:1px solid var(--line);border-radius:17px;background:rgba(255,255,255,.40);color:var(--ink);font-size:12px;font-weight:900;cursor:pointer;text-align:center}.admin-team-option input{position:absolute;opacity:0;pointer-events:none}.admin-team-option:has(input:checked){border-color:color-mix(in srgb,var(--local-accent) 65%,var(--line));background:color-mix(in srgb,var(--local-accent) 13%,rgba(255,255,255,.56));box-shadow:0 0 0 3px color-mix(in srgb,var(--local-accent) 12%,transparent)}.admin-team-logo{width:48px;height:48px}
-      .admin-sign-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.admin-sign-picker label{position:relative;margin:0}.admin-sign-picker input{position:absolute;opacity:0;pointer-events:none}.admin-sign-picker span{display:flex;align-items:center;justify-content:center;min-height:49px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.42);color:var(--ink);font-weight:900;cursor:pointer}.admin-sign-picker label:first-child:has(input:checked) span{border-color:rgba(74,125,79,.35);background:rgba(74,125,79,.10);color:#426f47}.admin-sign-picker label:last-child:has(input:checked) span{border-color:rgba(185,87,77,.34);background:rgba(185,87,77,.09);color:#93463c}
+      .admin-sign-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.admin-sign-picker label{position:relative;margin:0}.admin-sign-picker input{position:absolute;opacity:0;pointer-events:none}.admin-sign-picker span{display:flex;align-items:center;justify-content:center;min-height:49px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.42);color:var(--ink);font-weight:900;cursor:pointer}.admin-sign-picker label:first-child:has(input:checked) span{border-color:rgba(74,125,79,.35);background:rgba(74,125,79,.10);color:#426f47}.admin-sign-picker label:last-child:has(input:checked) span{border-color:rgba(185,87,77,.34);background:rgba(185,87,77,.09);color:#93463c}.admin-point-mode-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.admin-point-mode-picker label{position:relative;margin:0}.admin-point-mode-picker input{position:absolute;opacity:0;pointer-events:none}.admin-point-mode-picker span{display:grid;gap:2px;min-height:58px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.42);cursor:pointer}.admin-point-mode-picker b{font-size:12px;color:var(--ink)}.admin-point-mode-picker small{font-size:8px;color:var(--muted);line-height:1.3}.admin-point-mode-picker label:has(input:checked) span{border-color:rgba(49,83,110,.38);background:rgba(49,83,110,.09);box-shadow:0 0 0 2px rgba(49,83,110,.06)}.admin-point-mode-picker label:has(input:checked) b{color:#31536e}.admin-point-balance-hint{margin:8px 2px 0!important;padding:8px 10px;border-radius:10px;background:rgba(49,83,110,.06);color:#31536e!important;font-size:9px!important;font-weight:800;line-height:1.35}
       .admin-points-input{position:relative}.admin-points-input input{height:58px;margin:0;padding-right:80px;border-radius:15px;font-size:21px;font-weight:850}.admin-points-input>span{position:absolute;right:17px;top:50%;transform:translateY(-50%);color:var(--muted-2);font-size:13px;font-weight:850}.admin-preset-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}.admin-preset-row button{min-width:64px;padding:9px 13px;border:1px solid var(--line);background:rgba(255,255,255,.45);color:var(--ink);box-shadow:none}.admin-comment-label{margin:0}.admin-comment-label>span{color:var(--muted-2);font-weight:600}.admin-comment-label textarea{min-height:85px}
       .admin-score-submit{width:100%;min-height:52px}.admin-score-submit.is-negative{background:linear-gradient(135deg,#c66b5d,#9d4138);color:#fff}.admin-score-submit:disabled{cursor:not-allowed;opacity:.48;transform:none}
       .admin-test-reset-panel{display:flex;align-items:center;justify-content:space-between;gap:22px;margin-top:16px;padding:22px;border-color:rgba(122,49,64,.20);background:linear-gradient(135deg,rgba(122,49,64,.055),rgba(255,253,248,.84))}
@@ -11815,7 +11889,7 @@
           return;
         }
 
-        const values = ROULETTE_VALUES_BY_TEAM[currentGuest.team] || [];
+        const values = rouletteValuesForTeam(currentGuest.team);
         const index = secureRandomInt(values.length || 1);
         const baseResult = Number(values[index] || 0);
         const wheel = $("#newRouletteWheel");
@@ -13526,10 +13600,25 @@
       if (!scoreForm) return;
       const teamId = scoreForm.querySelector('input[name="teamId"]:checked')?.value || "";
       const sign = Number(scoreForm.querySelector('input[name="scoreSign"]:checked')?.value || 1);
+      const scoreMode = scoreForm.querySelector('input[name="scoreMode"]:checked')?.value || "individual";
       const amount = Math.abs(Number(scoreForm.elements.points?.value || 0));
       const preview = $("#adminScorePreview");
       const submit = $("#scoreSubmit");
+      const balanceHint = $("#adminPointBalanceHint");
       const teamName = teamId ? getTeam(teamId).name : "";
+      const counts = competitionEligibilitySnapshot();
+      const eligible = teamId ? Number(counts[teamId] || 0) : 0;
+      const reference = Math.max(1, ...Object.values(counts).map(Number));
+      const factor = teamId ? competitionPointFactor(teamId, counts) : 1;
+      const adjustedAmount = scoreMode === "individual" && teamId ? adjustedIndividualPoints(amount, teamId, counts) : amount;
+
+      if (balanceHint) {
+        balanceHint.textContent = teamId
+          ? scoreMode === "individual"
+            ? `${teamName}: ${eligible} participantes activos · factor ×${factor.toFixed(2)} (referencia: ${reference}).`
+            : `${teamName}: premio grupal sin compensación. Se cargará exactamente el valor indicado.`
+          : "Elegí un equipo para ver su factor de compensación.";
+      }
 
       if (!teamId || !amount) {
         preview.textContent = teamId ? `${teamName} · falta cantidad` : "Seleccioná un equipo";
@@ -13540,8 +13629,12 @@
       }
 
       const verb = sign < 0 ? "Restar" : "Sumar";
-      preview.textContent = `${verb} ${amount} a ${teamName}`;
-      submit.textContent = `${verb} ${amount} puntos a ${teamName}`;
+      preview.textContent = scoreMode === "individual"
+        ? `${verb} ${adjustedAmount} a ${teamName} · ${amount} base ×${factor.toFixed(2)}`
+        : `${verb} ${amount} a ${teamName}`;
+      submit.textContent = scoreMode === "individual"
+        ? `${verb} ${adjustedAmount} puntos a ${teamName}`
+        : `${verb} ${amount} puntos a ${teamName}`;
       submit.disabled = false;
       submit.classList.toggle("is-negative", sign < 0);
     };
@@ -13552,7 +13645,7 @@
       updateScorePreview();
     }));
 
-    scoreForm?.querySelectorAll('input[name="teamId"], input[name="scoreSign"], input[name="points"]').forEach(input => {
+    scoreForm?.querySelectorAll('input[name="teamId"], input[name="scoreSign"], input[name="scoreMode"], input[name="points"]').forEach(input => {
       input.addEventListener("input", updateScorePreview);
       input.addEventListener("change", updateScorePreview);
     });
@@ -13564,18 +13657,30 @@
       const sign = Number(values.scoreSign || 1);
       const amount = Math.abs(Number(values.points || 0));
       const teamId = values.teamId;
+      const scoreMode = String(values.scoreMode || "individual");
 
       if (!teamId || !amount) {
         toast("Elegí un equipo y una cantidad válida.");
         return;
       }
 
-      if (sign < 0 && !confirm(`¿Restar ${amount} puntos al equipo ${getTeam(teamId).name}?`)) return;
+      const counts = competitionEligibilitySnapshot();
+      const factor = competitionPointFactor(teamId, counts);
+      const adjustedAmount = scoreMode === "individual"
+        ? adjustedIndividualPoints(amount, teamId, counts)
+        : amount;
 
-      const { scoreSign, ...cleanValues } = values;
+      if (sign < 0 && !confirm(`¿Restar ${adjustedAmount} puntos al equipo ${getTeam(teamId).name}?`)) return;
+
+      const { scoreSign, scoreMode: _scoreMode, ...cleanValues } = values;
       const payload = {
         ...cleanValues,
-        points: amount * sign,
+        points: adjustedAmount * sign,
+        pointMode: scoreMode,
+        rawPoints: amount,
+        adjustmentFactor: scoreMode === "individual" ? Number(factor.toFixed(6)) : 1,
+        eligibleCount: Number(counts[teamId] || 0),
+        referenceEligibleCount: Math.max(1, ...Object.values(counts).map(Number)),
         adminPassword: state.adminPassword,
         adminName: "Fede y Vani",
         timestamp: new Date().toISOString()
@@ -13604,7 +13709,7 @@
       saveState();
       scheduleSilentSync();
 
-      toast(`${sign < 0 ? "Se restaron" : "Se sumaron"} ${amount} puntos a ${getTeam(teamId).name}.`);
+      toast(`${sign < 0 ? "Se restaron" : "Se sumaron"} ${adjustedAmount} puntos a ${getTeam(teamId).name}${scoreMode === "individual" ? ` (${amount} base ×${factor.toFixed(2)})` : ""}.`);
       renderCurrentRoute();
     });
 

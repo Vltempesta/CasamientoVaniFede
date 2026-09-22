@@ -1,5 +1,5 @@
 window.WEDDING_APP_DATA = {
-  "appVersion": "Real v2.6 · Ruleta UX sin cero + Guerra estratégica",
+  "appVersion": "Real v2.7 · Balance por asistentes + Ruleta dinámica",
   "couple": {
     "bride": "Vani",
     "groom": "Fede",
@@ -1176,6 +1176,21 @@ window.WEDDING_APP_DATA = {
       ],
       "roleVisible": "Cuñado",
       "displayRelation": "Cuñado"
+    },
+    {
+      "id": "macarena-escuer",
+      "firstName": "Macarena",
+      "lastName": "Escuer",
+      "email": "",
+      "alias": "Maca",
+      "relation": "Invitada",
+      "team": "luz",
+      "role": "invitado",
+      "tags": [
+        "luz"
+      ],
+      "roleVisible": "Invitada",
+      "displayRelation": "Invitada"
     },
     {
       "id": "maggie",
