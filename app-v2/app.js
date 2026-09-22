@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32523";
+  const CURRENT_APP_VERSION = "32524";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32523"
+        appVersion: CONFIG.APP_VERSION || "32524"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32523",
+      appVersion: "32524",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -3109,7 +3109,7 @@
   const WAR_DEFEND_REWARD = 0;
   const PRE_EVENT_SEQUENCE_GAME_ID = "pre-event-timed-sequence-v1";
   const PRE_EVENT_SEQUENCE_GUEST_ID = "system-pre-event-sequence";
-  const PRE_EVENT_STAGE_MS = 48 * 60 * 60 * 1000;
+  const PRE_EVENT_DAY_MS = 24 * 60 * 60 * 1000;
 
   // Ruleta v32523: 8 positivos y 4 negativos, sin cero.
   // La rueda parte de una tabla base calibrada para el equipo activo más grande y se escala
@@ -3157,11 +3157,13 @@
     const record = preEventSequenceRecord();
     if (!record) return null;
     const rouletteStart = record.start;
-    const rouletteEnd = rouletteStart + PRE_EVENT_STAGE_MS;
-    const war1Start = rouletteEnd;
-    const war1End = war1Start + PRE_EVENT_STAGE_MS;
-    const war2Start = war1End;
-    const war2End = war2Start + PRE_EVENT_STAGE_MS;
+    const rouletteEnd = rouletteStart + PRE_EVENT_DAY_MS;
+    // Día 1: Ruleta y Guerra R1 corren en paralelo durante 24 horas.
+    const war1Start = rouletteStart;
+    const war1End = rouletteEnd;
+    // Día 2: Ronda 2 se abre al vencer el primer día, una vez procesada R1.
+    const war2Start = rouletteEnd;
+    const war2End = war2Start + PRE_EVENT_DAY_MS;
     return { rouletteStart, rouletteEnd, war1Start, war1End, war2Start, war2End };
   }
 
@@ -3217,8 +3219,9 @@
     const nowIso = new Date().toISOString();
     const answer = {
       activatedAt: nowIso,
-      durationHoursPerStage: 48,
-      mode: "roulette-war1-war2",
+      dayOneHours: 24,
+      dayTwoHours: 24,
+      mode: "roulette+war1-then-war2",
       eligibleCounts: competitionEligibilitySnapshot()
     };
     const payload = {
@@ -3226,7 +3229,7 @@
       guestId: PRE_EVENT_SEQUENCE_GUEST_ID,
       teamId: "system",
       answer: JSON.stringify(answer),
-      comment: "Secuencia automática: Ruleta 48h → Guerra R1 48h → Guerra R2 48h",
+      comment: "Secuencia automática: Día 1 Ruleta + Guerra R1 (24h) → Día 2 Guerra R2 (24h)",
       earnedPoints: 0,
       status: "active",
       activatedAt: nowIso,
@@ -4574,7 +4577,7 @@
 
     const rank = calculateRanking();
     const deadline =
-      "15 de septiembre de 2026";
+      "24 de septiembre de 2026";
 
     const now = new Date();
     const eventDate = new Date(DATA.couple.eventDate);
@@ -4600,8 +4603,8 @@
         tone: "pending",
         icon: "calendarCheck",
         kicker: "NUEVO PLAZO",
-        title: "CONFIRMÁ ANTES DEL 15/09",
-        text: "Si todavía no respondiste, tenés tiempo hasta el 15 de septiembre.",
+        title: "CONFIRMÁ HASTA EL 24/09",
+        text: "Si todavía no respondiste, tenés tiempo hasta el 24 de septiembre.",
         button: "Confirmar asistencia",
         attr: 'data-go="asistencia"'
       };
@@ -5050,7 +5053,7 @@
         : transportUndecided
           ? "TODAVÍA PODÉS SUMARTE"
           : pendingRsvp
-            ? "NUEVO PLAZO · 15/09"
+            ? "PLAZO FINAL · 24/09"
             : declined
               ? "INFORMACIÓN DE TRASLADOS"
               : "INFORMACIÓN ACTUALIZADA";
@@ -5074,7 +5077,7 @@
         : transportUndecided
           ? "La estancia está en <strong>zona Pilar y queda lejos</strong>. Elegí abajo una salida con lugar."
           : pendingRsvp
-            ? "Revisá horarios y lugares antes de confirmar. Nuevo plazo: <strong>15/09</strong>."
+            ? "Revisá horarios y lugares antes de confirmar. Plazo final: <strong>24/09</strong>."
             : declined
               ? "Información actualizada de los micros."
               : "Horarios y disponibilidad actualizados.";
@@ -5420,7 +5423,7 @@
       !hasSaved ||
       !hasFinalSaved
     );
-    const deadlineLabel = "15 de septiembre de 2026";
+    const deadlineLabel = "24 de septiembre de 2026";
     const savedTransport = ["combi", "micro"].includes(formValues.transport)
       ? "combi"
       : formValues.transport === "auto"
@@ -5659,7 +5662,7 @@
           : "Confirmar asistencia",
         hasSaved
           ? "Actualizá tus datos si necesitás hacer un cambio."
-          : "Nuevo plazo para confirmar: 15 de septiembre de 2026."
+          : "Podés confirmar asistencia hasta el 24 de septiembre de 2026."
       )}
 
       <form
@@ -7159,7 +7162,7 @@
     const rouletteStage = timedStageStatus("roulette");
     const existingResult = rouletteSubmissionFor(currentGuest?.id);
     if (!testMode && !rouletteStage.active && !existingResult) {
-      return newGameLockedCard("Ruleta · Todo o Nada", rouletteStage.expired ? "El plazo de 48 horas terminó. La competencia continúa con Guerra de Equipos." : "Vani y Fede todavía no habilitaron este juego.");
+      return newGameLockedCard("Ruleta · Todo o Nada", rouletteStage.expired ? "El plazo de 24 horas terminó. La competencia continúa con la Ronda 2 de Guerra de Equipos." : "Vani y Fede todavía no habilitaron este juego.");
     }
     if (!currentGuestCanPlayNewGames()) {
       return newGameLockedCard("Ruleta · Todo o Nada", "Este juego es para quienes asisten o todavía no confirmaron. Quienes respondieron NO quedan fuera.");
@@ -7191,7 +7194,7 @@
             </div>
             <div class="roulette-team-next-note">
               <span>⏳</span>
-              <div><strong>${testMode ? "Prueba completada" : "Tu parte ya está hecha"}</strong><p>${testMode ? "Este resultado es sólo de prueba: no se guarda ni suma puntos." : "La Ruleta queda abierta durante 48 horas. Cuando venza, la Ronda 1 de Guerra de Equipos se habilitará automáticamente."}</p></div>
+              <div><strong>${testMode ? "Prueba completada" : "Tu parte ya está hecha"}</strong><p>${testMode ? "Este resultado es sólo de prueba: no se guarda ni suma puntos." : "La Ruleta y la Ronda 1 quedan abiertas durante las primeras 24 horas. Al terminar ese día, se procesa la Ronda 1 y se habilita automáticamente la Ronda 2."}</p></div>
             </div>
             ${testMode ? `<button type="button" class="admin-test-reset-game" data-reset-admin-test="roulette">↻ Probar la Ruleta de nuevo</button>` : ""}
           ` : pendingBase !== null ? `
@@ -7564,17 +7567,17 @@
       : rouletteOpen
         ? "La ruleta está abierta: girá y elegí cuánto riesgo asumir."
         : rouletteTiming.expired
-          ? "La ventana de 48 horas ya terminó."
+          ? "La ventana de 24 horas ya terminó."
           : seqLaunched && rouletteTiming.state === "waiting" ? `Se abre automáticamente en ${formatTimedStageRemaining(rouletteTiming.remainingMs)}.` : "Nuevo juego · se habilitará próximamente.";
     const rouletteProgress = rouletteDone
       ? `${rouletteEarnedPoints > 0 ? "+" : ""}${rouletteEarnedPoints} puntos${testMode ? " de prueba" : " obtenidos"}`
-      : testMode ? "Disponible para test" : rouletteOpen ? timedStageChip("roulette") : "48 horas para jugar";
+      : testMode ? "Disponible para test" : rouletteOpen ? timedStageChip("roulette") : "24 horas para jugar";
 
     const war1Text = war1Done
       ? "Ronda revelada: podés revisar las jugadas y el ranking."
       : war1Open
         ? "Debatan en WhatsApp y voten: sumar, atacar o defender."
-        : war1Timing.expired ? "La ronda terminó y se está procesando." : seqLaunched ? `Se habilita después de la Ruleta · ${timedStageChip("war1")}` : "Se habilita automáticamente después de la Ruleta.";
+        : war1Timing.expired ? "La ronda terminó y se está procesando." : seqLaunched ? `Se habilita junto con la Ruleta · ${timedStageChip("war1")}` : "Se habilita automáticamente junto con la Ruleta.";
     const war2Text = war2Done
       ? "Ronda final revelada."
       : war2Open
@@ -7587,8 +7590,8 @@
       { order:30, icon:"🎯", title:"¿Cuánto conocés a Vani y Fede?", text:triviaDone ? "Trivia completada." : "Respondé 5 preguntas.", done:triviaDone, active:false, route:"trivia-pareja", progressText:triviaDone ? `${coupleEarnedPoints} puntos obtenidos` : `Hasta ${coupleMaxPoints} puntos`, actionLabel:triviaDone ? "ABRIR RESULTADO" : "COMENZAR", locked:(!rsvpDone && !testMode) || !triviaOpen },
       { order:40, icon:"⚖️", title:"¿Vani o Fede?", text:whoTriviaDone ? "Trivia completada." : "Elegí: ¿Vani o Fede?", done:whoTriviaDone, active:false, route:"trivia-quien", progressText:whoTriviaDone ? `${whoEarnedPoints} puntos obtenidos` : `Hasta ${whoMaxPoints} puntos`, actionLabel:whoTriviaDone ? "ABRIR RESULTADO" : "COMENZAR", locked:(!rsvpDone && !testMode) || !whoTriviaOpen },
       { order:50, icon:"🎡", title:"Ruleta · Todo o Nada", text:rouletteText, done:rouletteDone, active:rouletteOpen && !rouletteDone, route:"ruleta", progressText:rouletteProgress, actionLabel:rouletteDone ? "ABRIR RULETA" : "ENTRAR AHORA", locked:!attending || (!rouletteOpen && !rouletteDone) },
-      { order:60, icon:"⚔️", title:"Guerra de Equipos · Ronda 1", text:war1Text, done:war1Done, active:war1Open && !war1Done, route:"guerra", warRound:1, progressText:war1Done ? "Ronda 1 finalizada" : testMode ? "Disponible para test" : war1Open ? timedStageChip("war1") : "48 horas para votar", actionLabel:war1Done ? "ABRIR RONDA" : war1Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 1", locked:!attending || (!war1Open && !war1Done) },
-      { order:70, icon:"🛡️", title:"Guerra de Equipos · Ronda 2", text:war2Text, done:war2Done, active:war2Open && !war2Done, route:"guerra", warRound:2, progressText:war2Done ? "Ronda 2 finalizada" : testMode ? "Disponible para test" : war2Open ? timedStageChip("war2") : "48 horas para votar", actionLabel:war2Done ? "ABRIR RONDA" : war2Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 2", locked:!attending || (!war2Open && !war2Done) }
+      { order:60, icon:"⚔️", title:"Guerra de Equipos · Ronda 1", text:war1Text, done:war1Done, active:war1Open && !war1Done, route:"guerra", warRound:1, progressText:war1Done ? "Ronda 1 finalizada" : testMode ? "Disponible para test" : war1Open ? timedStageChip("war1") : "24 horas para votar", actionLabel:war1Done ? "ABRIR RONDA" : war1Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 1", locked:!attending || (!war1Open && !war1Done) },
+      { order:70, icon:"🛡️", title:"Guerra de Equipos · Ronda 2", text:war2Text, done:war2Done, active:war2Open && !war2Done, route:"guerra", warRound:2, progressText:war2Done ? "Ronda 2 finalizada" : testMode ? "Disponible para test" : war2Open ? timedStageChip("war2") : "24 horas para votar", actionLabel:war2Done ? "ABRIR RONDA" : war2Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 2", locked:!attending || (!war2Open && !war2Done) }
     ];
 
     const pendingCards = cards.filter(card => !card.done).sort((a,b) => Number(b.active)-Number(a.active) || Number(a.locked)-Number(b.locked) || b.order-a.order);
@@ -10552,7 +10555,7 @@
     return `
       <section class="section-card admin-war-control admin-timed-sequence">
         <div class="admin-war-control-head">
-          <div><p class="eyebrow">Juegos nuevos</p><h4>Secuencia automática de 6 días</h4><p>Al lanzar los juegos: Ruleta 48h → Guerra R1 48h → Guerra R2 48h. No hace falta cerrar ni revelar rondas desde Admin.</p></div>
+          <div><p class="eyebrow">Juegos nuevos</p><h4>Secuencia automática de 2 días</h4><p>Al lanzar los juegos empieza el reloj: durante las primeras 24h están abiertas la Ruleta y Guerra R1; al vencer, se procesa R1 y se abre Guerra R2 por otras 24h. No hace falta cerrar ni revelar rondas desde Admin.</p></div>
           <span>${!launched ? "Sin lanzar" : warRoundRevealed(2) ? "Finalizada" : "⏱ Automático"}</span>
         </div>
         <div class="admin-timed-sequence-grid">
@@ -11312,7 +11315,7 @@
               {
                 key: "game-roulette",
                 title: "Lanzar nuevos juegos",
-                text: "Inicia la secuencia automática: Ruleta 48h → Guerra R1 48h → Guerra R2 48h. La Ruleta congela el balance por participantes activos al momento del lanzamiento."
+                text: "Inicia la secuencia automática de 2 días: Día 1 Ruleta + Guerra R1 (24h) → Día 2 Guerra R2 (24h). La Ruleta congela el balance por participantes activos al momento del lanzamiento."
               }
             ].map(game => {
               const open = game.key === "game-roulette" ? manualGameFlag(game.key) : isTriviaGameOpen(game.key);
@@ -14104,7 +14107,7 @@
       const featureMessage = isSectionKey
         ? `${sectionName} ${open ? "habilitada" : "oculta"}.`
         : key === "game-roulette"
-          ? (open ? "Nuevos juegos lanzados: empieza la Ruleta de 48 horas." : "Secuencia de nuevos juegos desactivada.")
+          ? (open ? "Nuevos juegos lanzados: empiezan la Ruleta y Guerra R1 por 24 horas." : "Secuencia de nuevos juegos desactivada.")
           : (open ? "Juego habilitado." : "Juego oculto.");
 
       toast(featureMessage);
