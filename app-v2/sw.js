@@ -1,5 +1,5 @@
 const CACHE_NAME =
-  "vani-fede-static-v32600";
+  "vani-fede-static-v32601";
 const TEAM_LOGO_CACHE_NAME =
   "vani-fede-team-logos-v1";
 
@@ -14,14 +14,14 @@ const TEAM_LOGO_PATHS = [
 
 const APP_SHELL = [
   "./index.html",
-  "./styles.css?v=32600",
-  "./ui-v2.css?v=32600",
-  "./photos.js?v=32600",
-  "./app.js?v=32600",
-  "./config.js?v=32600",
-  "./data.js?v=32600",
-  "./manifest.webmanifest?v=32600",
-  "./assets/branding/vyf-seal.png?v=32600",
+  "./styles.css?v=32601",
+  "./ui-v2.css?v=32601",
+  "./photos.js?v=32601",
+  "./app.js?v=32601",
+  "./config.js?v=32601",
+  "./data.js?v=32601",
+  "./manifest.webmanifest?v=32601",
+  "./assets/branding/vyf-seal.png?v=32601",
   "./icons/icon-32.png",
   "./icons/icon-48.png",
   "./icons/icon-96.png",

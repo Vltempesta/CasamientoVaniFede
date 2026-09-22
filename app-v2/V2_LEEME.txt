@@ -1,4 +1,4 @@
-VANI & FEDE · V2 · v32600
+VANI & FEDE · V2 · v32601
 Base real: v32524. No se reescribió la app desde cero.
 
 FRONTEND

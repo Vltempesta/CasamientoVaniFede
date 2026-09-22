@@ -160,27 +160,39 @@
     return { ok:true, raw };
   }
 
-  function postPhoto(payload, onProgress) {
+  async function postPhoto(payload, onProgress) {
     const endpoint = uploadEndpoint();
-    if (!endpoint || !/^https?:/i.test(endpoint)) return Promise.reject(new Error("La subida de fotos todavía no está conectada al Apps Script."));
-    return new Promise((resolve,reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", endpoint, true);
-      xhr.setRequestHeader("Content-Type", "text/plain;charset=UTF-8");
-      xhr.timeout = 120000;
-      xhr.upload.onprogress = event => {
-        if (event.lengthComputable && typeof onProgress === "function") onProgress(event.loaded / event.total);
-      };
-      xhr.onerror = () => reject(new Error("No se pudo conectar con el álbum."));
-      xhr.ontimeout = () => reject(new Error("La foto tardó demasiado en subir."));
-      xhr.onload = () => {
-        if (xhr.status && (xhr.status < 200 || xhr.status >= 400)) { reject(new Error(`Error ${xhr.status} al subir.`)); return; }
-        const response = parseResponseText(xhr.responseText);
-        if (response?.ok === false) { reject(new Error(response.error || "La foto no pudo guardarse.")); return; }
-        resolve(response);
-      };
-      xhr.send(JSON.stringify(payload));
-    });
+    if (!endpoint || !/^https?:/i.test(endpoint)) {
+      throw new Error("La subida de fotos todavía no está conectada al Apps Script.");
+    }
+
+    // Apps Script Web Apps no exponen CORS de forma fiable para XHR/fetch legible.
+    // En particular, escuchar xhr.upload.onprogress puede disparar un preflight OPTIONS,
+    // que Apps Script no atiende. Enviamos un POST simple en no-cors y verificamos luego
+    // el photoId mediante JSONP. Así mantenemos la carpeta privada sin depender de CORS.
+    if (typeof onProgress === "function") onProgress(0.18);
+
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeoutId = window.setTimeout(() => controller?.abort(), 120000);
+
+    try {
+      await fetch(endpoint, {
+        method: "POST",
+        mode: "no-cors",
+        credentials: "omit",
+        redirect: "follow",
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        body: JSON.stringify(payload),
+        signal: controller?.signal
+      });
+      if (typeof onProgress === "function") onProgress(0.78);
+      return { ok:true, opaque:true };
+    } catch (error) {
+      if (error?.name === "AbortError") throw new Error("La foto tardó demasiado en subir.");
+      throw new Error("No se pudo enviar la foto al álbum.");
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
   }
 
   async function confirmPhotoStored(photoId) {
@@ -236,7 +248,7 @@
           batchIndex: i + 1,
           batchTotal: state.items.length,
           token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-          appVersion: "32600",
+          appVersion: "32601",
           submittedAt: new Date().toISOString(),
           guestId: guest?.id || "",
           guestName: guest ? fullGuestName(guest) : optionalName,
@@ -248,14 +260,19 @@
           lastModified: item.file.lastModified || 0,
           dataBase64: base64
         };
+        let postError = null;
         try {
           await postPhoto(payload, fraction => updateProgress(state, i, Math.max(.08, fraction), `Subiendo ${i+1} de ${state.items.length}`));
-        } catch (postError) {
-          // Apps Script puede guardar correctamente el archivo pero el navegador bloquear la lectura
-          // de la respuesta cross-origin. Confirmamos por JSONP antes de mostrar un error o reintentar.
-          const stored = await confirmPhotoStored(item.id);
-          if (!stored) throw postError;
+        } catch (error) {
+          postError = error;
         }
+
+        updateProgress(state, i, .88, `Confirmando ${i+1} de ${state.items.length}`);
+        const stored = await confirmPhotoStored(item.id);
+        if (!stored) {
+          throw postError || new Error("La foto no quedó confirmada en el álbum. Revisá la conexión e intentá nuevamente.");
+        }
+
         item.status = "uploaded";
         item.error = "";
         success++;
