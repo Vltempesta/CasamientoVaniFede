@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32609";
+  const CURRENT_APP_VERSION = "32610";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32609"
+        appVersion: CONFIG.APP_VERSION || "32610"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32609",
+      appVersion: "32610",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -4855,7 +4855,6 @@
 
   function renderHome() {
     const rsvp = state.rsvps[currentGuest.id];
-    const giftsOpen = isTriviaGameOpen("gifts-section");
     const selectedTransport = String(rsvp?.transport || "");
     const usesMicro =
       rsvp?.attendance === "si" &&
@@ -5031,20 +5030,18 @@
           </button>
         </div>
 
-        ${giftsOpen ? `
-          <button
-            type="button"
-            class="home-gifts-feature"
-            data-go="regalos">
-            <span class="home-gifts-feature-icon">
-              ${uiIcon("gift")}
-            </span>
-            <span class="home-gifts-feature-copy">
-              <strong>Nuestro mejor regalo es tu presencia 🥂</strong>
-            </span>
-            <b aria-hidden="true">›</b>
-          </button>
-        ` : ""}
+        <button
+          type="button"
+          class="home-gifts-feature"
+          data-go="regalos">
+          <span class="home-gifts-feature-icon">
+            ${uiIcon("gift")}
+          </span>
+          <span class="home-gifts-feature-copy">
+            <strong>Nuestro mejor regalo es tu presencia 🥂</strong>
+          </span>
+          <b aria-hidden="true">›</b>
+        </button>
       </section>
     `;
   }
