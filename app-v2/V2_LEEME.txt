@@ -1,4 +1,4 @@
-Vani & Fede · App v32604
+Vani & Fede · App v32605
 Base: v32603 / v32524 core preserved.
 
 Cambios de esta versión:
@@ -18,4 +18,6 @@ IMPORTANTE AL SUBIR A GITHUB PAGES:
 - Reemplazar los archivos de esta carpeta.
 - Conservar el config.js real de producción.
 - Conservar assets/ e icons/ del repositorio.
-- Instalar y desplegar PhotosBackend v32604 para habilitar el contador y la deduplicación completa.
+- Instalar y desplegar PhotosBackend v32605 para habilitar el contador y la deduplicación completa.
+
+- v32605: inicio central restaurado, contador simplificado, aviso pendiente azul y deduplicación reforzada.

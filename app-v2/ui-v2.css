@@ -474,3 +474,76 @@ input,textarea,select{border-radius:13px!important}
   .home-pending-games-v32604{grid-template-columns:38px minmax(0,1fr) 14px;padding:10px 11px!important}.home-pending-games-icon{width:36px;height:36px;border-radius:11px;font-size:18px}
   .bottom-nav-main-circle{width:57px!important;height:57px!important}.bottom-nav-main-circle svg{width:26px!important;height:26px!important}
 }
+
+
+/* ==========================================================
+   v32605 · Inicio / alerta / nav central
+   ========================================================== */
+
+/* Cuenta regresiva: sólo FALTAN + números */
+#view .home-countdown-v32603{
+  grid-template-columns:72px minmax(0,1fr)!important;
+  gap:10px!important;
+  padding:11px 12px!important;
+}
+#view .home-countdown-v32603 .home-countdown-copy{
+  display:grid!important;place-items:center!important;
+  padding:0 10px 0 0!important;border-right:1px solid rgba(255,255,255,.20)!important;
+}
+#view .home-countdown-v32603 .home-countdown-copy>span{
+  color:#fff4e7!important;font-size:10px!important;font-weight:950!important;letter-spacing:.12em!important;line-height:1!important;text-align:center!important;
+}
+#view .home-countdown-v32603 .home-countdown-values-v2>span{
+  background:#fffdf8!important;border-color:rgba(255,255,255,.70)!important;
+}
+
+/* Pendientes: azul, deliberadamente distinto del contador bordó */
+#view .home-pending-games-v32604{
+  border:1px solid rgba(255,255,255,.22)!important;
+  background:linear-gradient(135deg,#365b78 0%,#29475f 100%)!important;
+  color:#fff!important;
+  box-shadow:0 8px 18px rgba(33,52,77,.14)!important;
+}
+#view .home-pending-games-v32604 .home-pending-games-icon{background:rgba(255,255,255,.12)!important}
+#view .home-pending-games-v32604 .home-pending-games-copy small{color:#efd28f!important}
+#view .home-pending-games-v32604 .home-pending-games-copy strong{color:#fff!important}
+#view .home-pending-games-v32604 .home-pending-games-copy em{color:rgba(255,255,255,.76)!important}
+#view .home-pending-games-v32604>b{color:#efd28f!important}
+
+/* Inicio central clásico: círculo bordó limpio y más grande; sin caja/dorado cuadrado */
+.bottom-nav .bottom-nav-main,
+.bottom-nav .bottom-nav-main.active{
+  background:transparent!important;
+  box-shadow:none!important;
+  border:0!important;
+  border-radius:0!important;
+}
+.bottom-nav .bottom-nav-main .bottom-nav-main-circle{
+  position:relative!important;
+  width:64px!important;height:64px!important;
+  display:grid!important;place-items:center!important;
+  margin:0 0 1px!important;
+  padding:0!important;
+  border:5px solid #f7efdf!important;
+  outline:0!important;
+  border-radius:999px!important;
+  background:linear-gradient(145deg,#804052,#682d3b)!important;
+  color:#fffaf2!important;
+  box-shadow:0 9px 22px rgba(116,51,68,.30)!important;
+  overflow:hidden!important;
+}
+.bottom-nav .bottom-nav-main .bottom-nav-main-circle::after{display:none!important}
+.bottom-nav .bottom-nav-main .bottom-nav-main-circle svg{
+  width:29px!important;height:29px!important;stroke-width:1.9!important;color:#fffaf2!important;
+}
+.bottom-nav .bottom-nav-main.active .bottom-nav-main-circle{
+  transform:translateY(-3px) scale(1.03)!important;
+  box-shadow:0 12px 26px rgba(116,51,68,.35)!important;
+}
+.bottom-nav .bottom-nav-main>span:last-child{color:#743344!important;font-size:10px!important;font-weight:950!important}
+
+@media(max-width:560px){
+  #view .home-countdown-v32603{grid-template-columns:64px minmax(0,1fr)!important;padding:10px!important}
+  .bottom-nav .bottom-nav-main .bottom-nav-main-circle{width:61px!important;height:61px!important}
+  .bottom-nav .bottom-nav-main .bottom-nav-main-circle svg{width:27px!important;height:27px!important}
+}

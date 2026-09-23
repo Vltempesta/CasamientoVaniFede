@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32604";
+  const CURRENT_APP_VERSION = "32605";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32604"
+        appVersion: CONFIG.APP_VERSION || "32605"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32604",
+      appVersion: "32605",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -3106,7 +3106,7 @@
       return;
     }
 
-    label.textContent = "Faltan";
+    label.textContent = "FALTAN:";
     days.textContent = String(values.days);
     hours.textContent = String(values.hours).padStart(2, "0");
     minutes.textContent = String(values.minutes).padStart(2, "0");
@@ -4736,8 +4736,8 @@
         ${first.warRound ? `data-war-round="${first.warRound}"` : ""}>
         <span class="home-pending-games-icon" aria-hidden="true">${first.icon}</span>
         <span class="home-pending-games-copy">
-          <small>TE QUEDA ${count === 1 ? "UN JUEGO" : `${count} JUEGOS`}</small>
-          <strong>${count === 1 ? "Tenés un desafío pendiente" : `Tenés ${count} desafíos pendientes`}</strong>
+          <small>${count === 1 ? "TENÉS 1 JUEGO PENDIENTE" : `TENÉS ${count} JUEGOS PENDIENTES`}</small>
+          <strong>${count === 1 ? "Hay un desafío esperando" : "Hay desafíos esperando"}</strong>
           <em>Empezá por ${escapeHTML(first.title)}</em>
         </span>
         <b aria-hidden="true">›</b>
@@ -4766,9 +4766,7 @@
       <section class="home-simple-v32603" aria-label="Inicio Vani y Fede">
         <div id="homeCountdown" class="home-countdown-v2 home-countdown-v32603" aria-label="Cuenta regresiva para el casamiento">
           <div class="home-countdown-copy">
-            <span id="countdownLabel">Faltan</span>
-            <strong>VANI &amp; FEDE</strong>
-            <small>24 · 10 · 2026</small>
+            <span id="countdownLabel">FALTAN:</span>
           </div>
           <div class="home-countdown-values-v2">
             <span><strong id="countdownDays">—</strong><small>días</small></span>

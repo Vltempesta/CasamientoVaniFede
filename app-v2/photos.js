@@ -3,6 +3,7 @@
   const MAX_FILE_BYTES = 25 * 1024 * 1024;
   const ALLOWED_TYPES = new Set(["image/jpeg","image/png","image/webp","image/heic","image/heif"]);
   const instances = new Map();
+  const LOCAL_DEDUP_KEY = "vf_photo_fingerprints_v2";
 
   function escapeHTML(value) {
     return String(value ?? "")
@@ -159,13 +160,96 @@
     }
   }
 
-  async function photoHashAlreadyStored(photoHash) {
-    if (!photoHash) return false;
+  async function sha256Text(value) {
+    if (!window.crypto?.subtle) return "";
     try {
-      const response = await jsonp("getPhotoUploadStatus", { photoHash });
+      const bytes = new TextEncoder().encode(String(value || ""));
+      const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+      return Array.from(new Uint8Array(digest)).map(v => v.toString(16).padStart(2,"0")).join("");
+    } catch (_) { return ""; }
+  }
+
+  async function sourceFingerprint(file) {
+    if (!file) return "";
+    return sha256Text([
+      String(file.name || "").toLowerCase(),
+      Number(file.size || 0),
+      Number(file.lastModified || 0),
+      String(file.type || "").toLowerCase()
+    ].join("|"));
+  }
+
+  async function visualFingerprint(file) {
+    if (!file || !window.crypto?.subtle) return "";
+    let bitmap = null;
+    let objectUrl = "";
+    try {
+      if (window.createImageBitmap) bitmap = await createImageBitmap(file);
+      let source = bitmap;
+      if (!source) {
+        objectUrl = URL.createObjectURL(file);
+        source = await new Promise((resolve,reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = objectUrl;
+        });
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = 9; canvas.height = 8;
+      const ctx = canvas.getContext("2d", { willReadFrequently:true });
+      if (!ctx) return "";
+      ctx.drawImage(source,0,0,9,8);
+      const data = ctx.getImageData(0,0,9,8).data;
+      let bits = "";
+      for (let y=0;y<8;y++) {
+        for (let x=0;x<8;x++) {
+          const i=(y*9+x)*4, j=(y*9+x+1)*4;
+          const a=data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114;
+          const b=data[j]*0.299+data[j+1]*0.587+data[j+2]*0.114;
+          bits += a > b ? "1" : "0";
+        }
+      }
+      let hex="";
+      for (let i=0;i<64;i+=4) hex += parseInt(bits.slice(i,i+4),2).toString(16);
+      return hex.padStart(16,"0");
+    } catch (_) {
+      return "";
+    } finally {
+      try { bitmap?.close?.(); } catch (_) {}
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  function loadLocalFingerprints() {
+    try {
+      const value = JSON.parse(localStorage.getItem(LOCAL_DEDUP_KEY) || "[]");
+      return new Set(Array.isArray(value) ? value : []);
+    } catch (_) { return new Set(); }
+  }
+
+  function rememberLocalFingerprints(...values) {
+    try {
+      const set = loadLocalFingerprints();
+      values.filter(Boolean).forEach(value => set.add(String(value)));
+      localStorage.setItem(LOCAL_DEDUP_KEY, JSON.stringify(Array.from(set).slice(-3000)));
+    } catch (_) {}
+  }
+
+  function localFingerprintSeen(...values) {
+    const set = loadLocalFingerprints();
+    return values.filter(Boolean).some(value => set.has(String(value)));
+  }
+
+  async function photoAlreadyStored(fingerprints) {
+    const photoHash = fingerprints?.photoHash || "";
+    const sourceFingerprint = fingerprints?.sourceFingerprint || "";
+    const visualFingerprint = fingerprints?.visualFingerprint || "";
+    if (!photoHash && !sourceFingerprint && !visualFingerprint) return false;
+    try {
+      const response = await jsonp("getPhotoUploadStatus", { photoHash, sourceFingerprint, visualFingerprint });
       return Boolean(response?.data?.found === true && response?.data?.duplicate === true);
     } catch (_) {
-      // Si el backend todavía no fue actualizado, dejamos que la deduplicación del servidor decida.
       return false;
     }
   }
@@ -296,9 +380,17 @@
         updateProgress(state, i, 0.03, `Revisando ${i+1} de ${state.items.length}`);
 
         item.photoHash = item.photoHash || await sha256File(item.file);
-        if (item.photoHash && await photoHashAlreadyStored(item.photoHash)) {
+        item.sourceFingerprint = item.sourceFingerprint || await sourceFingerprint(item.file);
+        item.visualFingerprint = item.visualFingerprint || await visualFingerprint(item.file);
+        const fingerprints = {
+          photoHash:item.photoHash || "",
+          sourceFingerprint:item.sourceFingerprint || "",
+          visualFingerprint:item.visualFingerprint || ""
+        };
+        if (localFingerprintSeen(fingerprints.photoHash, fingerprints.sourceFingerprint, fingerprints.visualFingerprint) || await photoAlreadyStored(fingerprints)) {
           item.status = "duplicate";
           item.error = "";
+          rememberLocalFingerprints(fingerprints.photoHash, fingerprints.sourceFingerprint, fingerprints.visualFingerprint);
           duplicates++;
           renderSelection(state);
           updateProgress(state, i + 1, 0, `${success} nuevas · ${duplicates} ya estaban`);
@@ -314,7 +406,7 @@
           batchIndex: i + 1,
           batchTotal: state.items.length,
           token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-          appVersion: "32604",
+          appVersion: "32605",
           submittedAt: new Date().toISOString(),
           guestId: guest?.id || "",
           guestName: guest ? fullGuestName(guest) : optionalName,
@@ -325,6 +417,8 @@
           size: item.file.size,
           lastModified: item.file.lastModified || 0,
           photoHash: item.photoHash || "",
+          sourceFingerprint: item.sourceFingerprint || "",
+          visualFingerprint: item.visualFingerprint || "",
           dataBase64: base64
         };
         let postError = null;
@@ -342,6 +436,7 @@
 
         item.status = stored.duplicate ? "duplicate" : "uploaded";
         item.error = "";
+        rememberLocalFingerprints(item.photoHash, item.sourceFingerprint, item.visualFingerprint);
         if (stored.duplicate) duplicates++;
         else success++;
       } catch (error) {
