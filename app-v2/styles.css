@@ -14703,3 +14703,46 @@ summary > b {
   color:#fff !important;
   font-size:7px !important;
 }
+
+
+/* ============================================================
+   v32620 · Menú hamburguesa realmente minimalista
+   ============================================================ */
+#mainMenu .nav-tabs .menu-group button .menu-item-icon,
+#mainMenu .menu-logout .menu-item-icon{
+  width:28px !important;
+  height:28px !important;
+  min-width:28px !important;
+  display:grid !important;
+  place-items:center !important;
+  background:transparent !important;
+  border:0 !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+  color:#74736f !important;
+  font-size:0 !important;
+}
+#mainMenu .menu-item-icon .menu-icon-svg{
+  display:block !important;
+  width:19px !important;
+  height:19px !important;
+  color:inherit !important;
+}
+#mainMenu .nav-tabs .menu-group button{
+  color:#5f6d7c !important;
+}
+#mainMenu .nav-tabs .menu-group button:hover .menu-item-icon{
+  color:#21344d !important;
+}
+#mainMenu .nav-tabs .menu-group button.active{
+  color:#743344 !important;
+}
+#mainMenu .nav-tabs .menu-group button.active .menu-item-icon{
+  color:#743344 !important;
+}
+#mainMenu .nav-tabs .menu-group button.is-section-locked{
+  opacity:.48 !important;
+}
+#mainMenu .nav-tabs .menu-group button.is-section-locked .menu-item-icon{
+  color:#8e8b86 !important;
+}

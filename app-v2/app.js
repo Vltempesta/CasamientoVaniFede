@@ -1,11 +1,14 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32619";
+  const CURRENT_APP_VERSION = "32620";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
   const LAST_BACKUP_KEY = "vf_last_backup_at";
+  const TABLE_ASSIGNMENT_GAME_ID = "event-table-assignment-v1";
+  const TRANSPORT_CHECKIN_GAME_ID = "event-transport-checkin-v1";
+  const ADMIN_OPERATOR_STORAGE_KEY = "vf_admin_points_operator_v1";
   const ONLINE_COPY = {
     idle: "Conexión pendiente",
     connecting: "Consultando datos…",
@@ -426,7 +429,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32619"
+        appVersion: CONFIG.APP_VERSION || "32620"
       })
     );
   }
@@ -1077,7 +1080,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32619",
+      appVersion: "32620",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2130,15 +2133,22 @@
       "settings"
     ];
 
+    const previous = adminSubsection;
     adminSubsection = allowed.includes(requested)
       ? requested
       : "dashboard";
 
-    renderCurrentRoute();
-
-    window.requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
+    try {
+      renderCurrentRoute();
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    } catch (error) {
+      console.error("Error abriendo subsección Admin:", adminSubsection, error);
+      adminSubsection = previous || "dashboard";
+      toast("No se pudo abrir esa sección de Admin.");
+      renderCurrentRoute();
+    }
   }
 
   window.VF_ADMIN_OPEN = openAdminSubsection_;
@@ -12001,15 +12011,14 @@
       ${renderAdminPeopleModal()}
 
       <section class="admin-subsection-launchers">
-        <button type="button" class="admin-subsection-launcher admin-subsection-launcher-event" data-admin-subsection="event" onclick="window.VF_ADMIN_OPEN && window.VF_ADMIN_OPEN('event')">
+        <button type="button" class="admin-subsection-launcher admin-subsection-launcher-event" data-admin-subsection="event">
           <span class="admin-subsection-launcher-icon">🚌</span>
           <span><small>Mini sección</small><strong>Operación en vivo</strong><em>Mesas y check-in de micros</em></span><b aria-hidden="true">›</b>
         </button>
         <button
           type="button"
           class="admin-subsection-launcher admin-subsection-launcher-points"
-          data-admin-subsection="points"
-          onclick="window.VF_ADMIN_OPEN && window.VF_ADMIN_OPEN('points')">
+          data-admin-subsection="points">
           <span class="admin-subsection-launcher-icon">
             ${uiIcon("star")}
           </span>
@@ -13795,17 +13804,6 @@
         renderCurrentRoute();
       }));
     }
-
-    $$("[data-admin-subsection]").forEach(button => {
-      button.addEventListener("click", event => {
-        event.preventDefault();
-        openAdminSubsection_(
-          button.dataset.adminSubsection || "dashboard"
-        );
-      });
-    });
-
-
 
     $$("[data-admin-response-team]")
       .forEach(button => {
