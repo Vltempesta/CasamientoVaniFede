@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32607";
+  const CURRENT_APP_VERSION = "32609";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32607"
+        appVersion: CONFIG.APP_VERSION || "32609"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32607",
+      appVersion: "32609",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2082,7 +2082,7 @@
         <div class="photos-public-shell">
           <div class="photos-public-inner">
             <div class="photos-public-brand"><strong>VANI &amp; FEDE</strong><small>24 · 10 · 2026</small></div>
-            <section class="section-card photos-coming-soon-v32607">
+            <section class="section-card photos-coming-soon-v32608">
               <span aria-hidden="true">📸</span>
               <small>ÁLBUM COLABORATIVO</small>
               <h2>Las fotos se habilitan el 23/10</h2>
@@ -4077,6 +4077,18 @@
 
     let changed = false;
 
+    if (route === "traslado") {
+      $("#transportCheckinToggle")?.addEventListener("click", async event => {
+        const current = transportCheckinFor(currentGuest.id).present;
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = current ? "Actualizando…" : "Registrando…";
+        const ok = await saveAdminGuestMeta({ guestId: currentGuest.id, gameId: TRANSPORT_CHECKIN_GAME_ID, answer: { present: !current, source: "guest" }, comment: !current ? "Check-in informado por invitado" : "Check-in desmarcado por invitado" });
+        toast(ok ? (!current ? "¡Listo! Avisamos que ya llegaste." : "Check-in desmarcado.") : "No pudimos actualizar el check-in.");
+        renderCurrentRoute();
+      });
+    }
+
     if (route === "social") {
       const latest = latestVisibleSocialTime();
       if (latest > record.socialSeenAt) {
@@ -4346,6 +4358,49 @@
   function gameSubmissionFor(guestId, gameId) {
     if (!guestId || !gameId) return null;
     return state.gameSubmissions?.[`${guestId}::${gameId}`] || null;
+  }
+
+  function tableAssignmentFor(guestId = currentGuest?.id) {
+    const raw = gameSubmissionFor(guestId, TABLE_ASSIGNMENT_GAME_ID);
+    if (!raw) return null;
+    const data = safeJsonObject(raw.answer);
+    const table = String(data.table || raw.table || "").trim();
+    if (!table) return null;
+    return { table, note: String(data.note || raw.note || "").trim(), updatedAt: raw.updatedAt || raw.submittedAt || "" };
+  }
+
+  function transportCheckinFor(guestId = currentGuest?.id) {
+    const raw = gameSubmissionFor(guestId, TRANSPORT_CHECKIN_GAME_ID);
+    if (!raw) return { present: false, source: "", updatedAt: "" };
+    const data = safeJsonObject(raw.answer);
+    return {
+      present: data.present === true || String(data.present || raw.present || "").toLowerCase() === "true",
+      source: String(data.source || raw.source || ""),
+      updatedAt: raw.updatedAt || raw.submittedAt || ""
+    };
+  }
+
+  async function saveAdminGuestMeta({ guestId, gameId, answer, comment = "" }) {
+    const guest = getGuestById(guestId);
+    if (!guest || !gameId) return false;
+    const now = new Date().toISOString();
+    const payload = {
+      gameId, guestId, teamId: guest.team,
+      answer: JSON.stringify(answer || {}),
+      comment, earnedPoints: 0, status: "completed",
+      updatedAt: now, submittedAt: now,
+      requestId: newRequestId(gameId)
+    };
+    const result = await writeToSheets("saveGameSubmission", payload, { silent: true, allowPreview: true });
+    if (!result) return false;
+    state.gameSubmissions[`${guestId}::${gameId}`] = { ...payload, ...(result.record || {}), pendingSync: false };
+    saveState();
+    scheduleSilentSync();
+    return true;
+  }
+
+  function adminPointsOperator() {
+    return localStorage.getItem(ADMIN_OPERATOR_STORAGE_KEY) || "Fede & Vani";
   }
 
   // Compatibilidad con el resto de la lógica: para los juegos nuevos, "confirmados" significa
@@ -4800,6 +4855,7 @@
 
   function renderHome() {
     const rsvp = state.rsvps[currentGuest.id];
+    const giftsOpen = isTriviaGameOpen("gifts-section");
     const selectedTransport = String(rsvp?.transport || "");
     const usesMicro =
       rsvp?.attendance === "si" &&
@@ -4938,6 +4994,17 @@
             </div>
           </button>
 
+          ${tableAssignmentFor(currentGuest.id) ? `
+            <article class="home-essential-row home-essential-table">
+              <span class="home-essential-icon">${uiIcon("seat")}</span>
+              <div>
+                <small>Tu mesa</small>
+                <strong>Mesa ${escapeHTML(tableAssignmentFor(currentGuest.id).table)}</strong>
+                <p>${escapeHTML(tableAssignmentFor(currentGuest.id).note || "Asignación confirmada")}</p>
+              </div>
+            </article>
+          ` : ""}
+
           <article class="home-essential-row home-essential-dress">
             <span class="home-essential-icon">
               ${uiIcon("dress")}
@@ -4963,6 +5030,21 @@
             </div>
           </button>
         </div>
+
+        ${giftsOpen ? `
+          <button
+            type="button"
+            class="home-gifts-feature"
+            data-go="regalos">
+            <span class="home-gifts-feature-icon">
+              ${uiIcon("gift")}
+            </span>
+            <span class="home-gifts-feature-copy">
+              <strong>Nuestro mejor regalo es tu presencia 🥂</strong>
+            </span>
+            <b aria-hidden="true">›</b>
+          </button>
+        ` : ""}
       </section>
     `;
   }
@@ -5185,6 +5267,19 @@
           </div>
         </div>
       </section>
+
+
+      ${usesMicro && isWeddingDayMode() ? `
+        <section class="section-card transport-checkin-card ${transportCheckinFor(currentGuest.id).present ? "is-present" : ""}">
+          <span>${transportCheckinFor(currentGuest.id).present ? "✓" : "📍"}</span>
+          <div>
+            <small>CHECK-IN DEL MICRO</small>
+            <strong>${transportCheckinFor(currentGuest.id).present ? "Ya avisaste que llegaste" : "¿Ya estás en el punto de salida?"}</strong>
+            <p>${transportCheckinFor(currentGuest.id).present ? "Tu presencia quedó registrada." : "Avisá con un toque para que podamos saber que ya estás ahí."}</p>
+          </div>
+          <button type="button" id="transportCheckinToggle">${transportCheckinFor(currentGuest.id).present ? "Desmarcar" : "Ya llegué"}</button>
+        </section>
+      ` : ""}
 
 
 
@@ -6646,6 +6741,8 @@
         <b aria-hidden="true">›</b>
       </button>
 
+      ${isGuestCaptain(currentGuest) && selectedTeamId === currentGuest.team ? renderCaptainPanel(currentGuest.team) : ""}
+
       <section class="team-attendance-mini team-challenge-mini section-card">
         <span>${uiIcon("star")}</span>
         <div>
@@ -6707,6 +6804,25 @@
     </style>`;
   }
 
+
+  function renderCaptainPanel(teamId) {
+    const members = timedCompetitionMembers(teamId);
+    const rouletteDone = members.filter(g => rouletteSubmissionFor(g.id)?.status === "completed");
+    const r1Votes = members.filter(g => warVoteForGuest(g.id, 1));
+    const r2Votes = members.filter(g => warVoteForGuest(g.id, 2));
+    const stage = timedStageStatus("roulette").active ? "roulette" : timedStageStatus("war1").active ? "war1" : timedStageStatus("war2").active ? "war2" : "idle";
+    const pending = stage === "roulette" ? members.filter(g => !rouletteSubmissionFor(g.id)?.status) : stage === "war1" ? members.filter(g => !warVoteForGuest(g.id, 1)) : stage === "war2" ? members.filter(g => !warVoteForGuest(g.id, 2)) : [];
+    return `
+      <section class="section-card captain-live-panel">
+        <div class="captain-live-head"><span>🧭</span><div><small>PANEL DEL CAPITÁN</small><strong>Mové a tu equipo</strong><p>Ves participación, no votos individuales.</p></div></div>
+        <div class="captain-live-stats">
+          <div><small>Ruleta</small><b>${rouletteDone.length}/${members.length}</b></div>
+          <div><small>Guerra R1</small><b>${r1Votes.length}/${members.length}</b></div>
+          <div><small>Guerra R2</small><b>${r2Votes.length}/${members.length}</b></div>
+        </div>
+        ${pending.length ? `<details class="captain-pending-list"><summary>${pending.length} ${pending.length===1?"persona pendiente":"personas pendientes"}</summary><div>${pending.map(g=>`<span>${escapeHTML(guestFullName(g))}</span>`).join("")}</div></details>` : stage !== "idle" ? `<div class="captain-all-done">✓ Todo tu equipo ya participó en esta etapa.</div>` : `<div class="captain-all-done is-idle">El panel se activa cuando haya un juego en curso.</div>`}
+      </section>`;
+  }
 
   function captainGuestStyles() {
     return `<style>
@@ -10990,6 +11106,31 @@
       </section>
     `;
 
+    if (adminSubsection === "event") {
+      const activeGuests = DATA.guests.filter(g => isCompetitionGuest(g) && state.rsvps[g.id]?.attendance !== "no").sort((a,b)=>guestFullName(a).localeCompare(guestFullName(b),"es"));
+      const zones = [
+        ["capital-obelisco","Capital · Obelisco"], ["wilde","Wilde"], ["longchamps","Longchamps"]
+      ];
+      return `
+        ${adminHeader}
+        ${renderAdminSubsectionHeader({icon:"coach",eyebrow:"Día del evento",title:"Operación en vivo",text:"Asignación de mesas y check-in de micros desde un solo lugar."})}
+        <section class="section-card admin-table-assign-card">
+          <div><p class="eyebrow">MESAS</p><h4>Asignar mesa a un invitado</h4><p>La mesa aparece automáticamente en “Lo esencial” del invitado.</p></div>
+          <form id="adminTableAssignForm" class="admin-table-assign-form">
+            <label>Invitado<select name="guestId" required><option value="">Elegí una persona</option>${activeGuests.map(g=>`<option value="${g.id}">${escapeHTML(guestFullName(g))} · ${escapeHTML(getTeam(g.team).name)}</option>`).join("")}</select></label>
+            <label>Mesa<input name="table" type="text" inputmode="numeric" placeholder="Ej: 7" required></label>
+            <label>Nota <input name="note" type="text" placeholder="Opcional"></label>
+            <button type="submit">Guardar mesa</button>
+          </form>
+        </section>
+        <section class="section-card admin-checkin-card">
+          <div><p class="eyebrow">MICROS</p><h4>Check-in de pasajeros</h4><p>Marcá presentes desde acá o dejá que cada invitado toque “Ya llegué”.</p></div>
+          <div class="admin-checkin-zones">
+            ${zones.map(([zone,label])=>{ const people=activeGuests.filter(g=>usesMicro(g)&&state.rsvps[g.id]?.pickupZone===zone); const present=people.filter(g=>transportCheckinFor(g.id).present).length; return `<details><summary><span>${escapeHTML(label)}</span><b>${present}/${people.length} presentes</b></summary><div>${people.map(g=>`<button type="button" class="admin-checkin-person ${transportCheckinFor(g.id).present?"is-present":""}" data-checkin-guest="${g.id}"><span>${transportCheckinFor(g.id).present?"✓":"○"}</span><strong>${escapeHTML(guestFullName(g))}</strong><small>${escapeHTML(getTeam(g.team).name)}</small></button>`).join("")||`<p>No hay pasajeros asignados.</p>`}</div></details>`; }).join("")}
+          </div>
+        </section>`;
+    }
+
     if (adminSubsection === "points") {
       return `
         ${adminHeader}
@@ -11002,6 +11143,28 @@
         })}
 
         ${renderAdminRankingSnapshot()}
+
+        <section class="section-card admin-live-score-console">
+          <div class="admin-live-score-head">
+            <div><p class="eyebrow">DÍA DEL EVENTO</p><h4>Carga rápida de puntos</h4><p>Para Euge, Daniela o ustedes. Elegí quién está cargando y tocá el puntaje del equipo.</p></div>
+          </div>
+          <div class="admin-operator-picker" role="group" aria-label="Responsable de la carga">
+            ${["Fede & Vani","Euge","Daniela"].map(name => `<button type="button" data-admin-operator="${escapeHTML(name)}" class="${adminPointsOperator()===name?"is-active":""}">${escapeHTML(name)}</button>`).join("")}
+          </div>
+          <div class="admin-quick-mode-row">
+            <label><input type="radio" name="quickScoreMode" value="individual" checked><span>👤 Individual compensado</span></label>
+            <label><input type="radio" name="quickScoreMode" value="team"><span>🏆 Equipo exacto</span></label>
+          </div>
+          <label class="admin-quick-reason">Motivo
+            <select id="adminQuickReason">
+              <option>Kermesse</option><option>Juego de cena</option><option>Juego del micro</option><option>Ramo / Whisky</option><option>Espíritu de equipo</option><option>Ajuste manual</option>
+            </select>
+          </label>
+          <div class="admin-quick-team-list">
+            ${Object.values(DATA.teams).map(team => `<article style="--local-accent:${team.accent}">${teamLogo(team,"admin-quick-team-logo")}<div><strong>${escapeHTML(team.name)}</strong><small>${calculateRanking().find(r=>r.id===team.id)?.total||0} pts</small></div><div class="admin-quick-buttons">${[10,25,50,100].map(v=>`<button type="button" data-quick-score-team="${team.id}" data-quick-score="${v}">+${v}</button>`).join("")}</div></article>`).join("")}
+          </div>
+          <p class="admin-quick-foot">En modo individual se aplica automáticamente el factor de compensación por tamaño del equipo.</p>
+        </section>
 
         <form
           id="scoreForm"
@@ -11713,6 +11876,10 @@
       ${renderAdminPeopleModal()}
 
       <section class="admin-subsection-launchers">
+        <button type="button" class="admin-subsection-launcher admin-subsection-launcher-event" data-admin-subsection="event">
+          <span class="admin-subsection-launcher-icon">🚌</span>
+          <span><small>Mini sección</small><strong>Operación en vivo</strong><em>Mesas y check-in de micros</em></span><b aria-hidden="true">›</b>
+        </button>
         <button
           type="button"
           class="admin-subsection-launcher admin-subsection-launcher-points"
@@ -13482,6 +13649,27 @@
       void window.WeddingPhotoUploader?.bindAdminView?.(document.getElementById("view"), { adminPassword: state.adminPassword });
     }
 
+    if (adminSubsection === "event") {
+      $("#adminTableAssignForm")?.addEventListener("submit", async event => {
+        event.preventDefault();
+        const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+        if (!values.guestId || !String(values.table||"").trim()) return;
+        const button = event.currentTarget.querySelector('button[type="submit"]');
+        if (button) { button.disabled = true; button.textContent = "Guardando…"; }
+        const ok = await saveAdminGuestMeta({ guestId: values.guestId, gameId: TABLE_ASSIGNMENT_GAME_ID, answer: { table: String(values.table).trim(), note: String(values.note||"").trim() }, comment: `Mesa ${String(values.table).trim()}` });
+        toast(ok ? "Mesa asignada ✓" : "No se pudo guardar la mesa.");
+        renderCurrentRoute();
+      });
+      $$("[data-checkin-guest]").forEach(button => button.addEventListener("click", async () => {
+        const guestId = button.dataset.checkinGuest;
+        const current = transportCheckinFor(guestId).present;
+        button.disabled = true;
+        const ok = await saveAdminGuestMeta({ guestId, gameId: TRANSPORT_CHECKIN_GAME_ID, answer: { present: !current, source: "admin" }, comment: !current ? "Check-in marcado desde Admin" : "Check-in desmarcado desde Admin" });
+        toast(ok ? (!current ? "Presente marcado ✓" : "Presente desmarcado") : "No se pudo actualizar.");
+        renderCurrentRoute();
+      }));
+    }
+
     $$("[data-admin-subsection]").forEach(button => {
       button.addEventListener("click", () => {
         const requested =
@@ -13489,6 +13677,7 @@
 
         adminSubsection = [
           "dashboard",
+          "event",
           "points",
           "responses",
           "photos",
@@ -13690,6 +13879,35 @@
     }));
     adminModal?.addEventListener("click", event => { if (event.target === adminModal || event.target.closest("[data-admin-modal-close]")) closeAdminModal(); });
 
+    $$("[data-admin-operator]").forEach(button => button.addEventListener("click", () => {
+      localStorage.setItem(ADMIN_OPERATOR_STORAGE_KEY, button.dataset.adminOperator || "Fede & Vani");
+      renderCurrentRoute();
+    }));
+
+    $$("[data-quick-score-team]").forEach(button => button.addEventListener("click", async () => {
+      const teamId = button.dataset.quickScoreTeam;
+      const base = Number(button.dataset.quickScore || 0);
+      const mode = document.querySelector('input[name="quickScoreMode"]:checked')?.value || "individual";
+      const reason = $("#adminQuickReason")?.value || "Carga rápida";
+      const counts = competitionEligibilitySnapshot();
+      const factor = competitionPointFactor(teamId, counts);
+      const points = mode === "individual" ? adjustedIndividualPoints(base, teamId, counts) : base;
+      const team = getTeam(teamId);
+      if (!confirm(`¿Sumar ${points} puntos a ${team.name}?\n\n${reason} · ${adminPointsOperator()}`)) return;
+      button.disabled = true;
+      const payload = {
+        gameId: "discrecional-fede-vani", teamId, points, rawPoints: base, pointMode: mode,
+        adjustmentFactor: mode === "individual" ? Number(factor.toFixed(6)) : 1,
+        eligibleCount: Number(counts[teamId] || 0), referenceEligibleCount: Math.max(1, ...Object.values(counts).map(Number)),
+        comment: `${reason} · carga rápida`, adminPassword: state.adminPassword, adminName: adminPointsOperator(),
+        timestamp: new Date().toISOString(), requestId: newRequestId("saveScore")
+      };
+      const result = await writeToSheets("saveScore", payload);
+      if (!result) { toast("No se pudo guardar el movimiento."); renderCurrentRoute(); return; }
+      state.scoreEntries.push(result.record || payload); state.scoreEntries = dedupeScores(state.scoreEntries); saveState(); scheduleSilentSync();
+      toast(`+${points} a ${team.name} · ${reason}`); renderCurrentRoute();
+    }));
+
     const scoreForm = $("#scoreForm");
     const updateScorePreview = () => {
       if (!scoreForm) return;
@@ -13777,7 +13995,7 @@
         eligibleCount: Number(counts[teamId] || 0),
         referenceEligibleCount: Math.max(1, ...Object.values(counts).map(Number)),
         adminPassword: state.adminPassword,
-        adminName: "Fede y Vani",
+        adminName: adminPointsOperator(),
         timestamp: new Date().toISOString()
       };
 
