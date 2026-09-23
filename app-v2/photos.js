@@ -1,6 +1,6 @@
 (() => {
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const APP_VERSION = "32606";
+  const APP_VERSION = "32607";
   const MAX_FILE_BYTES = 25 * 1024 * 1024;
   const ALLOWED_TYPES = new Set(["image/jpeg","image/png","image/webp","image/heic","image/heif"]);
   const LOCAL_DEDUP_KEY = "vf_photo_fingerprints_v3";

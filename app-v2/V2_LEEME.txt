@@ -24,3 +24,6 @@ IMPORTANTE AL SUBIR A GITHUB PAGES:
 
 
 v32606: Fotos usa cola local persistente en IndexedDB, hasta 2 subidas simultáneas, reanudación al volver a abrir la app y estado global no bloqueante. El backend sigue validando y deduplicando antes de guardar en Drive.
+
+
+v32607: mejora contraste de lugares disponibles en Traslados. Fotos se habilita públicamente el 23/10/2026; antes de esa fecha queda oculta para invitados y el QR muestra un aviso de próxima habilitación.

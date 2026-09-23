@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32606";
+  const CURRENT_APP_VERSION = "32607";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32606"
+        appVersion: CONFIG.APP_VERSION || "32607"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32606",
+      appVersion: "32607",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2046,6 +2046,21 @@
     });
   }
 
+  const PHOTOS_PUBLIC_LAUNCH_AT = new Date("2026-10-23T00:00:00-03:00").getTime();
+
+  function photosSectionAvailable() {
+    return Date.now() >= PHOTOS_PUBLIC_LAUNCH_AT;
+  }
+
+  function applyPhotosAvailabilityUi() {
+    const available = photosSectionAvailable() || isAdminTestMode();
+    document.querySelectorAll('.nav-tabs button[data-route="fotos"]').forEach(button => {
+      button.classList.toggle("hidden", !available);
+      button.setAttribute("aria-hidden", available ? "false" : "true");
+      button.tabIndex = available ? 0 : -1;
+    });
+  }
+
   function requestedInitialSection() {
     try {
       const query = new URLSearchParams(location.search).get("seccion");
@@ -2057,9 +2072,39 @@
 
   function showPublicPhotosEntry() {
     const host = document.getElementById("photoPublicScreen");
-    if (!host || !window.WeddingPhotoUploader) return false;
+    if (!host) return false;
     document.getElementById("loginScreen")?.classList.add("hidden");
     document.getElementById("mainScreen")?.classList.add("hidden");
+
+    if (!photosSectionAvailable()) {
+      host.classList.remove("hidden");
+      host.innerHTML = `
+        <div class="photos-public-shell">
+          <div class="photos-public-inner">
+            <div class="photos-public-brand"><strong>VANI &amp; FEDE</strong><small>24 · 10 · 2026</small></div>
+            <section class="section-card photos-coming-soon-v32607">
+              <span aria-hidden="true">📸</span>
+              <small>ÁLBUM COLABORATIVO</small>
+              <h2>Las fotos se habilitan el 23/10</h2>
+              <p>Desde ese día vas a poder subir directamente desde tu celular las fotos que quieras compartir con Vani &amp; Fede.</p>
+              <button type="button" class="photos-public-enter" data-photo-locked-enter>Entrar a la app</button>
+            </section>
+          </div>
+        </div>`;
+      host.querySelector("[data-photo-locked-enter]")?.addEventListener("click", () => {
+        host.classList.add("hidden");
+        host.innerHTML = "";
+        document.getElementById("loginScreen")?.classList.remove("hidden");
+        const url = new URL(location.href);
+        url.searchParams.delete("seccion");
+        url.hash = "";
+        history.replaceState({ screen:"login" }, "", url.pathname + url.search);
+        document.getElementById("guestName")?.focus();
+      });
+      return true;
+    }
+
+    if (!window.WeddingPhotoUploader) return false;
     window.WeddingPhotoUploader.mountPublic(host, {
       onEnterApp: () => {
         host.classList.add("hidden");
@@ -2085,6 +2130,7 @@
     updateAdminTestLoginUi();
     fillGuestSuggestions();
     configureNavigation();
+    applyPhotosAvailabilityUi();
     preloadTeamLogos();
     configureInstallExperience();
     registerServiceWorker();
@@ -2092,6 +2138,7 @@
     bindShellEvents();
     window.addEventListener("popstate", handleBrowserNavigation);
     window.addEventListener("focus", () => {
+      applyPhotosAvailabilityUi();
       syncUnlocksWhenAppReturns();
       checkVersionWhenAppReturns();
       void ensureTimedCompetitionState();
@@ -2110,6 +2157,7 @@
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
+        applyPhotosAvailabilityUi();
         syncUnlocksWhenAppReturns();
         checkVersionWhenAppReturns();
         void ensureTimedCompetitionState();
@@ -2148,6 +2196,8 @@
 
     migrateSectionNotificationBaselineBeforeSync();
     updateNotificationUi();
+
+    applyPhotosAvailabilityUi();
 
     window.setTimeout(() => {
       syncUnlockState({
@@ -2559,6 +2609,10 @@
     if (route === "ficha" || route === "juegos" || route === "info") route = "inicio";
     if (route === "torneo") route = "puntos";
     if (route === "cronograma") route = "inicio";
+    if (route === "fotos" && !photosSectionAvailable() && !isAdminTestMode()) {
+      toast("Fotos del casamiento se habilita el 23/10.");
+      route = "inicio";
+    }
 
     const legacyGameRoutes = ["musica", "trivia-pareja", "trivia-quien", "trivia"];
     const testMode = isAdminTestMode();

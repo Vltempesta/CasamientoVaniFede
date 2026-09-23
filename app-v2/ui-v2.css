@@ -557,3 +557,33 @@ input,textarea,select{border-radius:13px!important}
 .photos-queue-card{display:grid!important;grid-template-columns:42px minmax(0,1fr) auto;gap:11px;align-items:center;padding:13px 14px!important;border-color:rgba(49,83,110,.18)!important;background:linear-gradient(135deg,rgba(49,83,110,.07),rgba(255,253,248,.92))!important}.photos-queue-card.hidden{display:none!important}.photos-queue-card.is-error{border-color:rgba(116,51,68,.24)!important;background:linear-gradient(135deg,rgba(116,51,68,.07),rgba(255,253,248,.94))!important}.photos-queue-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:#21344d;color:#fff;font-size:19px}.photos-queue-copy small{display:block;color:#9b7b4d;font-size:7px;font-weight:950;letter-spacing:.1em}.photos-queue-copy strong{display:block;margin-top:2px;color:#21344d;font-size:12px}.photos-queue-copy p{margin:2px 0 0!important;font-size:8px!important;line-height:1.3}.photos-retry-btn{min-height:34px!important;padding:7px 10px!important;border-radius:10px!important;background:#743344!important;color:#fff!important;font-size:9px!important}.photos-retry-btn.hidden{display:none!important}
 .vf-photo-queue-pill{position:fixed;z-index:9998;left:50%;bottom:calc(89px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:7px;max-width:min(88vw,360px);padding:9px 13px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:#21344d;color:#fff;box-shadow:0 10px 28px rgba(21,37,56,.26);font-size:10px;font-weight:900;transition:opacity .2s ease,transform .2s ease}.vf-photo-queue-pill.hidden{opacity:0;pointer-events:none;transform:translate(-50%,8px)}.vf-photo-queue-pill.is-error{background:#743344}.vf-photo-queue-pill.is-done{background:#31536e}.vf-photo-queue-pill-icon{font-size:14px}
 @media (min-width:760px){.vf-photo-queue-pill{bottom:24px}}
+
+/* ============================================================
+   v32607 · Traslados legibles + Fotos desde 23/10
+   ============================================================ */
+#view .transport-confirmed-grid .transport-confirmed-card:not(.is-selected) .transport-zone-availability:not(.is-full),
+#view .transport-zone-availability:not(.is-full){
+  color:#21344d!important;
+  background:rgba(33,52,77,.075)!important;
+  border:1px solid rgba(33,52,77,.14)!important;
+  border-top:1px solid rgba(33,52,77,.14)!important;
+  border-radius:11px!important;
+  padding:7px 8px!important;
+  font-size:8px!important;
+  font-weight:950!important;
+}
+#view .transport-zone-availability:not(.is-full) span{color:#21344d!important;font-weight:950!important}
+#view .transport-zone-availability:not(.is-full) small{color:#526274!important;font-weight:850!important}
+#view .transport-zone-availability.is-full{
+  background:rgba(116,51,68,.065)!important;
+  border:1px solid rgba(116,51,68,.13)!important;
+  border-top:1px solid rgba(116,51,68,.13)!important;
+  border-radius:11px!important;
+  padding:7px 8px!important;
+  color:#743344!important;
+}
+.photos-coming-soon-v32607{margin-top:18px;padding:30px 22px!important;text-align:center}
+.photos-coming-soon-v32607>span{display:grid;place-items:center;width:64px;height:64px;margin:0 auto 12px;border-radius:20px;background:rgba(33,52,77,.08);font-size:31px}
+.photos-coming-soon-v32607>small{display:block;color:#9a713d;font-size:8px;font-weight:950;letter-spacing:.13em}
+.photos-coming-soon-v32607 h2{margin:5px 0 8px;color:#21344d;font-size:24px}
+.photos-coming-soon-v32607 p{max-width:480px;margin:0 auto 17px;color:#726b63;font-size:11px;line-height:1.5}
