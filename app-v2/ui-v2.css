@@ -380,3 +380,97 @@ input,textarea,select{border-radius:13px!important}
   .home-countdown-v32603 .home-countdown-values-v2>span{min-height:50px!important;border-radius:12px!important}
   .home-countdown-v32603 .home-countdown-values-v2 strong{font-size:21px!important}
 }
+
+
+/* ==========================================================
+   v32604 · Refinamientos UX + estados claros
+   ========================================================== */
+
+/* Inicio: aviso de juegos pendientes, justo antes de Lo esencial */
+.home-pending-games-v32604{
+  width:100%;display:grid!important;grid-template-columns:42px minmax(0,1fr) 18px;gap:10px;align-items:center;
+  margin:0 0 13px!important;padding:11px 13px!important;border:1px solid rgba(229,197,126,.34)!important;border-radius:18px!important;
+  background:linear-gradient(135deg,#7b384b 0%,#662c3b 100%)!important;color:#fffaf3!important;text-align:left!important;
+  box-shadow:0 9px 20px rgba(89,37,52,.15)!important;
+}
+.home-pending-games-v32604:hover{transform:none!important}
+.home-pending-games-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:rgba(255,255,255,.11);font-size:21px}
+.home-pending-games-copy{min-width:0}.home-pending-games-copy small,.home-pending-games-copy strong,.home-pending-games-copy em{display:block}
+.home-pending-games-copy small{color:#e9c979;font-size:7px;font-weight:950;letter-spacing:.12em}
+.home-pending-games-copy strong{margin-top:2px;color:#fff;font-size:12px;font-style:normal;line-height:1.15}
+.home-pending-games-copy em{margin-top:2px;color:rgba(255,250,243,.75);font-size:8px;font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.home-pending-games-v32604>b{color:#e9c979;font-size:23px;font-weight:500}
+
+/* Barra inferior: mismas 5 secciones, Inicio central con jerarquía más elegante */
+.bottom-nav-main-circle{
+  position:relative!important;width:60px!important;height:60px!important;margin-bottom:0!important;
+  border:3px solid #d5b46c!important;outline:5px solid #f7efdf!important;
+  background:linear-gradient(145deg,#7b384b,#612838)!important;color:#fffaf2!important;
+  box-shadow:0 9px 22px rgba(92,37,53,.28),inset 0 1px 0 rgba(255,255,255,.16)!important;
+}
+.bottom-nav-main-circle::after{content:"";position:absolute;inset:5px;border:1px solid rgba(255,239,196,.18);border-radius:50%;pointer-events:none}
+.bottom-nav-main-circle svg{width:28px!important;height:28px!important;stroke-width:1.75!important}
+.bottom-nav-main.active .bottom-nav-main-circle{transform:translateY(-3px)!important;box-shadow:0 12px 25px rgba(92,37,53,.34),inset 0 1px 0 rgba(255,255,255,.16)!important}
+.bottom-nav-main>span:last-child{margin-top:2px!important;font-size:10px!important;letter-spacing:.01em!important}
+
+/* Traslados: sólo el micro elegido se destaca; el resto vuelve a superficie neutra */
+#view .transport-confirmed-grid .transport-confirmed-card:not(.is-selected){
+  border:1px solid rgba(132,104,68,.14)!important;
+  background:linear-gradient(180deg,rgba(255,253,248,.95),rgba(247,240,229,.90))!important;
+  box-shadow:0 6px 16px rgba(66,48,30,.055)!important;
+}
+#view .transport-confirmed-grid .transport-confirmed-card:not(.is-selected) .transport-zone-card-head>span{background:rgba(49,83,110,.07)!important;color:#31536e!important}
+#view .transport-confirmed-grid .transport-confirmed-card:not(.is-selected) .transport-zone-card-head small{color:#9a713d!important}
+#view .transport-confirmed-grid .transport-confirmed-card:not(.is-selected) .transport-zone-card-head strong{color:var(--ink)!important}
+#view .transport-confirmed-grid .transport-confirmed-card:not(.is-selected) .transport-zone-card-head p{color:var(--muted)!important}
+#view .transport-confirmed-grid .transport-confirmed-card:not(.is-selected) .transport-zone-times>div{border-color:rgba(49,83,110,.08)!important;background:rgba(49,83,110,.035)!important}
+#view .transport-confirmed-grid .transport-confirmed-card:not(.is-selected) .transport-zone-times small{color:var(--muted)!important}
+#view .transport-confirmed-grid .transport-confirmed-card:not(.is-selected) .transport-zone-times strong{color:var(--ink)!important}
+#view .transport-confirmed-grid .transport-confirmed-card:not(.is-selected) .transport-zone-availability{border-top-color:rgba(132,104,68,.10)!important;color:#426f47!important}
+#view .transport-confirmed-grid .transport-confirmed-card:not(.is-selected) .transport-zone-availability.is-full{color:#8b4b55!important}
+#view .transport-confirmed-grid .transport-confirmed-card.is-selected{
+  border:2px solid #d9b96d!important;background:linear-gradient(145deg,#365b78,#29475f)!important;
+  box-shadow:0 10px 24px rgba(45,77,103,.22)!important;
+}
+
+/* Asistencia: confirmación importante en bordó */
+#view .rsvp-confirmed-compact .rsvp-confirmed-head{
+  margin:-2px -2px 12px!important;padding:12px 13px!important;border-radius:16px!important;
+  background:linear-gradient(135deg,#7b384b,#662c3b)!important;box-shadow:0 8px 18px rgba(89,37,52,.14)!important;
+}
+#view .rsvp-confirmed-compact .rsvp-confirmed-head h4{color:#fff!important}
+#view .rsvp-confirmed-compact .rsvp-confirmed-head p{color:rgba(255,250,243,.82)!important}
+#view .rsvp-confirmed-compact .rsvp-okmark{background:rgba(255,255,255,.12)!important;border-color:rgba(234,202,125,.55)!important;color:#f1d58e!important}
+
+/* Equipo: recordatorio musical */
+.team-song-cta-v32604{
+  width:100%;display:grid!important;grid-template-columns:42px minmax(0,1fr) 16px;gap:10px;align-items:center;
+  margin:8px 0!important;padding:11px 12px!important;border:1px solid rgba(116,51,68,.20)!important;border-radius:17px!important;
+  background:linear-gradient(135deg,rgba(116,51,68,.075),rgba(255,253,248,.94))!important;color:var(--ink)!important;text-align:left!important;box-shadow:0 6px 15px rgba(76,51,22,.05)!important;
+}
+.team-song-cta-v32604:hover{transform:none!important}.team-song-cta-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:#743344;color:white;font-size:20px}
+.team-song-cta-v32604 span:nth-child(2){min-width:0}.team-song-cta-v32604 small,.team-song-cta-v32604 strong,.team-song-cta-v32604 em{display:block}
+.team-song-cta-v32604 small{color:#9a713d;font-size:7px;font-weight:950;letter-spacing:.11em}.team-song-cta-v32604 strong{margin-top:2px;font-size:11px;line-height:1.2}.team-song-cta-v32604 em{margin-top:2px;color:var(--muted);font-size:8px;font-style:normal}.team-song-cta-v32604>b{color:#743344;font-size:20px}
+
+/* Social: el compositor pasa a ser la acción principal de la pantalla */
+#view .social-composer{
+  border:2px solid rgba(116,51,68,.42)!important;
+  background:linear-gradient(135deg,rgba(116,51,68,.07),rgba(255,253,248,.97))!important;
+  box-shadow:0 9px 22px rgba(93,43,56,.10)!important;
+}
+#view .social-composer textarea{
+  min-height:82px!important;border:2px solid rgba(116,51,68,.34)!important;background:#fffdf8!important;
+  box-shadow:0 4px 12px rgba(82,38,50,.055)!important;color:var(--ink)!important;
+}
+#view .social-composer textarea:focus{border-color:#743344!important;box-shadow:0 0 0 3px rgba(116,51,68,.09)!important;outline:none!important}
+#view .social-composer-actions button{background:#743344!important;color:#fffaf3!important}
+
+/* Fotos: contador personal + duplicados exactos */
+.photos-contribution-v32604{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:center;margin:0 0 10px;padding:9px 11px;border:1px solid rgba(49,83,110,.16);border-radius:16px;background:rgba(49,83,110,.055)}
+.photos-contribution-v32604>span{width:36px;height:36px;display:grid;place-items:center;border-radius:11px;background:#31536e;color:white;font-size:18px}.photos-contribution-v32604 small,.photos-contribution-v32604 strong{display:block}.photos-contribution-v32604 small{color:#8e6b3b;font-size:7px;font-weight:950;letter-spacing:.11em}.photos-contribution-v32604 strong{margin-top:2px;color:#21344d;font-size:12px}.photos-contribution-v32604 strong b{font-size:17px}.photos-contribution-v32604 strong em{font-style:normal;font-weight:850}
+.photos-preview.is-duplicate::after{content:"";position:absolute;inset:0;border:2px solid rgba(49,83,110,.55);border-radius:inherit;pointer-events:none}.photos-preview.is-duplicate img{filter:saturate(.75);opacity:.74}.photos-preview.is-duplicate small{background:#31536e!important;color:white!important}
+
+@media(max-width:560px){
+  .home-pending-games-v32604{grid-template-columns:38px minmax(0,1fr) 14px;padding:10px 11px!important}.home-pending-games-icon{width:36px;height:36px;border-radius:11px;font-size:18px}
+  .bottom-nav-main-circle{width:57px!important;height:57px!important}.bottom-nav-main-circle svg{width:26px!important;height:26px!important}
+}

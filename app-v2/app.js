@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32603";
+  const CURRENT_APP_VERSION = "32604";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32603"
+        appVersion: CONFIG.APP_VERSION || "32604"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32603",
+      appVersion: "32604",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -4686,6 +4686,64 @@
     return window.WeddingPhotoUploader.renderView({ guest: currentGuest, publicMode:false });
   }
 
+  function homePendingGames() {
+    if (!currentGuest || isAdminTestMode()) return [];
+
+    const items = [];
+    const rsvp = state.rsvps?.[currentGuest.id];
+    const rsvpReady = hasFinalRsvp(rsvp) && isCompetitionGuest(currentGuest);
+
+    if (rsvpReady && isTriviaGameOpen("trivia-music") && !triviaSubmission("music-selection")) {
+      items.push({ title: "Canciones favoritas", route: "musica", icon: "🎵" });
+    }
+    if (rsvpReady && isTriviaGameOpen("trivia-couple") && !triviaSubmission("couple-trivia-test")) {
+      items.push({ title: "¿Cuánto conocés a Vani y Fede?", route: "trivia-pareja", icon: "🎯" });
+    }
+    if (rsvpReady && isTriviaGameOpen("trivia-who") && !triviaSubmission("who-is-who-trivia-test")) {
+      items.push({ title: "¿Vani o Fede?", route: "trivia-quien", icon: "⚖️" });
+    }
+
+    if (currentGuestCanPlayNewGames()) {
+      const rouletteTiming = timedStageStatus("roulette");
+      if (rouletteTiming.active && rouletteSubmissionFor(currentGuest.id)?.status !== "completed") {
+        items.push({ title: "Ruleta · Todo o Nada", route: "ruleta", icon: "🎡" });
+      }
+
+      const war1Timing = timedStageStatus("war1");
+      if (war1Timing.active && !warRoundRevealed(1) && !warVoteForGuest(currentGuest.id, 1)) {
+        items.push({ title: "Guerra de Equipos · Ronda 1", route: "guerra", warRound: 1, icon: "⚔️" });
+      }
+
+      const war2Timing = timedStageStatus("war2");
+      if (war2Timing.active && warRoundRevealed(1) && !warRoundRevealed(2) && !warVoteForGuest(currentGuest.id, 2)) {
+        items.push({ title: "Guerra de Equipos · Ronda 2", route: "guerra", warRound: 2, icon: "🛡️" });
+      }
+    }
+
+    return items;
+  }
+
+  function renderHomePendingGamesBanner() {
+    const pending = homePendingGames();
+    if (!pending.length) return "";
+    const first = pending[0];
+    const count = pending.length;
+    return `
+      <button
+        type="button"
+        class="home-pending-games-v32604"
+        data-go="${escapeHTML(first.route)}"
+        ${first.warRound ? `data-war-round="${first.warRound}"` : ""}>
+        <span class="home-pending-games-icon" aria-hidden="true">${first.icon}</span>
+        <span class="home-pending-games-copy">
+          <small>TE QUEDA ${count === 1 ? "UN JUEGO" : `${count} JUEGOS`}</small>
+          <strong>${count === 1 ? "Tenés un desafío pendiente" : `Tenés ${count} desafíos pendientes`}</strong>
+          <em>Empezá por ${escapeHTML(first.title)}</em>
+        </span>
+        <b aria-hidden="true">›</b>
+      </button>`;
+  }
+
   function renderHome() {
     const rsvp = state.rsvps[currentGuest.id];
     const selectedTransport = String(rsvp?.transport || "");
@@ -4719,6 +4777,8 @@
           </div>
         </div>
       </section>
+
+      ${renderHomePendingGamesBanner()}
 
       <section
         id="homeEssential"
@@ -6524,6 +6584,16 @@
         </button>
       </section>
 
+      <button type="button" class="team-song-cta-v32604 section-card" data-go="musica">
+        <span class="team-song-cta-icon" aria-hidden="true">🎵</span>
+        <span>
+          <small>ENTRADA A LA PISTA</small>
+          <strong>¿Ya eligieron la canción con la que van a entrar?</strong>
+          <em>Abrí el juego de canciones y dejá tus favoritas.</em>
+        </span>
+        <b aria-hidden="true">›</b>
+      </button>
+
       <section class="team-attendance-mini team-challenge-mini section-card">
         <span>${uiIcon("star")}</span>
         <div>
@@ -7492,7 +7562,7 @@
     const seqLaunched = manualGameFlag("game-roulette") && Boolean(preEventSequenceSchedule());
 
     const pointsEyebrow = testMode ? "MODO PRUEBA" : allPreEventChallengesDone ? "ETAPA COMPLETADA" : "SUMÁ PUNTOS";
-    const pointsTitle = testMode ? "Probá todos los juegos" : allPreEventChallengesDone ? "¡No quedan más desafíos por ahora!" : "QUE EMPIECE LA COMPETENCIA";
+    const pointsTitle = testMode ? "Probá todos los juegos" : allPreEventChallengesDone ? "¡No quedan más desafíos por ahora!" : "QUE SIGA LA COMPETENCIA";
     const pointsText = testMode
       ? "Este usuario no guarda respuestas, no aparece en el ranking y no suma ni resta puntos."
       : allPreEventChallengesDone

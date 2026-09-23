@@ -43,6 +43,15 @@
           <p><strong>Tu mirada también hace esta historia ❤️</strong><br>¿Sacaste fotos durante la fiesta? Subilas acá para que queden guardadas en nuestro álbum.</p>
         </section>
 
+        ${identified ? `
+          <section class="photos-contribution-v32604" data-photo-contribution>
+            <span aria-hidden="true">📸</span>
+            <div>
+              <small>TU APORTE AL ÁLBUM</small>
+              <strong>Aportaste <b data-photo-contribution-count>—</b> <em data-photo-contribution-label>fotos</em></strong>
+            </div>
+          </section>` : ""}
+
         <section class="section-card photos-picker-card" data-photo-picker-card>
           <div class="photos-picker-icon" aria-hidden="true">📷</div>
           <h3>${identified ? `Hola, ${escapeHTML(guest.firstName || fullGuestName(guest))}` : "Compartí tus fotos"}</h3>
@@ -131,11 +140,54 @@
     if (button) button.textContent = `Subir ${state.items.length} ${state.items.length === 1 ? "foto" : "fotos"} al álbum`;
     if (!grid) return;
     grid.innerHTML = state.items.map(item => `
-      <div class="photos-preview ${item.status === "uploaded" ? "is-uploaded" : ""} ${item.status === "error" ? "is-error" : ""}" data-photo-id="${item.id}">
+      <div class="photos-preview ${item.status === "uploaded" ? "is-uploaded" : ""} ${item.status === "duplicate" ? "is-duplicate" : ""} ${item.status === "error" ? "is-error" : ""}" data-photo-id="${item.id}">
         <img src="${item.previewUrl}" alt="Vista previa de ${escapeHTML(item.file.name)}">
         ${item.status === "pending" ? `<button type="button" data-photo-remove="${item.id}" aria-label="Quitar ${escapeHTML(item.file.name)}">×</button>` : ""}
+        ${item.status === "duplicate" ? `<small>✓ Ya estaba en el álbum</small>` : ""}
         ${item.status === "error" ? `<small>${escapeHTML(item.error || "Error")}</small>` : ""}
       </div>`).join("");
+  }
+
+  async function sha256File(file) {
+    if (!file || !window.crypto?.subtle) return "";
+    try {
+      const bytes = await file.arrayBuffer();
+      const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+      return Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2,"0")).join("");
+    } catch (_) {
+      return "";
+    }
+  }
+
+  async function photoHashAlreadyStored(photoHash) {
+    if (!photoHash) return false;
+    try {
+      const response = await jsonp("getPhotoUploadStatus", { photoHash });
+      return Boolean(response?.data?.found === true && response?.data?.duplicate === true);
+    } catch (_) {
+      // Si el backend todavía no fue actualizado, dejamos que la deduplicación del servidor decida.
+      return false;
+    }
+  }
+
+  async function guestContributionCount(guestId) {
+    if (!guestId) return 0;
+    try {
+      const response = await jsonp("getPhotoUploadStatus", { countOnly:"1", guestId });
+      return Math.max(0, Number(response?.data?.contributedCount || 0));
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  async function refreshContributionCounter(state) {
+    const countNode = state.root.querySelector("[data-photo-contribution-count]");
+    const labelNode = state.root.querySelector("[data-photo-contribution-label]");
+    if (!countNode || !state.guest?.id || state.guest.id === "admin-test") return;
+    countNode.textContent = "…";
+    const count = await guestContributionCount(state.guest.id);
+    countNode.textContent = String(count);
+    if (labelNode) labelNode.textContent = count === 1 ? "foto" : "fotos";
   }
 
   function fileToBase64(file) {
@@ -196,16 +248,17 @@
   }
 
   async function confirmPhotoStored(photoId) {
-    if (!photoId) return false;
+    if (!photoId) return { found:false, duplicate:false };
     const waits = [450, 1200, 2200];
     for (const delay of waits) {
       await new Promise(resolve => setTimeout(resolve, delay));
       try {
         const response = await jsonp("getPhotoUploadStatus", { photoId });
-        if (response?.data?.found === true || response?.found === true) return true;
+        const data = response?.data || response || {};
+        if (data.found === true) return { found:true, duplicate:Boolean(data.duplicate) };
       } catch (_) {}
     }
-    return false;
+    return { found:false, duplicate:false };
   }
 
   function updateProgress(state, currentIndex, currentFraction, label) {
@@ -230,6 +283,7 @@
     const optionalName = String(state.root.querySelector("#photoGuestName")?.value || "").trim();
     const guest = state.guest;
     let success = 0;
+    let duplicates = 0;
     let failures = 0;
     const batchId = makeId();
 
@@ -239,7 +293,19 @@
       try {
         item.status = "uploading";
         renderSelection(state);
-        updateProgress(state, i, 0.03, `Subiendo ${i+1} de ${state.items.length}`);
+        updateProgress(state, i, 0.03, `Revisando ${i+1} de ${state.items.length}`);
+
+        item.photoHash = item.photoHash || await sha256File(item.file);
+        if (item.photoHash && await photoHashAlreadyStored(item.photoHash)) {
+          item.status = "duplicate";
+          item.error = "";
+          duplicates++;
+          renderSelection(state);
+          updateProgress(state, i + 1, 0, `${success} nuevas · ${duplicates} ya estaban`);
+          continue;
+        }
+
+        updateProgress(state, i, 0.12, `Subiendo ${i+1} de ${state.items.length}`);
         const base64 = await fileToBase64(item.file);
         const payload = {
           action: "uploadWeddingPhoto",
@@ -248,7 +314,7 @@
           batchIndex: i + 1,
           batchTotal: state.items.length,
           token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-          appVersion: "32603",
+          appVersion: "32604",
           submittedAt: new Date().toISOString(),
           guestId: guest?.id || "",
           guestName: guest ? fullGuestName(guest) : optionalName,
@@ -258,6 +324,7 @@
           mimeType: item.file.type || "image/jpeg",
           size: item.file.size,
           lastModified: item.file.lastModified || 0,
+          photoHash: item.photoHash || "",
           dataBase64: base64
         };
         let postError = null;
@@ -269,13 +336,14 @@
 
         updateProgress(state, i, .88, `Confirmando ${i+1} de ${state.items.length}`);
         const stored = await confirmPhotoStored(item.id);
-        if (!stored) {
+        if (!stored.found) {
           throw postError || new Error("La foto no quedó confirmada en el álbum. Revisá la conexión e intentá nuevamente.");
         }
 
-        item.status = "uploaded";
+        item.status = stored.duplicate ? "duplicate" : "uploaded";
         item.error = "";
-        success++;
+        if (stored.duplicate) duplicates++;
+        else success++;
       } catch (error) {
         item.status = "error";
         item.error = String(error?.message || "Error al subir");
@@ -301,7 +369,12 @@
     const successCard = state.root.querySelector("[data-photo-success]");
     successCard?.classList.remove("hidden");
     const copy = state.root.querySelector("[data-photo-success-copy]");
-    if (copy) copy.textContent = `Tus ${success} ${success === 1 ? "foto ya forma" : "fotos ya forman"} parte del álbum de Vani & Fede.`;
+    if (copy) {
+      if (success > 0 && duplicates > 0) copy.textContent = `Subiste ${success} ${success === 1 ? "foto nueva" : "fotos nuevas"}. ${duplicates} ${duplicates === 1 ? "ya estaba" : "ya estaban"} en el álbum.`;
+      else if (success > 0) copy.textContent = `Tus ${success} ${success === 1 ? "foto ya forma" : "fotos ya forman"} parte del álbum de Vani & Fede.`;
+      else copy.textContent = `Estas ${duplicates === 1 ? "foto ya estaba" : "fotos ya estaban"} en el álbum ❤️`;
+    }
+    void refreshContributionCounter(state);
   }
 
   function reset(state) {
@@ -316,6 +389,7 @@
   function bindView(root, options = {}) {
     if (!root) return;
     const state = createState(root, options);
+    void refreshContributionCounter(state);
     const input = root.querySelector("[data-photo-input]");
     const choose = root.querySelector("[data-photo-choose]");
     const add = root.querySelector("[data-photo-add]");

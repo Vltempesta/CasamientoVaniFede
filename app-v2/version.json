@@ -1,6 +1,7 @@
 {
-  "version": "32603",
+  "version": "32604",
   "releasedAt": "2026-09-22T19:45:00-03:00",
   "requiredReload": true,
-  "releaseDate": "2026-09-22T20:50:00-03:00"
+  "releaseDate": "2026-09-22T23:15:00-03:00",
+  "notes": "UX refinada + contador y deduplicación de fotos"
 }

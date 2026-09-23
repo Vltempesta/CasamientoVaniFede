@@ -1,33 +1,21 @@
-VANI & FEDE · V2 · v32603
-Base real: v32524. No se reescribió la app desde cero.
+Vani & Fede · App v32604
+Base: v32603 / v32524 core preserved.
 
-FRONTEND
-- Mantener en el repositorio los assets existentes de producción: config.js, assets/, icons/ y preview-whatsapp.jpg.
-- Reemplazar/añadir los archivos raíz de este paquete.
-- Nuevos archivos: ui-v2.css y photos.js.
-- Navegación V2: Inicio · Juegos · Fotos · Ranking · Más.
-- Nuevo deep-link para QR: ?seccion=fotos
+Cambios de esta versión:
+- Barra inferior conserva: Asistencia · Traslados · Inicio · Sumá puntos · Ranking.
+- Inicio central rediseñado para destacarse mejor.
+- Inicio muestra aviso arriba de "Lo esencial" sólo si el invitado tiene juegos disponibles pendientes.
+- Traslados: sólo se resalta el micro elegido; el resto queda neutro.
+- Asistencia: "Respuesta enviada" pasa a bordo.
+- Sumá puntos: "QUE SIGA LA COMPETENCIA".
+- Mi equipo: acceso directo al juego de canciones para definir la entrada a pista.
+- Social: compositor/mensaje mucho más visible.
+- Fotos: contador personal "Aportaste X fotos".
+- Fotos: hash SHA-256 en el navegador para consultar duplicados antes de subir.
+- El backend sigue haciendo la validación definitiva de duplicados.
 
-JUEGOS NUEVOS
-- Al tocar “Lanzar nuevos juegos” empieza el reloj de la Ruleta.
-- Ruleta: 24 horas, sin Guerra simultánea.
-- Al vencer Ruleta: abre Guerra R1 por 24 horas.
-- Al vencer R1: se procesa automáticamente, se congela el nuevo ranking/botines y abre R2 por 24 horas.
-- Al vencer R2: se procesa automáticamente.
-- Ningún capitán/admin necesita cerrar rondas manualmente. Si hay empate al cierre, el capitán puede dejar definido el desempate desde su pantalla sin cerrar la ronda.
-- Ranking y botines de cada Guerra quedan congelados al inicio de esa ronda.
-- La nómina y balance de participantes se congelan al lanzar la secuencia.
-
-FOTOS
-- Frontend integrado en la misma app y acceso público directo por QR.
-- Las cargas tienen photoId idempotente: si el navegador no puede leer la respuesta de Apps Script, verifica por JSONP antes de reintentar para evitar duplicados.
-- Las fotos se procesan de a una y se previsualizan con Object URL para evitar cargar todos los originales en memoria.
-- El frontend NO da acceso a Drive a los invitados.
-- Para habilitar la subida real a Drive, integrar backend/PhotosBackend.gs en el Apps Script existente y seguir backend/INTEGRACION_FOTOS.txt.
-- El proyecto frontend v32524 recibido no contenía el código fuente del Apps Script actual, por eso el módulo se entrega aislado para incorporarlo sin reemplazar el router/backend existente.
-
-IMPORTANTE
-Este ZIP conserva la misma estructura del paquete v32524: no incluye config.js, logos, íconos ni otros assets externos que ya viven en el repositorio de producción.
-
-
-v32603: Inicio vuelve a una disposición compacta inspirada en v32524; navegación inferior con Inicio central elevado; Cronograma retirado completamente de la interfaz.
+IMPORTANTE AL SUBIR A GITHUB PAGES:
+- Reemplazar los archivos de esta carpeta.
+- Conservar el config.js real de producción.
+- Conservar assets/ e icons/ del repositorio.
+- Instalar y desplegar PhotosBackend v32604 para habilitar el contador y la deduplicación completa.
