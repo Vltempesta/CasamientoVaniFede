@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32601";
+  const CURRENT_APP_VERSION = "32602";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32601"
+        appVersion: CONFIG.APP_VERSION || "32602"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32601",
+      appVersion: "32602",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2558,6 +2558,7 @@
   function navigate(route, options = {}) {
     if (route === "ficha" || route === "juegos" || route === "info") route = "inicio";
     if (route === "torneo") route = "puntos";
+    if (route === "cronograma") route = "inicio";
 
     const legacyGameRoutes = ["musica", "trivia-pareja", "trivia-quien", "trivia"];
     const testMode = isAdminTestMode();
@@ -2608,7 +2609,7 @@
     const activeBottomRoute =
       ["trivia", "ruleta", "guerra"].includes(route)
         ? "puntos"
-        : ["equipo", "invitados", "cronograma", "asistencia", "traslado", "ubicacion", "social", "regalos", "reglas", "admin"].includes(route)
+        : ["equipo", "invitados", "asistencia", "ubicacion", "social", "regalos", "reglas", "admin"].includes(route)
           ? ""
           : route;
 
@@ -2789,7 +2790,6 @@
 
     const routes = {
       inicio: renderHome,
-      cronograma: renderTimelineV2,
       fotos: renderPhotosV2,
       asistencia: renderRSVP,
       traslado: renderTransport,
@@ -3348,7 +3348,6 @@
 
 
   const SECTION_DEFINITIONS = [
-    { route: "cronograma", key: "section-cronograma", title: "Cronograma", text: "Horarios y momentos de la fiesta.", defaultOpen: true },
     { route: "fotos", key: "section-fotos", title: "Fotos", text: "Álbum colaborativo del casamiento.", defaultOpen: true },
     { route: "asistencia", key: "section-asistencia", title: "Asistencia", text: "Confirmación, traslado y restricciones.", defaultOpen: true },
     { route: "traslado", key: "transport-info", title: "Traslados", text: "Información de micros y viaje particular.", defaultOpen: true },
@@ -4681,17 +4680,6 @@
       .some(record => ids.has(record?.gameId));
   }
 
-  function renderTimelineV2() {
-    const items = Array.isArray(DATA.info?.timeline) ? DATA.info.timeline : [];
-    return `
-      <section class="timeline-v2-hero">
-        <span aria-hidden="true">🕒</span>
-        <div><small>24 · 10 · 2026</small><h3>Cronograma</h3><p>Los momentos principales de la noche, todos en un solo lugar.</p></div>
-      </section>
-      <section class="timeline-v2-list" aria-label="Cronograma del casamiento">
-        ${items.map(item => `<article class="timeline-v2-item"><span class="timeline-v2-time">${escapeHTML(item.time || "")}</span><div class="timeline-v2-copy"><strong>${escapeHTML(item.title || "")}</strong><p>${escapeHTML(item.detail || "")}</p></div></article>`).join("")}
-      </section>`;
-  }
 
   function renderPhotosV2() {
     if (!window.WeddingPhotoUploader) return `<section class="section-card"><h3>Fotos del casamiento</h3><p>El módulo de fotos no pudo cargarse. Actualizá la app e intentá de nuevo.</p></section>`;
@@ -4824,38 +4812,32 @@
 
     return `
       ${homeStyles()}
-      <section id="homeCountdown" class="home-v2-identity" aria-label="Inicio Vani y Fede">
-        <div class="home-v2-brand">
-          <div>
-            <h1>VANI &amp; FEDE</h1>
-            <p>24 · 10 · 2026</p>
+      <section class="home-compact-v32602" aria-label="Inicio Vani y Fede">
+        <div id="homeCountdown" class="home-countdown-v2 home-countdown-v32602" aria-label="Cuenta regresiva para el casamiento">
+          <div class="home-countdown-copy">
+            <span id="countdownLabel">Faltan</span>
+            <strong>VANI &amp; FEDE</strong>
+            <small>24 · 10 · 2026</small>
           </div>
-          <div class="home-v2-countdown" aria-label="Cuenta regresiva">
-            <span><b id="countdownDays">—</b><small>días</small></span>
-            <span><b id="countdownHours">—</b><small>horas</small></span>
-            <span><b id="countdownMinutes">—</b><small>min</small></span>
-            <i id="countdownLabel" class="sr-only">Faltan</i>
+          <div class="home-countdown-values-v2">
+            <span><strong id="countdownDays">—</strong><small>días</small></span>
+            <span><strong id="countdownHours">—</strong><small>horas</small></span>
+            <span><strong id="countdownMinutes">—</strong><small>min</small></span>
           </div>
         </div>
-        <div class="home-v2-user">
+
+        <section class="home-welcome-v32602">
           ${teamLogo(team,"home-v2-team-logo")}
-          <div>
+          <div class="home-welcome-v32602-copy">
             <small>Equipo ${escapeHTML(team.name)}</small>
             <h2>Hola, ${escapeHTML(currentGuest.firstName || guestFullName(currentGuest))} 👋</h2>
             <p>${escapeHTML(team.group || team.motto || "")}</p>
           </div>
-          <div class="home-v2-rank">
-            <span><small>Posición</small><b>${ownRankLabel}</b></span>
-            <span><small>Puntos</small><b>${Number(ownRank.points || 0)}</b></span>
+          <div class="home-welcome-v32602-stats" aria-label="Posición y puntos">
+            <span><small>Pos.</small><b>${ownRankLabel}</b></span>
+            <span><small>Pts.</small><b>${Number(ownRank.points || 0)}</b></span>
           </div>
-        </div>
-      </section>
-
-      <section class="home-v2-actions" aria-label="Accesos principales">
-        <button type="button" class="home-v2-action" data-go="puntos"><span>🎮</span><strong>Juegos</strong><small>Desafíos y puntos</small></button>
-        <button type="button" class="home-v2-action is-photo" data-go="fotos"><span>📸</span><strong>Fotos</strong><small>Subí al álbum</small></button>
-        <button type="button" class="home-v2-action" data-go="cronograma"><span>🕒</span><strong>Cronograma</strong><small>Todo el timing</small></button>
-        <button type="button" class="home-v2-action" data-go="equipo"><span>🛡️</span><strong>Equipos</strong><small>Tu grupo</small></button>
+        </section>
       </section>
 
       <button
@@ -4902,6 +4884,12 @@
           </button>
         </section>
       ` : ""}
+
+      <section class="home-quick-v32602" aria-label="Accesos rápidos">
+        <button type="button" data-go="puntos"><span>${uiIcon("star")}</span><strong>Juegos</strong></button>
+        <button type="button" data-go="fotos"><span>${uiIcon("camera")}</span><strong>Fotos</strong></button>
+        <button type="button" data-go="equipo"><span>${uiIcon("teamShield")}</span><strong>Mi equipo</strong></button>
+      </section>
 
       ${preEventCompetitionDone ? `
         <section class="home-event-next-banner">

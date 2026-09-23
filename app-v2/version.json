@@ -1,5 +1,6 @@
 {
-  "version": "32601",
+  "version": "32602",
   "releasedAt": "2026-09-22T19:45:00-03:00",
-  "requiredReload": true
+  "requiredReload": true,
+  "releaseDate": "2026-09-22T20:50:00-03:00"
 }
