@@ -14553,3 +14553,50 @@ summary > b {
   #view .roulette-v32521 .new-roulette-team-logo{width:45px!important;height:45px!important}
   #view .roulette-settled-intro>strong{font-size:24px}
 }
+
+
+/* ============================================================
+   v32617 · Sumá puntos · legibilidad tarjetas activas/bloqueadas
+   ============================================================ */
+#view .points-all-game-list .points-challenge-card.is-active .points-challenge-copy>small,
+#view .points-all-game-list .points-challenge-card.is-active .points-challenge-copy>em{
+  color:#8c4456 !important;
+}
+#view .points-all-game-list .points-challenge-card.is-active .points-challenge-copy>strong{
+  color:#20384f !important;
+}
+#view .points-all-game-list .points-challenge-card.is-active .points-challenge-copy>p{
+  color:#6d665c !important;
+}
+#view .points-all-game-list .points-challenge-card.is-active .new-game-status-chip,
+#view .points-all-game-list .points-challenge-card.is-active .new-game-deadline{
+  color:#743344 !important;
+}
+
+#view .points-all-game-list .points-challenge-card.is-locked .points-challenge-copy>small{
+  color:#a88245 !important;
+}
+#view .points-all-game-list .points-challenge-card.is-locked .points-challenge-copy>strong{
+  color:#5f6771 !important;
+}
+#view .points-all-game-list .points-challenge-card.is-locked .points-challenge-copy>p{
+  color:#7f7a72 !important;
+}
+#view .points-all-game-list .points-challenge-card.is-locked .points-challenge-copy>em{
+  color:#9a7a47 !important;
+}
+#view .points-all-game-list .points-challenge-card.is-locked .points-challenge-locked{
+  color:#8f8a80 !important;
+  border-color:rgba(126,120,108,.18) !important;
+  background:rgba(255,255,255,.45) !important;
+}
+
+@media (max-width: 760px){
+  #view .points-all-game-list .points-challenge-card.is-active .points-challenge-copy>strong{
+    font-size:18px !important;
+  }
+  #view .points-all-game-list .points-challenge-card.is-active .points-challenge-copy>p{
+    font-size:10.5px !important;
+    line-height:1.35 !important;
+  }
+}

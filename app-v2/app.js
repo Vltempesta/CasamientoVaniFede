@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32615";
+  const CURRENT_APP_VERSION = "32617";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32615"
+        appVersion: CONFIG.APP_VERSION || "32617"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32615",
+      appVersion: "32617",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2120,35 +2120,41 @@
     return true;
   }
 
+  function openAdminSubsection_(requested = "dashboard") {
+    const allowed = [
+      "dashboard",
+      "event",
+      "points",
+      "responses",
+      "photos",
+      "settings"
+    ];
+
+    adminSubsection = allowed.includes(requested)
+      ? requested
+      : "dashboard";
+
+    renderCurrentRoute();
+
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
+  window.VF_ADMIN_OPEN = openAdminSubsection_;
+
   function configureAdminSubsectionDelegation() {
     document.addEventListener("click", event => {
       const trigger = event.target.closest("[data-admin-subsection]");
       if (!trigger) return;
-      if (currentRoute !== "admin" || !state.adminUnlocked) return;
+      if (currentRoute !== "admin") return;
 
       event.preventDefault();
       event.stopPropagation();
 
-      const requested = trigger.dataset.adminSubsection || "dashboard";
-      adminSubsection = [
-        "dashboard",
-        "event",
-        "points",
-        "responses",
-        "photos",
-        "settings"
-      ].includes(requested)
-        ? requested
-        : "dashboard";
-
-      renderCurrentRoute();
-
-      window.requestAnimationFrame(() => {
-        window.scrollTo({
-          top: 0,
-          behavior: "smooth"
-        });
-      });
+      openAdminSubsection_(
+        trigger.dataset.adminSubsection || "dashboard"
+      );
     }, true);
   }
 
@@ -4431,6 +4437,16 @@
     saveState();
     scheduleSilentSync();
     return true;
+  }
+
+  function adminGuestUsesMicro_(guest) {
+    const rsvp = state.rsvps[guest?.id];
+    return Boolean(
+      guest &&
+      rsvp &&
+      rsvp.attendance === "si" &&
+      ["combi", "micro"].includes(rsvp.transport)
+    );
   }
 
   function adminPointsOperator() {
@@ -11237,7 +11253,7 @@
         <section class="section-card admin-checkin-card">
           <div><p class="eyebrow">MICROS</p><h4>Check-in de pasajeros</h4><p>Marcá presentes desde acá o dejá que cada invitado toque “Ya llegué”.</p></div>
           <div class="admin-checkin-zones">
-            ${zones.map(([zone,label])=>{ const people=activeGuests.filter(g=>usesMicro(g)&&state.rsvps[g.id]?.pickupZone===zone); const present=people.filter(g=>transportCheckinFor(g.id).present).length; return `<details><summary><span>${escapeHTML(label)}</span><b>${present}/${people.length} presentes</b></summary><div>${people.map(g=>`<button type="button" class="admin-checkin-person ${transportCheckinFor(g.id).present?"is-present":""}" data-checkin-guest="${g.id}"><span>${transportCheckinFor(g.id).present?"✓":"○"}</span><strong>${escapeHTML(guestFullName(g))}</strong><small>${escapeHTML(getTeam(g.team).name)}</small></button>`).join("")||`<p>No hay pasajeros asignados.</p>`}</div></details>`; }).join("")}
+            ${zones.map(([zone,label])=>{ const people=activeGuests.filter(g=>adminGuestUsesMicro_(g)&&state.rsvps[g.id]?.pickupZone===zone); const present=people.filter(g=>transportCheckinFor(g.id).present).length; return `<details><summary><span>${escapeHTML(label)}</span><b>${present}/${people.length} presentes</b></summary><div>${people.map(g=>`<button type="button" class="admin-checkin-person ${transportCheckinFor(g.id).present?"is-present":""}" data-checkin-guest="${g.id}"><span>${transportCheckinFor(g.id).present?"✓":"○"}</span><strong>${escapeHTML(guestFullName(g))}</strong><small>${escapeHTML(getTeam(g.team).name)}</small></button>`).join("")||`<p>No hay pasajeros asignados.</p>`}</div></details>`; }).join("")}
           </div>
         </section>`;
     }
@@ -11398,8 +11414,6 @@
             Seleccioná un equipo y una cantidad
           </button>
         </form>
-
-        ${renderAdminWarControl()}
 
         ${renderAdminMovements()}
       `;
@@ -11987,14 +12001,15 @@
       ${renderAdminPeopleModal()}
 
       <section class="admin-subsection-launchers">
-        <button type="button" class="admin-subsection-launcher admin-subsection-launcher-event" data-admin-subsection="event">
+        <button type="button" class="admin-subsection-launcher admin-subsection-launcher-event" data-admin-subsection="event" onclick="window.VF_ADMIN_OPEN && window.VF_ADMIN_OPEN('event')">
           <span class="admin-subsection-launcher-icon">🚌</span>
           <span><small>Mini sección</small><strong>Operación en vivo</strong><em>Mesas y check-in de micros</em></span><b aria-hidden="true">›</b>
         </button>
         <button
           type="button"
           class="admin-subsection-launcher admin-subsection-launcher-points"
-          data-admin-subsection="points">
+          data-admin-subsection="points"
+          onclick="window.VF_ADMIN_OPEN && window.VF_ADMIN_OPEN('points')">
           <span class="admin-subsection-launcher-icon">
             ${uiIcon("star")}
           </span>
@@ -13782,29 +13797,11 @@
     }
 
     $$("[data-admin-subsection]").forEach(button => {
-      button.addEventListener("click", () => {
-        const requested =
-          button.dataset.adminSubsection || "dashboard";
-
-        adminSubsection = [
-          "dashboard",
-          "event",
-          "points",
-          "responses",
-          "photos",
-          "settings"
-        ].includes(requested)
-          ? requested
-          : "dashboard";
-
-        renderCurrentRoute();
-
-        window.requestAnimationFrame(() => {
-          window.scrollTo({
-            top: 0,
-            behavior: "smooth"
-          });
-        });
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        openAdminSubsection_(
+          button.dataset.adminSubsection || "dashboard"
+        );
       });
     });
 
