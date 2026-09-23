@@ -1,0 +1,26 @@
+
+/* Hotfix visual aislado: agrega el aviso de Regalos sin tocar renderHome/app.js. */
+#homeEssential::after{
+  content:"🎁  Nuestro mejor regalo es tu presencia 🥂";
+  display:block;
+  margin-top:14px;
+  padding:15px 18px;
+  border-radius:18px;
+  background:linear-gradient(135deg,#21344d,#36556f);
+  color:#fff;
+  font-family:var(--font-body, Inter, sans-serif);
+  font-size:14px;
+  line-height:1.35;
+  font-weight:800;
+  text-align:left;
+  box-shadow:0 10px 22px rgba(33,52,77,.14);
+  border:1px solid rgba(255,255,255,.10);
+}
+@media(max-width:560px){
+  #homeEssential::after{
+    margin-top:12px;
+    padding:14px 15px;
+    border-radius:16px;
+    font-size:13px;
+  }
+}
