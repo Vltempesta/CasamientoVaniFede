@@ -21,3 +21,6 @@ IMPORTANTE AL SUBIR A GITHUB PAGES:
 - Instalar y desplegar PhotosBackend v32605 para habilitar el contador y la deduplicación completa.
 
 - v32605: inicio central restaurado, contador simplificado, aviso pendiente azul y deduplicación reforzada.
+
+
+v32606: Fotos usa cola local persistente en IndexedDB, hasta 2 subidas simultáneas, reanudación al volver a abrir la app y estado global no bloqueante. El backend sigue validando y deduplicando antes de guardar en Drive.

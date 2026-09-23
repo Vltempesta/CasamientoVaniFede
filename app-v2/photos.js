@@ -1,9 +1,22 @@
 (() => {
   const CONFIG = window.WEDDING_APP_CONFIG || {};
+  const APP_VERSION = "32606";
   const MAX_FILE_BYTES = 25 * 1024 * 1024;
   const ALLOWED_TYPES = new Set(["image/jpeg","image/png","image/webp","image/heic","image/heif"]);
+  const LOCAL_DEDUP_KEY = "vf_photo_fingerprints_v3";
+  const ANON_OWNER_KEY = "vf_photo_anon_owner_v1";
+  const DB_NAME = "vf_wedding_photo_queue_v1";
+  const DB_VERSION = 1;
+  const STORE_NAME = "uploads";
+  const MAX_CONCURRENT = 2;
+  const LARGE_FILE_BYTES = 12 * 1024 * 1024;
   const instances = new Map();
-  const LOCAL_DEDUP_KEY = "vf_photo_fingerprints_v2";
+  const listeners = new Set();
+  const activeIds = new Set();
+  const activeSizes = new Map();
+  let pumpScheduled = false;
+  let queueReady = false;
+  let globalStatusHideTimer = null;
 
   function escapeHTML(value) {
     return String(value ?? "")
@@ -30,6 +43,23 @@
     return `photo_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   }
 
+  function anonymousOwnerKey() {
+    try {
+      let value = localStorage.getItem(ANON_OWNER_KEY) || "";
+      if (!value) {
+        value = `anon_${makeId()}`;
+        localStorage.setItem(ANON_OWNER_KEY, value);
+      }
+      return value;
+    } catch (_) {
+      return `anon_session`;
+    }
+  }
+
+  function ownerKeyForGuest(guest) {
+    return guest?.id && guest.id !== "admin-test" ? `guest:${guest.id}` : anonymousOwnerKey();
+  }
+
   function renderView({ guest = null, publicMode = false } = {}) {
     const identified = Boolean(guest?.id && guest.id !== "admin-test");
     const greeting = identified
@@ -45,18 +75,19 @@
         </section>
 
         ${identified ? `
-          <section class="photos-contribution-v32604" data-photo-contribution>
+          <section class="photos-contribution-v32606" data-photo-contribution>
             <span aria-hidden="true">📸</span>
             <div>
               <small>TU APORTE AL ÁLBUM</small>
               <strong>Aportaste <b data-photo-contribution-count>—</b> <em data-photo-contribution-label>fotos</em></strong>
+              <p class="photos-contribution-status hidden" data-photo-contribution-status></p>
             </div>
           </section>` : ""}
 
         <section class="section-card photos-picker-card" data-photo-picker-card>
           <div class="photos-picker-icon" aria-hidden="true">📷</div>
           <h3>${identified ? `Hola, ${escapeHTML(guest.firstName || fullGuestName(guest))}` : "Compartí tus fotos"}</h3>
-          <p>Elegí una o varias fotos desde tu celular. La app sólo recibe los archivos que selecciones.</p>
+          <p>Elegí una o varias fotos. Al tocar subir, quedan en cola y podés seguir usando la app mientras se guardan.</p>
 
           ${!identified ? `
             <div class="photo-guest-optional">
@@ -74,21 +105,25 @@
             <button type="button" data-photo-add>Agregar más</button>
           </div>
           <div class="photos-preview-grid" data-photo-grid></div>
-          <button type="button" class="photos-upload-btn" data-photo-upload>Subir al álbum</button>
-          <p class="form-note">Se suben de a una para cuidar la memoria del celular. No modificamos la calidad del archivo original.</p>
+          <button type="button" class="photos-upload-btn" data-photo-upload>Enviar al álbum</button>
+          <p class="form-note">Conservamos la calidad del archivo original. Las fotos se envían de fondo en una cola segura.</p>
         </section>
 
-        <section class="section-card photos-progress-card hidden" data-photo-progress-card>
-          <div class="photos-progress-top"><strong data-photo-progress-label>Preparando…</strong><span data-photo-progress-value>0%</span></div>
-          <div class="photos-progress-track"><div class="photos-progress-fill" data-photo-progress-fill></div></div>
-          <p class="photos-progress-note" data-photo-progress-note>No cierres esta pantalla mientras se están subiendo las fotos.</p>
+        <section class="section-card photos-queue-card hidden" data-photo-queue-card>
+          <div class="photos-queue-icon" aria-hidden="true">☁️</div>
+          <div class="photos-queue-copy">
+            <small>ESTADO DE TUS FOTOS</small>
+            <strong data-photo-queue-title>Preparando…</strong>
+            <p data-photo-queue-copy>Podés seguir usando la app mientras terminamos.</p>
+          </div>
+          <button type="button" class="photos-retry-btn hidden" data-photo-retry>Reintentar</button>
         </section>
 
         <section class="section-card photos-success hidden" data-photo-success>
           <span aria-hidden="true">❤️</span>
           <h3>¡Gracias!</h3>
-          <p data-photo-success-copy>Tus fotos ya forman parte del álbum de Vani &amp; Fede.</p>
-          <button type="button" data-photo-more>Subir más fotos</button>
+          <p data-photo-success-copy>Tu selección quedó en cola y se está enviando al álbum.</p>
+          <button type="button" data-photo-more>Elegir más fotos</button>
         </section>
       </div>`;
   }
@@ -100,9 +135,11 @@
       root,
       guest: options.guest || null,
       publicMode: Boolean(options.publicMode),
+      ownerKey: ownerKeyForGuest(options.guest || null),
       items: [],
-      uploading: false,
-      uploadedCount: 0
+      enqueuing: false,
+      confirmedContribution: 0,
+      unsubscribe: null
     };
     instances.set(root, state);
     return state;
@@ -138,26 +175,18 @@
     const active = state.items.length > 0;
     selection?.classList.toggle("hidden", !active);
     if (count) count.textContent = `${state.items.length} ${state.items.length === 1 ? "foto seleccionada" : "fotos seleccionadas"}`;
-    if (button) button.textContent = `Subir ${state.items.length} ${state.items.length === 1 ? "foto" : "fotos"} al álbum`;
+    if (button) {
+      button.disabled = state.enqueuing;
+      button.textContent = state.enqueuing
+        ? "Preparando fotos…"
+        : `Enviar ${state.items.length} ${state.items.length === 1 ? "foto" : "fotos"} al álbum`;
+    }
     if (!grid) return;
     grid.innerHTML = state.items.map(item => `
-      <div class="photos-preview ${item.status === "uploaded" ? "is-uploaded" : ""} ${item.status === "duplicate" ? "is-duplicate" : ""} ${item.status === "error" ? "is-error" : ""}" data-photo-id="${item.id}">
+      <div class="photos-preview" data-photo-id="${item.id}">
         <img src="${item.previewUrl}" alt="Vista previa de ${escapeHTML(item.file.name)}">
-        ${item.status === "pending" ? `<button type="button" data-photo-remove="${item.id}" aria-label="Quitar ${escapeHTML(item.file.name)}">×</button>` : ""}
-        ${item.status === "duplicate" ? `<small>✓ Ya estaba en el álbum</small>` : ""}
-        ${item.status === "error" ? `<small>${escapeHTML(item.error || "Error")}</small>` : ""}
+        <button type="button" data-photo-remove="${item.id}" aria-label="Quitar ${escapeHTML(item.file.name)}">×</button>
       </div>`).join("");
-  }
-
-  async function sha256File(file) {
-    if (!file || !window.crypto?.subtle) return "";
-    try {
-      const bytes = await file.arrayBuffer();
-      const digest = await window.crypto.subtle.digest("SHA-256", bytes);
-      return Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2,"0")).join("");
-    } catch (_) {
-      return "";
-    }
   }
 
   async function sha256Text(value) {
@@ -241,37 +270,123 @@
     return values.filter(Boolean).some(value => set.has(String(value)));
   }
 
-  async function photoAlreadyStored(fingerprints) {
-    const photoHash = fingerprints?.photoHash || "";
-    const sourceFingerprint = fingerprints?.sourceFingerprint || "";
-    const visualFingerprint = fingerprints?.visualFingerprint || "";
-    if (!photoHash && !sourceFingerprint && !visualFingerprint) return false;
-    try {
-      const response = await jsonp("getPhotoUploadStatus", { photoHash, sourceFingerprint, visualFingerprint });
-      return Boolean(response?.data?.found === true && response?.data?.duplicate === true);
-    } catch (_) {
-      return false;
-    }
+  function openQueueDb() {
+    return new Promise((resolve,reject) => {
+      if (!window.indexedDB) { reject(new Error("Este navegador no permite guardar una cola local.")); return; }
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = event => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          const store = db.createObjectStore(STORE_NAME, { keyPath:"id" });
+          store.createIndex("status", "status", { unique:false });
+          store.createIndex("ownerKey", "ownerKey", { unique:false });
+          store.createIndex("createdAt", "createdAt", { unique:false });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error("No se pudo abrir la cola local."));
+    });
   }
 
-  async function guestContributionCount(guestId) {
-    if (!guestId) return 0;
-    try {
-      const response = await jsonp("getPhotoUploadStatus", { countOnly:"1", guestId });
-      return Math.max(0, Number(response?.data?.contributedCount || 0));
-    } catch (_) {
-      return 0;
-    }
+  async function dbPut(record) {
+    const db = await openQueueDb();
+    return new Promise((resolve,reject) => {
+      const tx = db.transaction(STORE_NAME,"readwrite");
+      tx.objectStore(STORE_NAME).put(record);
+      tx.oncomplete = () => { db.close(); resolve(record); };
+      tx.onerror = () => { const err=tx.error; db.close(); reject(err || new Error("No se pudo guardar la foto en la cola.")); };
+    });
   }
 
-  async function refreshContributionCounter(state) {
-    const countNode = state.root.querySelector("[data-photo-contribution-count]");
-    const labelNode = state.root.querySelector("[data-photo-contribution-label]");
-    if (!countNode || !state.guest?.id || state.guest.id === "admin-test") return;
-    countNode.textContent = "…";
-    const count = await guestContributionCount(state.guest.id);
-    countNode.textContent = String(count);
-    if (labelNode) labelNode.textContent = count === 1 ? "foto" : "fotos";
+  async function dbDelete(id) {
+    const db = await openQueueDb();
+    return new Promise((resolve,reject) => {
+      const tx = db.transaction(STORE_NAME,"readwrite");
+      tx.objectStore(STORE_NAME).delete(id);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { const err=tx.error; db.close(); reject(err); };
+    });
+  }
+
+  async function dbAll() {
+    const db = await openQueueDb();
+    return new Promise((resolve,reject) => {
+      const tx = db.transaction(STORE_NAME,"readonly");
+      const req = tx.objectStore(STORE_NAME).getAll();
+      req.onsuccess = () => { const rows=req.result || []; db.close(); resolve(rows); };
+      req.onerror = () => { const err=req.error; db.close(); reject(err); };
+    });
+  }
+
+  async function resetInterruptedQueue() {
+    const rows = await dbAll();
+    const stuck = rows.filter(row => ["uploading","confirming"].includes(row.status));
+    await Promise.all(stuck.map(row => dbPut({...row,status:"pending",updatedAt:Date.now(),error:""})));
+  }
+
+  function queueSummaryFromRows(rows, ownerKey="") {
+    const filtered = ownerKey ? rows.filter(row => row.ownerKey === ownerKey) : rows;
+    const summary = { pending:0, uploading:0, confirming:0, error:0, totalActive:0, total:filtered.length };
+    filtered.forEach(row => {
+      if (Object.prototype.hasOwnProperty.call(summary,row.status)) summary[row.status] += 1;
+    });
+    summary.totalActive = summary.pending + summary.uploading + summary.confirming;
+    return summary;
+  }
+
+  async function queueSummary(ownerKey="") {
+    try { return queueSummaryFromRows(await dbAll(), ownerKey); }
+    catch (_) { return {pending:0,uploading:0,confirming:0,error:0,totalActive:0,total:0}; }
+  }
+
+  function emitQueueChange() {
+    Promise.resolve(queueSummary()).then(summary => {
+      listeners.forEach(fn => { try { fn(summary); } catch (_) {} });
+      updateGlobalQueuePill(summary);
+    });
+  }
+
+  function subscribeQueue(fn) {
+    listeners.add(fn);
+    void queueSummary().then(summary => fn(summary));
+    return () => listeners.delete(fn);
+  }
+
+  function ensureGlobalQueuePill() {
+    let pill = document.getElementById("vfPhotoQueuePill");
+    if (pill) return pill;
+    pill = document.createElement("div");
+    pill.id = "vfPhotoQueuePill";
+    pill.className = "vf-photo-queue-pill hidden";
+    pill.setAttribute("role","status");
+    pill.setAttribute("aria-live","polite");
+    pill.innerHTML = `<span class="vf-photo-queue-pill-icon">📸</span><span class="vf-photo-queue-pill-copy">Fotos</span>`;
+    document.body.appendChild(pill);
+    return pill;
+  }
+
+  function updateGlobalQueuePill(summary) {
+    if (!document.body) return;
+    const pill = ensureGlobalQueuePill();
+    const copy = pill.querySelector(".vf-photo-queue-pill-copy");
+    if (globalStatusHideTimer) { clearTimeout(globalStatusHideTimer); globalStatusHideTimer = null; }
+    pill.classList.remove("is-error","is-done");
+    if (summary.error > 0) {
+      pill.classList.remove("hidden");
+      pill.classList.add("is-error");
+      if (copy) copy.textContent = `${summary.error} ${summary.error === 1 ? "foto necesita" : "fotos necesitan"} reintento`;
+      return;
+    }
+    if (summary.totalActive > 0) {
+      pill.classList.remove("hidden");
+      if (copy) copy.textContent = `${summary.totalActive} ${summary.totalActive === 1 ? "foto enviándose" : "fotos enviándose"}`;
+      return;
+    }
+    if (!pill.classList.contains("hidden")) {
+      pill.classList.add("is-done");
+      if (copy) copy.textContent = "Fotos guardadas ✓";
+      globalStatusHideTimer = setTimeout(() => pill.classList.add("hidden"), 4500);
+    }
   }
 
   function fileToBase64(file) {
@@ -287,42 +402,22 @@
     });
   }
 
-  function parseResponseText(text) {
-    const raw = String(text || "").trim();
-    if (!raw) return { ok:true };
-    try { return JSON.parse(raw); } catch (_) {}
-    const match = raw.match(/^[^(]+\((.*)\)\s*;?$/s);
-    if (match) { try { return JSON.parse(match[1]); } catch (_) {} }
-    return { ok:true, raw };
-  }
-
-  async function postPhoto(payload, onProgress) {
+  async function postPhoto(payload) {
     const endpoint = uploadEndpoint();
-    if (!endpoint || !/^https?:/i.test(endpoint)) {
-      throw new Error("La subida de fotos todavía no está conectada al Apps Script.");
-    }
-
-    // Apps Script Web Apps no exponen CORS de forma fiable para XHR/fetch legible.
-    // En particular, escuchar xhr.upload.onprogress puede disparar un preflight OPTIONS,
-    // que Apps Script no atiende. Enviamos un POST simple en no-cors y verificamos luego
-    // el photoId mediante JSONP. Así mantenemos la carpeta privada sin depender de CORS.
-    if (typeof onProgress === "function") onProgress(0.18);
-
+    if (!endpoint || !/^https?:/i.test(endpoint)) throw new Error("La subida de fotos todavía no está conectada al Apps Script.");
     const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
     const timeoutId = window.setTimeout(() => controller?.abort(), 120000);
-
     try {
       await fetch(endpoint, {
-        method: "POST",
-        mode: "no-cors",
-        credentials: "omit",
-        redirect: "follow",
-        headers: { "Content-Type": "text/plain;charset=UTF-8" },
-        body: JSON.stringify(payload),
-        signal: controller?.signal
+        method:"POST",
+        mode:"no-cors",
+        credentials:"omit",
+        redirect:"follow",
+        headers:{"Content-Type":"text/plain;charset=UTF-8"},
+        body:JSON.stringify(payload),
+        signal:controller?.signal
       });
-      if (typeof onProgress === "function") onProgress(0.78);
-      return { ok:true, opaque:true };
+      return {ok:true,opaque:true};
     } catch (error) {
       if (error?.name === "AbortError") throw new Error("La foto tardó demasiado en subir.");
       throw new Error("No se pudo enviar la foto al álbum.");
@@ -332,152 +427,247 @@
   }
 
   async function confirmPhotoStored(photoId) {
-    if (!photoId) return { found:false, duplicate:false };
-    const waits = [450, 1200, 2200];
+    if (!photoId) return {found:false,duplicate:false};
+    const waits = [0, 300, 850, 1700, 3000];
     for (const delay of waits) {
-      await new Promise(resolve => setTimeout(resolve, delay));
+      if (delay) await new Promise(resolve => setTimeout(resolve,delay));
       try {
         const response = await jsonp("getPhotoUploadStatus", { photoId });
         const data = response?.data || response || {};
-        if (data.found === true) return { found:true, duplicate:Boolean(data.duplicate) };
+        if (data.found === true) return {found:true,duplicate:Boolean(data.duplicate)};
       } catch (_) {}
     }
-    return { found:false, duplicate:false };
+    return {found:false,duplicate:false};
   }
 
-  function updateProgress(state, currentIndex, currentFraction, label) {
-    const total = Math.max(1, state.items.length);
-    const overall = Math.min(1, (currentIndex + currentFraction) / total);
-    const percent = Math.round(overall * 100);
-    const root = state.root;
-    root.querySelector("[data-photo-progress-card]")?.classList.remove("hidden");
-    const lab = root.querySelector("[data-photo-progress-label]");
-    const val = root.querySelector("[data-photo-progress-value]");
-    const fill = root.querySelector("[data-photo-progress-fill]");
-    if (lab) lab.textContent = label || "Subiendo fotos…";
-    if (val) val.textContent = `${percent}%`;
-    if (fill) fill.style.width = `${percent}%`;
+  async function uploadQueueRecord(record) {
+    const current = {...record,status:"uploading",updatedAt:Date.now(),error:""};
+    await dbPut(current);
+    emitQueueChange();
+
+    const file = current.file;
+    if (!file) throw new Error("La foto pendiente ya no está disponible en este dispositivo.");
+
+    const srcFp = current.sourceFingerprint || await sourceFingerprint(file);
+    if (srcFp && localFingerprintSeen(srcFp)) {
+      rememberLocalFingerprints(srcFp);
+      await dbDelete(current.id);
+      emitQueueChange();
+      return {duplicate:true,local:true};
+    }
+
+    // La huella visual se calcula en segundo plano. No hacemos una consulta previa al servidor:
+    // el backend vuelve a calcular SHA-256 real y decide si ya existe antes de crear el archivo.
+    const visFp = current.visualFingerprint || await visualFingerprint(file);
+    await dbPut({...current,sourceFingerprint:srcFp,visualFingerprint:visFp});
+
+    const base64 = await fileToBase64(file);
+    const payload = {
+      action:"uploadWeddingPhoto",
+      photoId:current.id,
+      batchId:current.batchId,
+      batchIndex:current.batchIndex,
+      batchTotal:current.batchTotal,
+      token:CONFIG.PUBLIC_WRITE_TOKEN || "",
+      appVersion:APP_VERSION,
+      submittedAt:new Date().toISOString(),
+      guestId:current.guestId || "",
+      guestName:current.guestName || "",
+      teamId:current.teamId || "",
+      teamName:current.teamName || "",
+      originalName:file.name || current.originalName || "foto",
+      mimeType:file.type || current.mimeType || "image/jpeg",
+      size:file.size || current.size || 0,
+      lastModified:file.lastModified || current.lastModified || 0,
+      sourceFingerprint:srcFp || "",
+      visualFingerprint:visFp || "",
+      dataBase64:base64
+    };
+
+    await postPhoto(payload);
+    await dbPut({...current,status:"confirming",sourceFingerprint:srcFp,visualFingerprint:visFp,updatedAt:Date.now(),error:""});
+    emitQueueChange();
+    const stored = await confirmPhotoStored(current.id);
+    if (!stored.found) throw new Error("Todavía no pudimos confirmar esta foto en el álbum.");
+
+    rememberLocalFingerprints(srcFp, visFp);
+    await dbDelete(current.id);
+    emitQueueChange();
+    return stored;
   }
 
-  async function uploadAll(state) {
-    if (state.uploading || !state.items.length) return;
-    state.uploading = true;
-    const uploadButton = state.root.querySelector("[data-photo-upload]");
-    if (uploadButton) uploadButton.disabled = true;
+  function canStartRecord(record) {
+    if (activeIds.size >= MAX_CONCURRENT) return false;
+    const size = Number(record?.size || record?.file?.size || 0);
+    const activeLarge = Array.from(activeSizes.values()).some(v => v > LARGE_FILE_BYTES);
+    if (activeLarge) return false;
+    if (size > LARGE_FILE_BYTES && activeIds.size > 0) return false;
+    return true;
+  }
+
+  async function runRecord(record) {
+    activeIds.add(record.id);
+    activeSizes.set(record.id, Number(record?.size || record?.file?.size || 0));
+    try {
+      await uploadQueueRecord(record);
+    } catch (error) {
+      const latestRows = await dbAll().catch(() => []);
+      const latest = latestRows.find(row => row.id === record.id) || record;
+      const attempts = Number(latest.attempts || 0) + 1;
+      const nextStatus = attempts <= 1 ? "pending" : "error";
+      await dbPut({...latest,status:nextStatus,attempts,updatedAt:Date.now(),error:String(error?.message || "No se pudo subir")}).catch(()=>{});
+      emitQueueChange();
+      if (nextStatus === "pending") setTimeout(schedulePump, 1200);
+    } finally {
+      activeIds.delete(record.id);
+      activeSizes.delete(record.id);
+      schedulePump();
+    }
+  }
+
+  async function pumpQueue() {
+    pumpScheduled = false;
+    let rows;
+    try { rows = await dbAll(); } catch (_) { return; }
+    const candidates = rows
+      .filter(row => row.status === "pending" && !activeIds.has(row.id))
+      .sort((a,b) => Number(a.createdAt||0) - Number(b.createdAt||0));
+    for (const record of candidates) {
+      if (!canStartRecord(record)) break;
+      void runRecord(record);
+    }
+    emitQueueChange();
+  }
+
+  function schedulePump() {
+    if (pumpScheduled) return;
+    pumpScheduled = true;
+    setTimeout(() => void pumpQueue(), 40);
+  }
+
+  async function enqueueSelected(state) {
+    if (state.enqueuing || !state.items.length) return;
+    state.enqueuing = true;
+    renderSelection(state);
     const optionalName = String(state.root.querySelector("#photoGuestName")?.value || "").trim();
     const guest = state.guest;
-    let success = 0;
-    let duplicates = 0;
-    let failures = 0;
     const batchId = makeId();
+    const selected = state.items.slice();
 
-    for (let i=0;i<state.items.length;i++) {
-      const item = state.items[i];
-      if (item.status === "uploaded") { success++; continue; }
-      try {
-        item.status = "uploading";
-        renderSelection(state);
-        updateProgress(state, i, 0.03, `Revisando ${i+1} de ${state.items.length}`);
+    // Feedback inmediato: la selección deja de sentirse como una pantalla bloqueada.
+    state.root.querySelector("[data-photo-success]")?.classList.remove("hidden");
+    const successCopy = state.root.querySelector("[data-photo-success-copy]");
+    if (successCopy) successCopy.textContent = `Recibimos tu selección de ${selected.length} ${selected.length === 1 ? "foto" : "fotos"}. Se ${selected.length === 1 ? "está enviando" : "están enviando"} al álbum en segundo plano.`;
 
-        item.photoHash = item.photoHash || await sha256File(item.file);
-        item.sourceFingerprint = item.sourceFingerprint || await sourceFingerprint(item.file);
-        item.visualFingerprint = item.visualFingerprint || await visualFingerprint(item.file);
-        const fingerprints = {
-          photoHash:item.photoHash || "",
-          sourceFingerprint:item.sourceFingerprint || "",
-          visualFingerprint:item.visualFingerprint || ""
-        };
-        if (localFingerprintSeen(fingerprints.photoHash, fingerprints.sourceFingerprint, fingerprints.visualFingerprint) || await photoAlreadyStored(fingerprints)) {
-          item.status = "duplicate";
-          item.error = "";
-          rememberLocalFingerprints(fingerprints.photoHash, fingerprints.sourceFingerprint, fingerprints.visualFingerprint);
-          duplicates++;
-          renderSelection(state);
-          updateProgress(state, i + 1, 0, `${success} nuevas · ${duplicates} ya estaban`);
-          continue;
-        }
-
-        updateProgress(state, i, 0.12, `Subiendo ${i+1} de ${state.items.length}`);
-        const base64 = await fileToBase64(item.file);
-        const payload = {
-          action: "uploadWeddingPhoto",
-          photoId: item.id,
+    try {
+      for (let i=0;i<selected.length;i++) {
+        const item = selected[i];
+        const srcFp = await sourceFingerprint(item.file);
+        if (srcFp && localFingerprintSeen(srcFp)) continue;
+        await dbPut({
+          id:item.id,
+          ownerKey:state.ownerKey,
+          createdAt:Date.now()+i,
+          updatedAt:Date.now(),
+          status:"pending",
+          attempts:0,
+          error:"",
           batchId,
-          batchIndex: i + 1,
-          batchTotal: state.items.length,
-          token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-          appVersion: "32605",
-          submittedAt: new Date().toISOString(),
-          guestId: guest?.id || "",
-          guestName: guest ? fullGuestName(guest) : optionalName,
-          teamId: guest?.team || "",
-          teamName: guest?.team ? teamLabel(guest.team) : "",
-          originalName: item.file.name,
-          mimeType: item.file.type || "image/jpeg",
-          size: item.file.size,
-          lastModified: item.file.lastModified || 0,
-          photoHash: item.photoHash || "",
-          sourceFingerprint: item.sourceFingerprint || "",
-          visualFingerprint: item.visualFingerprint || "",
-          dataBase64: base64
-        };
-        let postError = null;
-        try {
-          await postPhoto(payload, fraction => updateProgress(state, i, Math.max(.08, fraction), `Subiendo ${i+1} de ${state.items.length}`));
-        } catch (error) {
-          postError = error;
-        }
-
-        updateProgress(state, i, .88, `Confirmando ${i+1} de ${state.items.length}`);
-        const stored = await confirmPhotoStored(item.id);
-        if (!stored.found) {
-          throw postError || new Error("La foto no quedó confirmada en el álbum. Revisá la conexión e intentá nuevamente.");
-        }
-
-        item.status = stored.duplicate ? "duplicate" : "uploaded";
-        item.error = "";
-        rememberLocalFingerprints(item.photoHash, item.sourceFingerprint, item.visualFingerprint);
-        if (stored.duplicate) duplicates++;
-        else success++;
-      } catch (error) {
-        item.status = "error";
-        item.error = String(error?.message || "Error al subir");
-        failures++;
+          batchIndex:i+1,
+          batchTotal:selected.length,
+          guestId:guest?.id || "",
+          guestName:guest ? fullGuestName(guest) : optionalName,
+          teamId:guest?.team || "",
+          teamName:guest?.team ? teamLabel(guest.team) : "",
+          originalName:item.file.name,
+          mimeType:item.file.type || "image/jpeg",
+          size:item.file.size,
+          lastModified:item.file.lastModified || 0,
+          sourceFingerprint:srcFp || "",
+          visualFingerprint:"",
+          file:item.file
+        });
       }
+      state.items.forEach(item => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
+      state.items = [];
+      state.root.querySelector("[data-photo-selection]")?.classList.add("hidden");
       renderSelection(state);
-      updateProgress(state, i + 1, 0, failures ? `${success} listas · ${failures} con error` : `Subiendo ${Math.min(i+2,state.items.length)} de ${state.items.length}`);
-      await new Promise(resolve => setTimeout(resolve, 90));
+      emitQueueChange();
+      schedulePump();
+      void refreshContributionCounter(state);
+    } catch (error) {
+      if (successCopy) successCopy.textContent = "No pudimos preparar todas las fotos en este dispositivo. Revisá el espacio disponible e intentá nuevamente.";
+      window.alert(error?.message || "No se pudieron preparar las fotos.");
+    } finally {
+      state.enqueuing = false;
+      renderSelection(state);
+      void refreshQueueCard(state);
     }
-
-    state.uploading = false;
-    if (uploadButton) uploadButton.disabled = false;
-    const progressNote = state.root.querySelector("[data-photo-progress-note]");
-    if (failures) {
-      if (progressNote) progressNote.textContent = `${failures} ${failures === 1 ? "foto no pudo subirse" : "fotos no pudieron subirse"}. Podés tocar “Subir al álbum” para reintentar sólo las fallidas.`;
-      if (uploadButton) uploadButton.textContent = `Reintentar ${failures} ${failures === 1 ? "foto" : "fotos"}`;
-      return;
-    }
-
-    updateProgress(state, state.items.length, 0, "¡Listo!");
-    state.root.querySelector("[data-photo-selection]")?.classList.add("hidden");
-    state.root.querySelector("[data-photo-progress-card]")?.classList.add("hidden");
-    const successCard = state.root.querySelector("[data-photo-success]");
-    successCard?.classList.remove("hidden");
-    const copy = state.root.querySelector("[data-photo-success-copy]");
-    if (copy) {
-      if (success > 0 && duplicates > 0) copy.textContent = `Subiste ${success} ${success === 1 ? "foto nueva" : "fotos nuevas"}. ${duplicates} ${duplicates === 1 ? "ya estaba" : "ya estaban"} en el álbum.`;
-      else if (success > 0) copy.textContent = `Tus ${success} ${success === 1 ? "foto ya forma" : "fotos ya forman"} parte del álbum de Vani & Fede.`;
-      else copy.textContent = `Estas ${duplicates === 1 ? "foto ya estaba" : "fotos ya estaban"} en el álbum ❤️`;
-    }
-    void refreshContributionCounter(state);
   }
 
-  function reset(state) {
+  async function retryFailed(ownerKey="") {
+    const rows = await dbAll();
+    const failed = rows.filter(row => row.status === "error" && (!ownerKey || row.ownerKey === ownerKey));
+    await Promise.all(failed.map(row => dbPut({...row,status:"pending",attempts:0,error:"",updatedAt:Date.now()})));
+    emitQueueChange();
+    schedulePump();
+  }
+
+  async function guestContributionCount(guestId) {
+    if (!guestId) return 0;
+    try {
+      const response = await jsonp("getPhotoUploadStatus", { countOnly:"1", guestId });
+      return Math.max(0, Number(response?.data?.contributedCount || 0));
+    } catch (_) { return 0; }
+  }
+
+  async function refreshContributionCounter(state) {
+    const countNode = state.root.querySelector("[data-photo-contribution-count]");
+    const labelNode = state.root.querySelector("[data-photo-contribution-label]");
+    const statusNode = state.root.querySelector("[data-photo-contribution-status]");
+    if (!state.guest?.id || state.guest.id === "admin-test") {
+      void refreshQueueCard(state);
+      return;
+    }
+    if (countNode) countNode.textContent = "…";
+    const [count, summary] = await Promise.all([guestContributionCount(state.guest.id), queueSummary(state.ownerKey)]);
+    state.confirmedContribution = count;
+    if (countNode) countNode.textContent = String(count);
+    if (labelNode) labelNode.textContent = count === 1 ? "foto" : "fotos";
+    if (statusNode) {
+      statusNode.classList.toggle("hidden", summary.totalActive === 0 && summary.error === 0);
+      if (summary.error) statusNode.textContent = `${summary.error} ${summary.error === 1 ? "foto necesita" : "fotos necesitan"} reintento.`;
+      else if (summary.totalActive) statusNode.textContent = `${summary.totalActive} ${summary.totalActive === 1 ? "foto se está enviando" : "fotos se están enviando"}…`;
+      else statusNode.textContent = "";
+    }
+    void refreshQueueCard(state, summary);
+  }
+
+  async function refreshQueueCard(state, providedSummary=null) {
+    const card = state.root.querySelector("[data-photo-queue-card]");
+    if (!card) return;
+    const summary = providedSummary || await queueSummary(state.ownerKey);
+    const title = card.querySelector("[data-photo-queue-title]");
+    const copy = card.querySelector("[data-photo-queue-copy]");
+    const retry = card.querySelector("[data-photo-retry]");
+    const visible = summary.totalActive > 0 || summary.error > 0;
+    card.classList.toggle("hidden", !visible);
+    card.classList.toggle("is-error", summary.error > 0);
+    retry?.classList.toggle("hidden", summary.error === 0);
+    if (summary.error > 0) {
+      if (title) title.textContent = `${summary.error} ${summary.error === 1 ? "foto necesita" : "fotos necesitan"} reintento`;
+      if (copy) copy.textContent = "Las demás fotos pueden seguir enviándose normalmente.";
+      if (retry) retry.textContent = `Reintentar ${summary.error}`;
+    } else if (summary.totalActive > 0) {
+      if (title) title.textContent = `${summary.totalActive} ${summary.totalActive === 1 ? "foto enviándose" : "fotos enviándose"}`;
+      if (copy) copy.textContent = "Podés navegar por la app. Te avisamos cuando terminen.";
+    }
+  }
+
+  function resetSelection(state) {
     state.items.forEach(item => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
     state.items = [];
-    state.uploadedCount = 0;
     state.root.querySelector("[data-photo-success]")?.classList.add("hidden");
-    state.root.querySelector("[data-photo-progress-card]")?.classList.add("hidden");
     renderSelection(state);
   }
 
@@ -506,8 +696,26 @@
         }
         return;
       }
-      if (event.target.closest("[data-photo-upload]")) { void uploadAll(state); return; }
-      if (event.target.closest("[data-photo-more]")) reset(state);
+      if (event.target.closest("[data-photo-upload]")) { void enqueueSelected(state); return; }
+      if (event.target.closest("[data-photo-more]")) { resetSelection(state); input?.click(); return; }
+      if (event.target.closest("[data-photo-retry]")) { void retryFailed(state.ownerKey); return; }
+    });
+    let previousActive = null;
+    state.unsubscribe = subscribeQueue(() => {
+      void queueSummary(state.ownerKey).then(summary => {
+        void refreshQueueCard(state, summary);
+        const statusNode = state.root.querySelector("[data-photo-contribution-status]");
+        if (statusNode) {
+          statusNode.classList.toggle("hidden", summary.totalActive === 0 && summary.error === 0);
+          if (summary.error) statusNode.textContent = `${summary.error} ${summary.error === 1 ? "foto necesita" : "fotos necesitan"} reintento.`;
+          else if (summary.totalActive) statusNode.textContent = `${summary.totalActive} ${summary.totalActive === 1 ? "foto se está enviando" : "fotos se están enviando"}…`;
+          else statusNode.textContent = "";
+        }
+        if (previousActive !== null && previousActive > 0 && summary.totalActive === 0 && summary.error === 0) {
+          void refreshContributionCounter(state);
+        }
+        previousActive = summary.totalActive;
+      });
     });
   }
 
@@ -583,5 +791,19 @@
     }
   }
 
-  window.WeddingPhotoUploader = { renderView, bindView, mountPublic, renderAdminView, bindAdminView };
+  async function initQueue() {
+    if (queueReady) return;
+    queueReady = true;
+    try {
+      await resetInterruptedQueue();
+      emitQueueChange();
+      schedulePump();
+    } catch (_) {}
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => void initQueue(), {once:true});
+  else void initQueue();
+
+  window.addEventListener("online", () => schedulePump());
+  window.WeddingPhotoUploader = { renderView, bindView, mountPublic, renderAdminView, bindAdminView, retryFailed };
 })();
