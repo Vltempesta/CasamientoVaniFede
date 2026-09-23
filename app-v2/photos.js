@@ -248,7 +248,7 @@
           batchIndex: i + 1,
           batchTotal: state.items.length,
           token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-          appVersion: "32602",
+          appVersion: "32603",
           submittedAt: new Date().toISOString(),
           guestId: guest?.id || "",
           guestName: guest ? fullGuestName(guest) : optionalName,

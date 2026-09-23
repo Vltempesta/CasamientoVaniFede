@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32602";
+  const CURRENT_APP_VERSION = "32603";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32602"
+        appVersion: CONFIG.APP_VERSION || "32603"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32602",
+      appVersion: "32603",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -4687,11 +4687,8 @@
   }
 
   function renderHome() {
-    const team = getTeam(currentGuest.team);
     const rsvp = state.rsvps[currentGuest.id];
-    const rsvpDone = hasFinalRsvp(rsvp);
-    const selectedTransport =
-      String(rsvp?.transport || "");
+    const selectedTransport = String(rsvp?.transport || "");
     const usesMicro =
       rsvp?.attendance === "si" &&
       ["combi", "micro"].includes(selectedTransport);
@@ -4705,115 +4702,11 @@
     const homeTransportSchedule =
       TRANSPORT_SCHEDULE_BY_ZONE[selectedPickupZone] || null;
     const locationOpen = isSectionOpen("ubicacion");
-    const giftsOpen = isTriviaGameOpen("gifts-section");
-    const musicDone = Boolean(triviaSubmission("music-selection"));
-    const coupleTriviaDone = Boolean(
-      triviaSubmission("couple-trivia-test")
-    );
-    const whoTriviaDone = Boolean(
-      triviaSubmission("who-is-who-trivia-test")
-    );
-    const rouletteOpen = timedStageStatus("roulette").active;
-    const warOpen = timedStageStatus("war1").active || timedStageStatus("war2").active;
-    const newGamesActive = rouletteOpen || warOpen;
-    const rouletteDone = rouletteSubmissionFor(currentGuest.id)?.status === "completed";
-    const warDone = warRoundRevealed(2);
-    const challengesDone =
-      musicDone &&
-      coupleTriviaDone &&
-      whoTriviaDone;
-    const preEventCompetitionDone = Boolean(
-      rsvpDone && challengesDone && rouletteDone && warDone
-    );
-    const expandedChallengesActive = rouletteOpen || warOpen || hasNewCompetitionGameData();
-    const homeChallengesDone = expandedChallengesActive
-      ? preEventCompetitionDone
-      : challengesDone;
-
-    const rank = calculateRanking();
-    const ownRankIndex = Math.max(0, rank.findIndex(row => row.id === team.id));
-    const ownRank = rank[ownRankIndex] || { id: team.id, points: 0 };
-    const ownRankLabel = ownRankIndex >= 0 ? `${ownRankIndex + 1}°` : "—";
-    const deadline =
-      "24 de septiembre de 2026";
-
-    const now = new Date();
-    const eventDate = new Date(DATA.couple.eventDate);
-    const daysToEvent = Math.ceil(
-      (eventDate.getTime() - now.getTime()) /
-      (24 * 60 * 60 * 1000)
-    );
-    const eventDay =
-      isWeddingDayMode() || (
-      now.getFullYear() === eventDate.getFullYear() &&
-      now.getMonth() === eventDate.getMonth() &&
-      now.getDate() === eventDate.getDate()
-      );
-    const nearEvent =
-      !eventDay &&
-      daysToEvent > 0 &&
-      daysToEvent <= 30;
-
-    let primaryAction = null;
-
-    if (!rsvpDone) {
-      primaryAction = {
-        tone: "pending",
-        icon: "calendarCheck",
-        kicker: "NUEVO PLAZO",
-        title: "CONFIRMÁ HASTA EL 24/09",
-        text: "Si todavía no respondiste, tenés tiempo hasta el 24 de septiembre.",
-        button: "Confirmar asistencia",
-        attr: 'data-go="asistencia"'
-      };
-    } else if (eventDay) {
-      primaryAction = {
-        tone: "today",
-        icon: "sparkle",
-        kicker: "Hoy es el gran día",
-        title: "Todo listo para celebrar",
-        text: "Revisá la información clave antes de salir.",
-        button: "Ver lo esencial",
-        attr: 'data-scroll="homeEssential"'
-      };
-    } else if (!homeChallengesDone && newGamesActive) {
-      primaryAction = {
-        tone: "play",
-        icon: "star",
-        kicker: "¡NUEVOS JUEGOS!",
-        title: "SEGUÍ SUMANDO PUNTOS PARA TU EQUIPO",
-        text: "Ya hay nuevos desafíos disponibles. Entrá, jugá y ayudá a mover el ranking.",
-        button: "Ver desafíos",
-        attr: 'data-go="puntos"'
-      };
-    } else if (nearEvent) {
-      primaryAction = {
-        tone: "soon",
-        icon: "hourglass",
-        kicker: "Falta poco",
-        title: `${daysToEvent} ${
-          daysToEvent === 1 ? "día" : "días"
-        } para el casamiento`,
-        text: "Revisá horario, traslado y vestimenta.",
-        button: "Ver lo esencial",
-        attr: 'data-scroll="homeEssential"'
-      };
-    } else if (!homeChallengesDone) {
-      primaryAction = {
-        tone: "play",
-        icon: "star",
-        kicker: "TU PRÓXIMO DESAFÍO",
-        title: "SUMÁ PUNTOS PARA TU EQUIPO!",
-        text: "Mientras esperamos al resto, ayudá a tu equipo desde ahora.",
-        button: "Ver desafíos",
-        attr: 'data-go="puntos"'
-      };
-    }
 
     return `
       ${homeStyles()}
-      <section class="home-compact-v32602" aria-label="Inicio Vani y Fede">
-        <div id="homeCountdown" class="home-countdown-v2 home-countdown-v32602" aria-label="Cuenta regresiva para el casamiento">
+      <section class="home-simple-v32603" aria-label="Inicio Vani y Fede">
+        <div id="homeCountdown" class="home-countdown-v2 home-countdown-v32603" aria-label="Cuenta regresiva para el casamiento">
           <div class="home-countdown-copy">
             <span id="countdownLabel">Faltan</span>
             <strong>VANI &amp; FEDE</strong>
@@ -4825,83 +4718,11 @@
             <span><strong id="countdownMinutes">—</strong><small>min</small></span>
           </div>
         </div>
-
-        <section class="home-welcome-v32602">
-          ${teamLogo(team,"home-v2-team-logo")}
-          <div class="home-welcome-v32602-copy">
-            <small>Equipo ${escapeHTML(team.name)}</small>
-            <h2>Hola, ${escapeHTML(currentGuest.firstName || guestFullName(currentGuest))} 👋</h2>
-            <p>${escapeHTML(team.group || team.motto || "")}</p>
-          </div>
-          <div class="home-welcome-v32602-stats" aria-label="Posición y puntos">
-            <span><small>Pos.</small><b>${ownRankLabel}</b></span>
-            <span><small>Pts.</small><b>${Number(ownRank.points || 0)}</b></span>
-          </div>
-        </section>
       </section>
-
-      <button
-        type="button"
-        class="home-install-app-banner hidden"
-        data-install-app
-        aria-label="Instalar la app de Vani y Fede">
-        <span class="home-install-app-icon" aria-hidden="true">
-          ${uiIcon("download")}
-        </span>
-        <span class="home-install-app-copy">
-          <strong>¡Instalá nuestra APP!</strong>
-          <small>Vani &amp; Fede</small>
-        </span>
-        <span class="home-install-app-arrow" aria-hidden="true">›</span>
-      </button>
-
-      ${eventDay ? `
-        <section class="wedding-day-command section-card">
-          <div class="wedding-day-command-head">
-            <span aria-hidden="true">✨</span>
-            <div><small>24 de octubre de 2026</small><h3>Hoy es el gran día</h3><p>Todo lo importante para salir y llegar sin vueltas.</p></div>
-          </div>
-          <div class="wedding-day-command-actions">
-            ${locationOpen ? `<button type="button" data-go="ubicacion">${uiIcon("pin")}<span>Cómo llegar</span></button>` : ""}
-            <button type="button" data-go="traslado">${uiIcon("bus")}<span>Traslado</span></button>
-          </div>
-        </section>
-      ` : ""}
-
-      ${primaryAction ? `
-        <section
-          class="home-primary-action home-primary-action--${primaryAction.tone}">
-          <span class="home-primary-icon">
-            ${uiIcon(primaryAction.icon)}
-          </span>
-          <div class="home-primary-copy">
-            <small>${escapeHTML(primaryAction.kicker)}</small>
-            <h3>${escapeHTML(primaryAction.title)}</h3>
-            <p>${escapeHTML(primaryAction.text)}</p>
-          </div>
-          <button type="button" ${primaryAction.attr}>
-            ${escapeHTML(primaryAction.button)}
-          </button>
-        </section>
-      ` : ""}
-
-      <section class="home-quick-v32602" aria-label="Accesos rápidos">
-        <button type="button" data-go="puntos"><span>${uiIcon("star")}</span><strong>Juegos</strong></button>
-        <button type="button" data-go="fotos"><span>${uiIcon("camera")}</span><strong>Fotos</strong></button>
-        <button type="button" data-go="equipo"><span>${uiIcon("teamShield")}</span><strong>Mi equipo</strong></button>
-      </section>
-
-      ${preEventCompetitionDone ? `
-        <section class="home-event-next-banner">
-          <span class="home-event-next-icon">${uiIcon("bus")}</span>
-          <div><small>PRÓXIMO PASO</small><strong>Prepárense para el traslado al evento</strong><p>Los desafíos previos terminaron. Revisá cómo viajás y estate atento: lo próximo empieza camino al casamiento.</p></div>
-          <button type="button" data-go="traslado">Ver traslado</button>
-        </section>
-      ` : ""}
 
       <section
         id="homeEssential"
-        class="home-essential"
+        class="home-essential home-essential-v32603"
         aria-labelledby="homeEssentialTitle">
         <div class="home-section-heading">
           <div>
@@ -5030,70 +4851,9 @@
             </div>
           </button>
         </div>
-
-        ${giftsOpen ? `
-          <button
-            type="button"
-            class="home-gifts-feature"
-            data-go="regalos">
-            <span class="home-gifts-feature-icon">
-              ${uiIcon("gift")}
-            </span>
-            <span class="home-gifts-feature-copy">
-              <strong>
-                Nuestro mejor regalo es tu presencia 🥂
-              </strong>
-            </span>
-            <b aria-hidden="true">›</b>
-          </button>
-        ` : ""}
-
       </section>
-
-      ${(rsvpDone || homeChallengesDone) ? `
-        <section
-          class="home-completion-status-grid ${
-            rsvpDone && homeChallengesDone
-              ? "has-two"
-              : "has-one"
-          }">
-          ${rsvpDone ? `
-            <button
-              class="home-rsvp-confirmed home-completion-status"
-              type="button"
-              data-go="asistencia">
-              ${uiIcon("checkCircle")}
-              <span>
-                ${
-                  rsvp.attendance === "si"
-                    ? "Asistencia confirmada"
-                    : "Respuesta enviada"
-                }
-              </span>
-            </button>
-          ` : ""}
-
-          ${homeChallengesDone ? `
-            <button
-              class="home-rsvp-confirmed home-completion-status home-challenges-confirmed"
-              type="button"
-              data-go="puntos">
-              ${uiIcon("checkCircle")}
-              <span>Desafíos al día</span>
-            </button>
-          ` : ""}
-        </section>
-      ` : ""}
-
-      ${challengesDone && !preEventCompetitionDone ? `
-        <div class="home-more-challenges-note">
-          <span aria-hidden="true">${rouletteOpen || warOpen ? "🔥" : "🕒"}</span>
-          <strong>${rouletteOpen || warOpen ? "¡Hay nuevos desafíos en Sumá puntos!" : "¡2 nuevos desafíos se habilitarán próximamente!"}</strong>
-        </div>
-      ` : ""}
     `;
   }
-
 
   function homeStyles() {
     return `<style>

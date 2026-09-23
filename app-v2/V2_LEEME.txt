@@ -1,4 +1,4 @@
-VANI & FEDE · V2 · v32602
+VANI & FEDE · V2 · v32603
 Base real: v32524. No se reescribió la app desde cero.
 
 FRONTEND
@@ -30,4 +30,4 @@ IMPORTANTE
 Este ZIP conserva la misma estructura del paquete v32524: no incluye config.js, logos, íconos ni otros assets externos que ya viven en el repositorio de producción.
 
 
-v32602: Inicio vuelve a una disposición compacta inspirada en v32524; navegación inferior con Inicio central elevado; Cronograma retirado completamente de la interfaz.
+v32603: Inicio vuelve a una disposición compacta inspirada en v32524; navegación inferior con Inicio central elevado; Cronograma retirado completamente de la interfaz.
