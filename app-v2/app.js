@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32617";
+  const CURRENT_APP_VERSION = "32619";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32617"
+        appVersion: CONFIG.APP_VERSION || "32619"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32617",
+      appVersion: "32619",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -4958,27 +4958,27 @@
         <div class="home-section-heading"><div><h3>Lo esencial</h3></div></div>
         <div class="home-essential-card">
           <article class="home-essential-row">
-            <span class="home-essential-icon">📅</span>
+            <span class="home-essential-icon">${uiIcon("calendar")}</span>
             <div><small>Fecha</small><strong>Sábado 24 de Octubre</strong><p>18:00 a 03:00 HRS</p></div>
           </article>
 
           <button type="button" class="home-essential-row home-essential-link" data-go="ubicacion">
-            <span class="home-essential-icon">📍</span>
-            <div><small>Ubicación</small><strong>Estancia Los Candiles</strong><p>Ver ubicación e indicaciones ›</p></div>
+            <span class="home-essential-icon">${uiIcon("pin")}</span>
+            <div><small>Ubicación</small><strong>Destino coordinado</strong><p>Lugar secreto · te avisaremos cuándo corresponda</p></div>
           </button>
 
           <button type="button" class="home-essential-row home-essential-link" data-go="traslado">
-            <span class="home-essential-icon">🚌</span>
+            <span class="home-essential-icon">${uiIcon("bus")}</span>
             <div><small>Traslado</small><strong>${escapeHTML(transportTitle)}</strong><p>${escapeHTML(transportText)}</p></div>
           </button>
 
           <article class="home-essential-row">
-            <span class="home-essential-icon">👗</span>
+            <span class="home-essential-icon">${uiIcon("dress")}</span>
             <div><small>Vestimenta</small><strong>Elegante sport</strong><p>Lugar con mucho césped. ¡Evitá taco aguja!</p></div>
           </article>
 
           <button type="button" class="home-essential-row home-essential-link" data-go="asistencia">
-            <span class="home-essential-icon">🍽️</span>
+            <span class="home-essential-icon">${uiIcon("food")}</span>
             <div><small>Menú</small><strong>Restricciones Alimentarias</strong><p>Ver / actualizar ›</p></div>
           </button>
         </div>
@@ -5062,8 +5062,8 @@
               </span>
               <div>
                 <small>Ubicación</small>
-                <strong>Estancia Los Candiles</strong>
-                <p>Ver ubicación e indicaciones ›</p>
+                <strong>Destino coordinado</strong>
+                <p>Ver indicaciones ›</p>
               </div>
             </button>
           ` : usesParticular ? `
@@ -5074,8 +5074,8 @@
               </span>
               <div>
                 <small>Ubicación</small>
-                <strong>Zona Pilar</strong>
-                <p>Consultá a los novios la dirección</p>
+                <strong>Destino coordinado</strong>
+                <p>Pedinos la dirección cuando corresponda</p>
               </div>
             </article>
           ` : usesMicro ? `
@@ -5098,8 +5098,8 @@
               </span>
               <div>
                 <small>Ubicación</small>
-                <strong>Zona Pilar</strong>
-                <p>Revisá los micros antes de decidir</p>
+                <strong>Destino coordinado</strong>
+                <p>Revisá tu traslado antes de decidir</p>
               </div>
             </article>
           `}
