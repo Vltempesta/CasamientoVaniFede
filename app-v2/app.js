@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32608";
+  const CURRENT_APP_VERSION = "32614";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32608"
+        appVersion: CONFIG.APP_VERSION || "32614"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32608",
+      appVersion: "32614",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2843,7 +2843,7 @@
     }
 
     const routes = {
-      inicio: renderHome,
+      inicio: renderHomeSafe_,
       fotos: renderPhotosV2,
       asistencia: renderRSVP,
       traslado: renderTransport,
@@ -2864,11 +2864,12 @@
 
     updateSectionNavigationState();
 
-    const routeHtml = !state.remoteReady && currentRoute !== "admin"
+    const homeCanRenderImmediately = currentRoute === "inicio" && Boolean(currentGuest);
+    const routeHtml = !state.remoteReady && currentRoute !== "admin" && !homeCanRenderImmediately
       ? renderLoadingSkeleton()
       : !isSectionOpen(currentRoute)
         ? renderLockedSection(currentRoute)
-        : (routes[currentRoute] || renderHome)();
+        : (routes[currentRoute] || renderHomeSafe_)();
 
     const html = `
       ${renderAdminPreviewBanner()}
@@ -4851,6 +4852,99 @@
         </span>
         <b aria-hidden="true">›</b>
       </button>`;
+  }
+
+  function homeGiftBannerHtml_() {
+    return `
+      <button type="button" class="home-gifts-feature home-gifts-feature-v32614" data-go="regalos">
+        <span class="home-gifts-feature-icon" aria-hidden="true">🎁</span>
+        <span class="home-gifts-feature-copy">
+          <strong>Nuestro mejor regalo es tu presencia 🥂</strong>
+          <small>Ver información de regalos</small>
+        </span>
+        <b aria-hidden="true">›</b>
+      </button>`;
+  }
+
+  function renderHomeFallback_(error) {
+    console.error("Error al renderizar Inicio", error);
+
+    const rsvp = state?.rsvps?.[currentGuest?.id] || {};
+    const selectedTransport = String(rsvp?.transport || "");
+    const selectedPickupZone = String(rsvp?.pickupZone || "");
+    const schedule = TRANSPORT_SCHEDULE_BY_ZONE?.[selectedPickupZone] || null;
+
+    let transportTitle = "Micros disponibles";
+    let transportText = "Revisá horarios y lugares disponibles ›";
+
+    if (["combi", "micro"].includes(selectedTransport)) {
+      transportTitle = schedule ? `Micro / Combi · ${schedule.shortLabel}` : "Micro / Combi";
+      transportText = schedule
+        ? `Estar ${schedule.beThere} · salida ${schedule.departure} ›`
+        : "Ver información del traslado ›";
+    } else if (["particular", "auto"].includes(selectedTransport)) {
+      transportTitle = "Particular";
+      transportText = "Ver información del traslado ›";
+    } else if (selectedTransport === "sin-decidir") {
+      transportTitle = "Aún no lo decidiste";
+      transportText = "Revisá horarios y lugares ›";
+    }
+
+    return `
+      ${homeStyles()}
+      <section class="home-simple-v32603" aria-label="Inicio Vani y Fede">
+        <div id="homeCountdown" class="home-countdown-v2 home-countdown-v32603">
+          <div class="home-countdown-copy">
+            <span id="countdownLabel">FALTAN:</span>
+          </div>
+          <div class="home-countdown-values-v2">
+            <span><strong id="countdownDays">—</strong><small>días</small></span>
+            <span><strong id="countdownHours">—</strong><small>horas</small></span>
+            <span><strong id="countdownMinutes">—</strong><small>min</small></span>
+          </div>
+        </div>
+      </section>
+
+      <section id="homeEssential" class="home-essential home-essential-v32603">
+        <div class="home-section-heading"><div><h3>Lo esencial</h3></div></div>
+        <div class="home-essential-card">
+          <article class="home-essential-row">
+            <span class="home-essential-icon">📅</span>
+            <div><small>Fecha</small><strong>Sábado 24 de Octubre</strong><p>18:00 a 03:00 HRS</p></div>
+          </article>
+
+          <button type="button" class="home-essential-row home-essential-link" data-go="ubicacion">
+            <span class="home-essential-icon">📍</span>
+            <div><small>Ubicación</small><strong>Estancia Los Candiles</strong><p>Ver ubicación e indicaciones ›</p></div>
+          </button>
+
+          <button type="button" class="home-essential-row home-essential-link" data-go="traslado">
+            <span class="home-essential-icon">🚌</span>
+            <div><small>Traslado</small><strong>${escapeHTML(transportTitle)}</strong><p>${escapeHTML(transportText)}</p></div>
+          </button>
+
+          <article class="home-essential-row">
+            <span class="home-essential-icon">👗</span>
+            <div><small>Vestimenta</small><strong>Elegante sport</strong><p>Lugar con mucho césped. ¡Evitá taco aguja!</p></div>
+          </article>
+
+          <button type="button" class="home-essential-row home-essential-link" data-go="asistencia">
+            <span class="home-essential-icon">🍽️</span>
+            <div><small>Menú</small><strong>Restricciones Alimentarias</strong><p>Ver / actualizar ›</p></div>
+          </button>
+        </div>
+      </section>
+
+      ${homeGiftBannerHtml_()}
+    `;
+  }
+
+  function renderHomeSafe_() {
+    try {
+      return `${renderHome()}${homeGiftBannerHtml_()}`;
+    } catch (error) {
+      return renderHomeFallback_(error);
+    }
   }
 
   function renderHome() {

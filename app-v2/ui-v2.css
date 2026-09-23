@@ -602,3 +602,31 @@ input,textarea,select{border-radius:13px!important}
 .admin-subsection-launcher-event .admin-subsection-launcher-icon{background:rgba(33,52,77,.08);color:#21344d}
 
 @media(max-width:680px){.transport-checkin-card{grid-template-columns:38px minmax(0,1fr)}.transport-checkin-card>span{width:38px;height:38px}.transport-checkin-card button{grid-column:1/-1;width:100%}.admin-table-assign-form{grid-template-columns:1fr}.admin-checkin-zones details>div{grid-template-columns:1fr}.admin-quick-team-list article{grid-template-columns:34px minmax(0,1fr)}.admin-quick-buttons{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr)}.admin-quick-buttons button{width:100%}}
+
+
+/* v32614 · acceso Regalos en Inicio */
+#view .home-gifts-feature-v32614{
+  width:100%;
+  display:grid;
+  grid-template-columns:44px minmax(0,1fr) auto;
+  gap:12px;
+  align-items:center;
+  margin:14px 0 4px;
+  padding:15px 16px;
+  border:1px solid rgba(201,170,114,.28);
+  border-radius:18px;
+  background:linear-gradient(135deg,#21344d,#36556f);
+  color:#fff;
+  text-align:left;
+  box-shadow:0 10px 22px rgba(33,52,77,.14);
+}
+#view .home-gifts-feature-v32614:active{transform:scale(.99)}
+#view .home-gifts-feature-v32614 .home-gifts-feature-icon{
+  width:42px;height:42px;display:grid;place-items:center;border-radius:13px;
+  background:rgba(255,255,255,.12);font-size:21px;
+}
+#view .home-gifts-feature-v32614 strong,
+#view .home-gifts-feature-v32614 small{display:block}
+#view .home-gifts-feature-v32614 strong{font-size:14px;line-height:1.25}
+#view .home-gifts-feature-v32614 small{margin-top:3px;color:rgba(255,255,255,.72);font-size:10px}
+#view .home-gifts-feature-v32614 b{font-size:23px;font-weight:500}
