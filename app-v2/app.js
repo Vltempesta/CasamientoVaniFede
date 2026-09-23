@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32620";
+  const CURRENT_APP_VERSION = "32621";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -429,7 +429,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32620"
+        appVersion: CONFIG.APP_VERSION || "32621"
       })
     );
   }
@@ -1080,7 +1080,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32620",
+      appVersion: "32621",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -6721,15 +6721,89 @@
 
 
   function guestChallengeProgress(guest) {
-    if (!isCompetitionGuest(guest)) return { completed: 0, total: 0, label: "Fuera de competencia" };
+    if (!isCompetitionGuest(guest)) {
+      return {
+        completed: 0,
+        total: 0,
+        label: "Fuera de competencia",
+        checks: []
+      };
+    }
+
     const checks = [
-      hasCompletedRsvp(state.rsvps[guest.id]),
-      Boolean(state.gameSubmissions[`${guest.id}::music-selection`]),
-      Boolean(state.gameSubmissions[`${guest.id}::couple-trivia-test`]),
-      Boolean(state.gameSubmissions[`${guest.id}::who-is-who-trivia-test`])
+      {
+        key: "rsvp",
+        label: "Asistencia",
+        done: hasCompletedRsvp(state.rsvps[guest.id])
+      },
+      {
+        key: "music",
+        label: "Canciones",
+        done: Boolean(
+          state.gameSubmissions[`${guest.id}::music-selection`]
+        )
+      },
+      {
+        key: "couple",
+        label: "Trivia Vani & Fede",
+        done: Boolean(
+          state.gameSubmissions[`${guest.id}::couple-trivia-test`]
+        )
+      },
+      {
+        key: "who",
+        label: "¿Vani o Fede?",
+        done: Boolean(
+          state.gameSubmissions[`${guest.id}::who-is-who-trivia-test`]
+        )
+      }
     ];
-    const completed = checks.filter(Boolean).length;
-    return { completed, total: checks.length, label: `${completed} de ${checks.length} desafíos` };
+
+    /*
+      Una vez lanzada la nueva etapa, el progreso del equipo debe
+      contemplar también Ruleta + las dos rondas de Guerra.
+      Antes del lanzamiento se conserva el histórico 4 desafíos.
+    */
+    const sequenceLaunched = Boolean(
+      manualGameFlag("game-roulette") &&
+      preEventSequenceSchedule()
+    );
+
+    if (sequenceLaunched) {
+      checks.push(
+        {
+          key: "roulette",
+          label: "Ruleta",
+          done:
+            rouletteSubmissionFor(guest.id)?.status ===
+            "completed"
+        },
+        {
+          key: "war1",
+          label: "Guerra R1",
+          done: Boolean(
+            warVoteForGuest(guest.id, 1)
+          )
+        },
+        {
+          key: "war2",
+          label: "Guerra R2",
+          done: Boolean(
+            warVoteForGuest(guest.id, 2)
+          )
+        }
+      );
+    }
+
+    const completed =
+      checks.filter(item => item.done).length;
+
+    return {
+      completed,
+      total: checks.length,
+      label: `${completed} de ${checks.length} desafíos`,
+      checks
+    };
   }
 
   function renderTeam() {
@@ -6760,22 +6834,44 @@
         );
       });
     const activePlayers = members.length;
-    const challengeCompleters =
-      members.filter(guest => {
-        const progress =
-          guestChallengeProgress(guest);
+    const memberChallengeProgress =
+      members.map(guest => ({
+        guest,
+        progress: guestChallengeProgress(guest)
+      }));
 
-        return (
-          progress.total > 0 &&
-          progress.completed === progress.total
-        );
-      }).length;
+    const challengeCompleters =
+      memberChallengeProgress.filter(
+        row =>
+          row.progress.total > 0 &&
+          row.progress.completed === row.progress.total
+      ).length;
+
+    const teamChallengesCompleted =
+      memberChallengeProgress.reduce(
+        (sum, row) =>
+          sum + Number(row.progress.completed || 0),
+        0
+      );
+
+    const teamChallengesTotal =
+      memberChallengeProgress.reduce(
+        (sum, row) =>
+          sum + Number(row.progress.total || 0),
+        0
+      );
+
+    /*
+      El porcentaje representa el cumplimiento REAL de desafíos,
+      no sólo cuánta gente terminó el 100%.
+      Ej.: si todos van 4/7, el equipo está en 57%.
+    */
     const challengePercent = Math.min(
       100,
       Math.round(
         (
-          challengeCompleters /
-          Math.max(activePlayers, 1)
+          teamChallengesCompleted /
+          Math.max(teamChallengesTotal, 1)
         ) * 100
       )
     );
@@ -6884,14 +6980,17 @@
         <span>${uiIcon("star")}</span>
         <div>
           <strong>
+            ${teamChallengesCompleted} de ${teamChallengesTotal}
+            desafíos completados
+          </strong>
+          <small class="team-challenge-mini-detail">
             ${challengeCompleters} de ${activePlayers}
             ${
               challengeCompleters === 1
-                ? "ya completó"
-                : "ya completaron"
+                ? "integrante completó todo"
+                : "integrantes completaron todo"
             }
-            los desafíos
-          </strong>
+          </small>
           <i>
             <em
               style="width:${challengePercent}%">

@@ -14746,3 +14746,19 @@ summary > b {
 #mainMenu .nav-tabs .menu-group button.is-section-locked .menu-item-icon{
   color:#8e8b86 !important;
 }
+
+
+/* ============================================================
+   v32621 · Progreso actualizado de desafíos por integrante
+   ============================================================ */
+#view .team-challenge-mini .team-challenge-mini-detail{
+  display:block;
+  margin:2px 0 5px;
+  color:#81786b;
+  font-size:8px;
+  font-weight:750;
+  line-height:1.25;
+}
+#view .team-member-list .guest-challenge-status>span b{
+  color:#426f47;
+}
