@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32611";
+  const CURRENT_APP_VERSION = "32612";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -426,7 +426,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32611"
+        appVersion: CONFIG.APP_VERSION || "32612"
       })
     );
   }
@@ -1077,7 +1077,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32611",
+      appVersion: "32612",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -12078,37 +12078,12 @@
     });
   }
 
-  function ensureHomeGiftsBanner_() {
-    try {
-      const home = $("#homeEssential");
-      if (!home || home.querySelector(".home-gifts-feature")) return;
-
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "home-gifts-feature";
-      button.dataset.go = "regalos";
-      button.innerHTML = `
-        <span class="home-gifts-feature-icon" aria-hidden="true">🎁</span>
-        <span class="home-gifts-feature-copy">
-          <strong>Nuestro mejor regalo es tu presencia 🥂</strong>
-        </span>
-        <b aria-hidden="true">›</b>
-      `;
-      home.appendChild(button);
-    } catch (error) {
-      console.warn("No se pudo insertar el acceso de Regalos en Inicio", error);
-    }
-  }
-
   function bindViewEvents(route) {
     if (countdownTimer) {
       window.clearInterval(countdownTimer);
       countdownTimer = null;
     }
-    if (route === "inicio") {
-      startHomeCountdown();
-      ensureHomeGiftsBanner_();
-    }
+    if (route === "inicio") startHomeCountdown();
     if (route === "fotos") {
       const photoRoot = document.querySelector("[data-photo-root]");
       window.WeddingPhotoUploader?.bindView?.(photoRoot, { guest: currentGuest, publicMode:false });
