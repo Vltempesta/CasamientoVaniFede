@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32621";
+  const CURRENT_APP_VERSION = "32623";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -429,7 +429,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32621"
+        appVersion: CONFIG.APP_VERSION || "32623"
       })
     );
   }
@@ -1080,7 +1080,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32621",
+      appVersion: "32623",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -3268,6 +3268,17 @@
   const PRE_EVENT_SEQUENCE_GUEST_ID = "system-pre-event-sequence";
   const PRE_EVENT_DAY_MS = 24 * 60 * 60 * 1000;
 
+  // Calendario definitivo de la previa (hora Argentina, UTC-3).
+  // Ruleta: hasta viernes 25/09/2026 17:00.
+  // Guerra R1: viernes 25/09 18:00 → lunes 28/09 18:00.
+  // Guerra R2: comienza al cerrar R1 y conserva una ventana de 24 h.
+  const PRE_EVENT_ROULETTE_END_AT =
+    new Date("2026-09-25T17:00:00-03:00").getTime();
+  const PRE_EVENT_WAR1_START_AT =
+    new Date("2026-09-25T18:00:00-03:00").getTime();
+  const PRE_EVENT_WAR1_END_AT =
+    new Date("2026-09-28T18:00:00-03:00").getTime();
+
   // Ruleta v32523: 8 positivos y 4 negativos, sin cero.
   // La rueda parte de una tabla base calibrada para el equipo activo más grande y se escala
   // según la cantidad de participantes activos (ASISTE + pendiente) de cada equipo.
@@ -3352,17 +3363,28 @@
   function preEventSequenceSchedule() {
     const record = preEventSequenceRecord();
     if (!record) return null;
+
     const rouletteStart = record.start;
-    // V2: tres etapas consecutivas de 24 horas. La Guerra nunca corre al mismo tiempo que la Ruleta.
-    // Esto evita que el ranking/botín de Guerra cambie mientras todavía entran resultados de la Ruleta
-    // y, al mismo tiempo, impide que una persona que no juegue bloquee a todos indefinidamente.
-    const rouletteEnd = rouletteStart + PRE_EVENT_DAY_MS;
+    const rouletteEnd = PRE_EVENT_ROULETTE_END_AT;
     const rouletteDeadline = rouletteEnd;
-    const war1Start = rouletteEnd;
-    const war1End = war1Start + PRE_EVENT_DAY_MS;
+
+    // Se deja 1 hora de transición entre Ruleta y Guerra R1.
+    const war1Start = PRE_EVENT_WAR1_START_AT;
+    const war1End = PRE_EVENT_WAR1_END_AT;
+
+    // R2 arranca inmediatamente al cerrar R1 y dura 24 horas.
     const war2Start = war1End;
     const war2End = war2Start + PRE_EVENT_DAY_MS;
-    return { rouletteStart, rouletteEnd, rouletteDeadline, war1Start, war1End, war2Start, war2End };
+
+    return {
+      rouletteStart,
+      rouletteEnd,
+      rouletteDeadline,
+      war1Start,
+      war1End,
+      war2Start,
+      war2End
+    };
   }
 
   function timedStageStatus(stage, now = Date.now()) {
@@ -3421,9 +3443,11 @@
     }, {});
     const answer = {
       activatedAt: nowIso,
-      rouletteHours: 24,
-      warRoundHours: 24,
-      mode: "roulette-then-war1-then-war2",
+      rouletteEndsAt: "2026-09-25T17:00:00-03:00",
+      war1StartsAt: "2026-09-25T18:00:00-03:00",
+      war1EndsAt: "2026-09-28T18:00:00-03:00",
+      war2Hours: 24,
+      mode: "fixed-roulette-then-war1-then-war2",
       eligibleCounts: competitionEligibilitySnapshot(),
       eligibleGuestIdsByTeam
     };
@@ -3432,7 +3456,7 @@
       guestId: PRE_EVENT_SEQUENCE_GUEST_ID,
       teamId: "system",
       answer: JSON.stringify(answer),
-      comment: "Secuencia: Ruleta 24h → Guerra R1 24h → Guerra R2 24h",
+      comment: "Secuencia: Ruleta hasta 25/09 17:00 → Guerra R1 25/09 18:00 a 28/09 18:00 → Guerra R2 24h",
       earnedPoints: 0,
       status: "active",
       activatedAt: nowIso,
@@ -4493,12 +4517,21 @@
   function parseRouletteSubmission(submission) {
     if (!submission) return null;
     const data = safeJsonObject(submission.answer);
-    const finalPoints = Number(
-      submission.finalPoints ??
-      data.finalPoints ??
-      submission.earnedPoints ??
-      0
-    );
+
+    /*
+      earnedPoints de RESPUESTAS_JUEGOS es la fuente de verdad editable
+      para correcciones manuales. El payloadJson conserva el envío original
+      y no debe pisar un ajuste administrativo hecho directamente en Sheets.
+    */
+    const sheetEarnedPoints = Number(submission.earnedPoints);
+    const finalPoints = Number.isFinite(sheetEarnedPoints)
+      ? sheetEarnedPoints
+      : Number(
+          submission.finalPoints ??
+          data.finalPoints ??
+          0
+        );
+
     return {
       baseResult: Number(submission.baseResult ?? data.baseResult ?? 0),
       decision: String(submission.decision ?? data.decision ?? ""),
@@ -7597,7 +7630,7 @@
             </div>
             <div class="roulette-team-next-note">
               <span>⏳</span>
-              <div><strong>${testMode ? "Prueba completada" : "Tu parte ya está hecha"}</strong><p>${testMode ? "Este resultado es sólo de prueba: no se guarda ni suma puntos." : "Tu parte ya está hecha. Guerra de Equipos · Ronda 1 se habilita cuando termina el reloj de la Ruleta. Primero todos prueban su suerte; después empieza la estrategia por equipos."}</p></div>
+              <div><strong>${testMode ? "Prueba completada" : "Tu parte ya está hecha"}</strong><p>${testMode ? "Este resultado es sólo de prueba: no se guarda ni suma puntos." : "Tu parte ya está hecha. Guerra de Equipos · Ronda 1 se habilita el viernes 25/09 a las 18:00. Primero todos prueban su suerte; después empieza la estrategia por equipos."}</p></div>
             </div>
             ${testMode ? `<button type="button" class="admin-test-reset-game" data-reset-admin-test="roulette">↻ Probar la Ruleta de nuevo</button>` : ""}
           ` : pendingBase !== null ? `
@@ -8001,7 +8034,7 @@
       { order:30, icon:"🎯", title:"¿Cuánto conocés a Vani y Fede?", text:triviaDone ? "Trivia completada." : "Respondé 5 preguntas.", done:triviaDone, active:false, route:"trivia-pareja", progressText:triviaDone ? `${coupleEarnedPoints} puntos obtenidos` : `Hasta ${coupleMaxPoints} puntos`, actionLabel:triviaDone ? "ABRIR RESULTADO" : "COMENZAR", locked:(!rsvpDone && !testMode) || !triviaOpen },
       { order:40, icon:"⚖️", title:"¿Vani o Fede?", text:whoTriviaDone ? "Trivia completada." : "Elegí: ¿Vani o Fede?", done:whoTriviaDone, active:false, route:"trivia-quien", progressText:whoTriviaDone ? `${whoEarnedPoints} puntos obtenidos` : `Hasta ${whoMaxPoints} puntos`, actionLabel:whoTriviaDone ? "ABRIR RESULTADO" : "COMENZAR", locked:(!rsvpDone && !testMode) || !whoTriviaOpen },
       { order:50, icon:"🎡", title:"Ruleta · Todo o Nada", text:rouletteText, done:rouletteDone, active:rouletteOpen && !rouletteDone, route:"ruleta", progressText:rouletteProgress, actionLabel:rouletteDone ? "ABRIR RULETA" : "ENTRAR AHORA", locked:!attending || (!rouletteOpen && !rouletteDone) },
-      { order:60, icon:"⚔️", title:"Guerra de Equipos · Ronda 1", text:war1Text, done:war1Done, active:war1Open && !war1Done, route:"guerra", warRound:1, progressText:war1Done ? "Ronda 1 finalizada" : testMode ? "Disponible para test" : war1Open ? timedStageChip("war1") : "24 horas para votar", actionLabel:war1Done ? "ABRIR RONDA" : war1Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 1", locked:!attending || (!war1Open && !war1Done) },
+      { order:60, icon:"⚔️", title:"Guerra de Equipos · Ronda 1", text:war1Text, done:war1Done, active:war1Open && !war1Done, route:"guerra", warRound:1, progressText:war1Done ? "Ronda 1 finalizada" : testMode ? "Disponible para test" : war1Open ? timedStageChip("war1") : "25/09 18:00 → 28/09 18:00", actionLabel:war1Done ? "ABRIR RONDA" : war1Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 1", locked:!attending || (!war1Open && !war1Done) },
       { order:70, icon:"🛡️", title:"Guerra de Equipos · Ronda 2", text:war2Text, done:war2Done, active:war2Open && !war2Done, route:"guerra", warRound:2, progressText:war2Done ? "Ronda 2 finalizada" : testMode ? "Disponible para test" : war2Open ? timedStageChip("war2") : "24 horas para votar", actionLabel:war2Done ? "ABRIR RONDA" : war2Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 2", locked:!attending || (!war2Open && !war2Done) }
     ];
 
