@@ -630,3 +630,31 @@ input,textarea,select{border-radius:13px!important}
 #view .home-gifts-feature-v32614 strong{font-size:14px;line-height:1.25}
 #view .home-gifts-feature-v32614 small{margin-top:3px;color:rgba(255,255,255,.72);font-size:10px}
 #view .home-gifts-feature-v32614 b{font-size:23px;font-weight:500}
+
+
+/* ============================================================
+   v32624 · Fotos del casamiento → Google Fotos
+   ============================================================ */
+.photos-google-v32624{display:grid;gap:12px}
+.photos-google-card{overflow:hidden}
+.photos-google-actions{display:grid;grid-template-columns:1fr;gap:9px;margin-top:14px}
+.photos-google-btn{
+  min-height:50px;display:flex;align-items:center;justify-content:center;gap:9px;
+  width:100%;padding:12px 16px;border-radius:14px;text-decoration:none!important;
+  font-size:12px;font-weight:950;line-height:1.15;box-sizing:border-box;
+  transition:transform .14s ease,box-shadow .16s ease,filter .16s ease;
+}
+.photos-google-btn:active{transform:scale(.985)}
+.photos-google-btn-primary{background:var(--vf-burgundy);color:#fff!important;box-shadow:0 12px 24px rgba(116,51,68,.18)}
+.photos-google-btn-secondary{border:1px solid rgba(33,52,77,.14);background:rgba(49,83,110,.065);color:var(--vf-blue)!important;box-shadow:none}
+.photos-google-btn>span:first-child{font-size:18px;line-height:1}
+.photos-google-note{display:flex;align-items:flex-start;gap:8px;margin:12px 2px 0;padding:10px 11px;border-radius:13px;background:rgba(201,170,114,.11);color:#725e43;text-align:left}
+.photos-google-note>span{font-size:14px;font-weight:900;line-height:1.2}
+.photos-google-note p{margin:0!important;font-size:9px!important;line-height:1.4!important;color:inherit!important}
+.photos-google-tip{display:grid;grid-template-columns:42px minmax(0,1fr);gap:11px;align-items:center;padding:14px!important;background:linear-gradient(135deg,rgba(49,83,110,.055),rgba(255,253,248,.94))!important}
+.photos-google-tip>span{width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:rgba(116,51,68,.09);font-size:18px}
+.photos-google-tip small{display:block;color:#9b7b4d;font-size:7px;font-weight:950;letter-spacing:.11em}
+.photos-google-tip strong{display:block;margin:2px 0;color:var(--vf-blue);font-size:12px}
+.photos-google-tip p{margin:0!important;font-size:9px!important;line-height:1.35!important}
+.photos-google-admin .photos-google-btn{margin-top:4px}
+@media (min-width:560px){.photos-google-actions{grid-template-columns:1.25fr .75fr}}

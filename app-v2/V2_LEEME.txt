@@ -1,29 +1,26 @@
-Vani & Fede · App v32605
-Base: v32603 / v32524 core preserved.
+Vani & Fede · App v32624
+Base exacta: v32623_ruleta_sheet_override_fix.
 
-Cambios de esta versión:
-- Barra inferior conserva: Asistencia · Traslados · Inicio · Sumá puntos · Ranking.
-- Inicio central rediseñado para destacarse mejor.
-- Inicio muestra aviso arriba de "Lo esencial" sólo si el invitado tiene juegos disponibles pendientes.
-- Traslados: sólo se resalta el micro elegido; el resto queda neutro.
-- Asistencia: "Respuesta enviada" pasa a bordo.
-- Sumá puntos: "QUE SIGA LA COMPETENCIA".
-- Mi equipo: acceso directo al juego de canciones para definir la entrada a pista.
-- Social: compositor/mensaje mucho más visible.
-- Fotos: contador personal "Aportaste X fotos".
-- Fotos: hash SHA-256 en el navegador para consultar duplicados antes de subir.
-- El backend sigue haciendo la validación definitiva de duplicados.
+CAMBIO PRINCIPAL
+- Fotos del casamiento ahora usa el álbum compartido de Google Fotos:
+  https://photos.app.goo.gl/a81nwbuYzQkMCWGA9
+- Se mantiene el diseño de la sección Fotos dentro de la app.
+- Botón principal: “Subir fotos y videos”.
+- Botón secundario: “Ver álbum”.
+- Ambos abren el álbum compartido de Google Fotos.
+- Se mantiene el desbloqueo público de Fotos el 23/10/2026.
+- El deep link ?seccion=fotos sigue funcionando: antes del 23/10 muestra el aviso; desde el 23/10 abre la pantalla pública del álbum.
+- Admin > Fotos ahora abre Google Fotos y deja de consultar contadores del uploader anterior.
+- El PhotosBackend específico de cargas ya no es necesario para esta sección. Puede quedar desplegado, pero v32624 no lo utiliza.
 
-IMPORTANTE AL SUBIR A GITHUB PAGES:
-- Reemplazar los archivos de esta carpeta.
-- Conservar el config.js real de producción.
-- Conservar assets/ e icons/ del repositorio.
-- Instalar y desplegar PhotosBackend v32605 para habilitar el contador y la deduplicación completa.
+SE PRESERVA DE v32623
+- Corrección de overrides de Ruleta desde Sheet.
+- Toda la lógica existente de invitados, equipos, ranking, puntos, traslados, juegos, admin y navegación.
+- config.js real de producción NO está incluido: conservar el del repositorio.
+- assets/ e icons/ NO están incluidos: conservar los del repositorio.
 
-- v32605: inicio central restaurado, contador simplificado, aviso pendiente azul y deduplicación reforzada.
-
-
-v32606: Fotos usa cola local persistente en IndexedDB, hasta 2 subidas simultáneas, reanudación al volver a abrir la app y estado global no bloqueante. El backend sigue validando y deduplicando antes de guardar en Drive.
-
-
-v32607: mejora contraste de lugares disponibles en Traslados. Fotos se habilita públicamente el 23/10/2026; antes de esa fecha queda oculta para invitados y el QR muestra un aviso de próxima habilitación.
+IMPORTANTE AL SUBIR A GITHUB PAGES
+1. Reemplazar los archivos incluidos en este ZIP.
+2. Conservar config.js real de producción.
+3. Conservar assets/ e icons/ del repositorio.
+4. Hacer recarga completa en el celular para tomar el Service Worker v32624.

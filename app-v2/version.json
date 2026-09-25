@@ -1,8 +1,8 @@
 {
-  "version": "32623",
-  "releasedAt": "2026-09-22T22:10:00-03:00",
+  "version": "32624",
+  "releasedAt": "2026-09-24T22:45:49-03:00",
   "requiredReload": true,
-  "releaseDate": "2026-09-22T22:10:00-03:00",
-  "notes": "Fotos en segundo plano: cola persistente, 2 cargas concurrentes y feedback no bloqueante",
-  "release": "Background photo queue + UX rápida"
+  "releaseDate": "2026-09-24T22:45:49-03:00",
+  "notes": "Fotos del casamiento migra a álbum compartido de Google Fotos; se elimina la carga propia de archivos desde la app.",
+  "release": "Google Photos shared album"
 }
