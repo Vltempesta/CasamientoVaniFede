@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32625";
+  const CURRENT_APP_VERSION = "32628";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -71,8 +71,8 @@
     eugenia: { id:"staff-eugenia", firstName:"Eugenia", lastName:"", team:"bosque", role:"staff-eugenia", alias:"Eugenia" },
     daniela: { id:"staff-daniela", firstName:"Daniela", lastName:"", team:"fuego", role:"staff-daniela", alias:"Daniela" }
   };
-  const STAFF_SESSION_KEY = "vf_staff_session_v32625";
-  const THEME_KEY = "vf_theme_v32625";
+  const STAFF_SESSION_KEY = "vf_staff_session_v32628";
+  const THEME_KEY = "vf_theme_v32628";
   let staffSession = null;
   let staffSelectedActivity = "juego-mesa-1";
 
@@ -439,7 +439,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32625"
+        appVersion: CONFIG.APP_VERSION || "32628"
       })
     );
   }
@@ -873,8 +873,8 @@
     const role = staffAlias(input.value);
     row.classList.toggle("hidden", !role);
     if (role) {
-      $("#staffLoginLabel").textContent = `Acceso de ${role === "eugenia" ? "Eugenia" : "Daniela"}`;
-      $("#staffLoginHint").textContent = role === "eugenia" ? "Control de tickets y puntos de Kermesse." : "Control de juegos, performance y ranking en vivo.";
+      $("#staffLoginLabel").textContent = role === "eugenia" ? "Eugenia" : "Daniela";
+      $("#staffLoginHint").textContent = "";
     } else if ($("#staffPassword")) {
       $("#staffPassword").value = "";
     }
@@ -1163,7 +1163,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32625",
+      appVersion: "32628",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2377,6 +2377,7 @@
       input.value = guestFullName(guest);
       input.removeAttribute("aria-invalid");
       $("#loginMessage").textContent = "";
+      updateStaffLoginUi();
       closeSuggestions();
       input.focus();
     }
@@ -2421,6 +2422,7 @@
       input.removeAttribute("aria-invalid");
       $("#loginMessage").textContent = "";
       updateAdminTestLoginUi();
+      updateStaffLoginUi();
       renderSuggestions();
     });
 
@@ -2975,7 +2977,7 @@
     const teamOptions = Object.keys(DATA.teams).map(id=>`<option value="${id}">${escapeHTML(getTeam(id).name)}</option>`).join("");
     const euge = `<section class="section-card staff-form"><p class="eyebrow">CANJE DE KERMESSE</p><label for="staffTeam">Equipo</label><select id="staffTeam">${teamOptions}</select><label for="staffTickets">Tickets recibidos</label><div class="staff-ticket-stepper"><button type="button" data-ticket-delta="-1">−</button><input id="staffTickets" type="number" min="0" max="999" inputmode="numeric" value="0"><button type="button" data-ticket-delta="1">+</button></div><div class="staff-activity-grid"><button type="button" data-ticket-add="5">+5</button><button type="button" data-ticket-add="10">+10</button><button type="button" data-ticket-add="20">+20</button><button type="button" data-ticket-clear>Limpiar</button></div><div class="staff-conversion"><small>1 TICKET = 10 PUNTOS</small><strong id="staffTicketPreview">0 pts</strong></div><button id="staffSaveTickets" class="staff-primary" type="button">CONFIRMAR CANJE</button></section>`;
     const dani = `<section class="section-card staff-form"><p class="eyebrow">CARGA DE PUNTOS</p><label>Actividad</label><div class="staff-activity-grid" id="staffActivityGrid"><button class="active" data-staff-activity="juego-mesa-1">Juego mesa 1</button><button data-staff-activity="juego-mesa-2">Juego mesa 2</button><button data-staff-activity="baile">Performance baile</button><button data-staff-activity="banda">Performance banda</button><button data-staff-activity="ramo">Ramo</button><button data-staff-activity="whisky">Whisky</button><button data-staff-activity="espiritu">Espíritu de equipo</button></div><label for="staffTeam">Equipo</label><select id="staffTeam">${teamOptions}</select><div id="staffDynamicFields"></div><div class="staff-conversion"><small>PUNTOS A CARGAR</small><strong id="staffPointsPreview">500 pts</strong></div><button id="staffSaveDaniela" class="staff-primary" type="button">CONFIRMAR PUNTOS</button></section>`;
-    return `<div class="staff-console-v32625"><section class="staff-console-head"><p class="eyebrow">CONTROL DE FIESTA</p><h2>${isEuge ? "Kermesse · Eugenia" : "Operación · Daniela"}</h2><p>${isEuge ? "Registrá tickets por equipo. La conversión es automática y el ranking se actualiza al guardar." : "Cargá resultados y seguí el ranking para los anuncios durante la fiesta."}</p><span class="staff-live-chip">● Ranking en vivo</span></section>${isEuge ? euge : dani}${staffRankingHtml()}<button type="button" class="ghost-button" style="width:100%;margin-top:10px" data-staff-refresh>Actualizar ranking</button></div>`;
+    return `<div class="staff-console-v32628"><section class="staff-console-head"><p class="eyebrow">CONTROL DE FIESTA</p><h2>${isEuge ? "Kermesse · Eugenia" : "Operación · Daniela"}</h2><p>${isEuge ? "Registrá tickets por equipo. La conversión es automática y el ranking se actualiza al guardar." : "Cargá resultados y seguí el ranking para los anuncios durante la fiesta."}</p><span class="staff-live-chip">● Ranking en vivo</span></section>${isEuge ? euge : dani}${staffRankingHtml()}<button type="button" class="ghost-button" style="width:100%;margin-top:10px" data-staff-refresh>Actualizar ranking</button></div>`;
   }
 
   function staffDanielaPoints() {

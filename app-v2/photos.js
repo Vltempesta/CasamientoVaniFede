@@ -29,7 +29,7 @@
 
     if (prelaunch) {
       return `
-        <div class="photos-v2 photos-google-v32625 photos-prelaunch-v32625" data-photo-root data-public-mode="${publicMode ? "true" : "false"}">
+        <div class="photos-v2 photos-google-v32628 photos-prelaunch-v32628" data-photo-root data-public-mode="${publicMode ? "true" : "false"}">
           <section class="photos-hero">
             ${greeting}
             <h2>Fotos del casamiento 📸</h2>
@@ -46,7 +46,7 @@
     }
 
     return `
-      <div class="photos-v2 photos-google-v32625" data-photo-root data-public-mode="${publicMode ? "true" : "false"}">
+      <div class="photos-v2 photos-google-v32628" data-photo-root data-public-mode="${publicMode ? "true" : "false"}">
         <section class="photos-hero">
           ${greeting}
           <h2>Fotos del casamiento 📸</h2>

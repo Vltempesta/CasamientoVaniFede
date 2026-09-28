@@ -106,8 +106,8 @@ function vfStaffSaveScore_(params) {
 
   const props=PropertiesService.getScriptProperties();
   const spreadsheetId=props.getProperty('WEDDING_SPREADSHEET_ID');
-  if (!spreadsheetId) throw new Error('Falta WEDDING_SPREADSHEET_ID.');
-  const ss=SpreadsheetApp.openById(spreadsheetId);
+  const ss=spreadsheetId ? SpreadsheetApp.openById(spreadsheetId) : SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error('No se pudo acceder a la planilla del casamiento.');
   const sheet=ss.getSheetByName('PUNTAJES');
   if (!sheet) throw new Error('No existe la hoja PUNTAJES.');
   const values=sheet.getDataRange().getValues();

@@ -1,0 +1,18 @@
+VANI & FEDE · v32628
+
+Cambio exclusivo de frontend: rediseño integral del modo noche.
+- No modifica backend, juegos, puntajes, respuestas ni Google Sheets.
+- Corrige fondos claros y contrastes inconsistentes en cards, ranking, menú, formularios, fotos y paneles de staff.
+- Mantiene la identidad bordo/azul y dorado de la app.
+
+INSTALACIÓN SOBRE v32625
+Reemplazar en GitHub:
+- index.html
+- app.js
+- photos.js
+- styles.css
+- sw.js
+- version.json
+
+No reemplazar config.js.
+No hace falta volver a desplegar Apps Script.
