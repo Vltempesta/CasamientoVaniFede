@@ -1,5 +1,5 @@
 const CACHE_NAME =
-  "vani-fede-static-v32636";
+  "vani-fede-static-v32637";
 const TEAM_LOGO_CACHE_NAME =
   "vani-fede-team-logos-v1";
 
@@ -14,14 +14,14 @@ const TEAM_LOGO_PATHS = [
 
 const APP_SHELL = [
   "./index.html",
-  "./styles.css?v=32636",
-  "./ui-v2.css?v=32636",
-  "./photos.js?v=32636",
-  "./app.js?v=32636",
-  "./config.js?v=32636",
-  "./data.js?v=32636",
-  "./manifest.webmanifest?v=32636",
-  "./assets/branding/vyf-seal.png?v=32636",
+  "./styles.css?v=32637",
+  "./ui-v2.css?v=32637",
+  "./photos.js?v=32637",
+  "./app.js?v=32637",
+  "./config.js?v=32637",
+  "./data.js?v=32637",
+  "./manifest.webmanifest?v=32637",
+  "./assets/branding/vyf-seal.png?v=32637",
   "./icons/icon-32.png",
   "./icons/icon-48.png",
   "./icons/icon-96.png",
@@ -202,6 +202,52 @@ self.addEventListener(
   }
 );
 
+async function cacheFirstStatic(request) {
+  const cache = await caches.open(CACHE_NAME);
+  let cached = await cache.match(request);
+
+  // Íconos/branding pueden llegar con query de versión aunque se hayan
+  // precacheado sin query. Dentro del cache de esta versión es seguro ignorarlo.
+  if (!cached) {
+    cached = await cache.match(request, { ignoreSearch: true });
+  }
+
+  if (cached) return cached;
+
+  const response = await fetch(
+    new Request(request, { cache: "no-store" })
+  );
+
+  if (response?.ok) {
+    await cache.put(request, response.clone());
+  }
+
+  return response;
+}
+
+async function staleWhileRevalidateNavigation(request, event) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match("./index.html");
+
+  const networkPromise = fetch(
+    new Request(request, { cache: "no-store" })
+  )
+    .then(async response => {
+      if (response?.ok) {
+        await cache.put("./index.html", response.clone());
+      }
+      return response;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    event.waitUntil(networkPromise);
+    return cached;
+  }
+
+  return (await networkPromise) || Response.error();
+}
+
 self.addEventListener(
   "fetch",
   event => {
@@ -212,105 +258,42 @@ self.addEventListener(
     const url = new URL(request.url);
 
     if (
-      url.origin ===
-        self.location.origin &&
-      url.pathname.includes(
-        "/assets/team-logos/"
-      )
+      url.origin === self.location.origin &&
+      url.pathname.includes("/assets/team-logos/")
+    ) {
+      event.respondWith(cacheFirstTeamLogo(request));
+      return;
+    }
+
+    // version.json siempre debe venir de red para detectar una versión nueva.
+    if (
+      url.origin === self.location.origin &&
+      url.pathname.endsWith("/version.json")
     ) {
       event.respondWith(
-        cacheFirstTeamLogo(request)
+        fetch(new Request(request, { cache: "no-store" }))
       );
       return;
     }
 
-    if (
-      url.origin ===
-        self.location.origin &&
-      url.pathname.endsWith(
-        "/version.json"
-      )
-    ) {
-      event.respondWith(
-        fetch(
-          new Request(
-            request,
-            { cache: "no-store" }
-          )
-        )
-      );
-      return;
-    }
-
-    if (
-      url.origin !==
-      self.location.origin
-    ) {
+    if (url.origin !== self.location.origin) {
       event.respondWith(fetch(request));
       return;
     }
 
-    const freshRequest = new Request(
-      request,
-      { cache: "no-store" }
-    );
+    // v32637: usuarios recurrentes ven el shell cacheado de inmediato.
+    // En navegación actualizamos index.html en segundo plano.
+    if (request.mode === "navigate") {
+      event.respondWith(
+        staleWhileRevalidateNavigation(request, event)
+      );
+      return;
+    }
 
+    // Recursos versionados: cache-first real. El ?v=32637 invalida de forma
+    // explícita cuando publicamos una versión nueva.
     event.respondWith(
-      fetch(freshRequest)
-        .then(response => {
-          if (
-            response &&
-            response.ok
-          ) {
-            const copy =
-              response.clone();
-
-            caches
-              .open(CACHE_NAME)
-              .then(cache => {
-                if (
-                  request.mode ===
-                  "navigate"
-                ) {
-                  cache.put(
-                    "./index.html",
-                    copy
-                  );
-                } else {
-                  cache.put(
-                    request,
-                    copy
-                  );
-                }
-              });
-          }
-
-          return response;
-        })
-        .catch(async () => {
-          if (
-            request.mode ===
-            "navigate"
-          ) {
-            return (
-              (
-                await caches.match(
-                  "./index.html"
-                )
-              ) ||
-              Response.error()
-            );
-          }
-
-          return (
-            (
-              await caches.match(
-                request
-              )
-            ) ||
-            Response.error()
-          );
-        })
+      cacheFirstStatic(request).catch(() => Response.error())
     );
   }
 );

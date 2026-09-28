@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32636";
+  const CURRENT_APP_VERSION = "32637";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
@@ -11,7 +11,7 @@
   const TRANSPORT_CHECKIN_GAME_ID = "event-transport-checkin-v1";
   const ADMIN_OPERATOR_STORAGE_KEY = "vf_admin_points_operator_v1";
 
-  // v32636 · Privacidad Guerra: mientras una ronda está activa, el navegador
+  // v32637 · Privacidad Guerra: mientras una ronda está activa, el navegador
   // conserva únicamente registros sensibles de su propio equipo. Los demás
   // equipos nunca quedan persistidos localmente aunque provengan de una caché vieja.
   const WAR_PRIVATE_ACTIVE_GAME_ROUND = Object.freeze({
@@ -489,6 +489,7 @@
           dataResetAt: snapshot.dataResetAt || null,
           lastSyncAt: snapshot.lastSyncAt || null,
           backendVersion: String(snapshot.backendVersion || ""),
+          serverRevision: String(snapshot.serverRevision || ""),
           remoteReady: true
         } : {}),
         currentGuestId: restoredGuestId,
@@ -524,6 +525,7 @@
           dataResetAt: state.dataResetAt || null,
           lastSyncAt: state.lastSyncAt || null,
           backendVersion: state.backendVersion || "",
+          serverRevision: state.serverRevision || "",
           cachedAt: new Date().toISOString()
         })
       );
@@ -537,7 +539,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32636"
+        appVersion: CONFIG.APP_VERSION || "32637"
       })
     );
     saveRemoteSnapshot();
@@ -1241,7 +1243,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32636",
+      appVersion: "32637",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -1336,21 +1338,26 @@
     }
   }
 
-  async function postToSheets(action, payload) {
-    const result = await writeToSheets(action, payload);
+  async function postToSheets(action, payload, options = {}) {
+    const result = await writeToSheets(action, payload, options);
     if (!result) return false;
 
-    await syncFromSheets(false);
+    if (options.sync !== false) {
+      await syncFromSheets(false);
+    }
     return true;
   }
 
-  function scheduleSilentSync(delay = 1800) {
+  // v32637 · Las escrituras ya se reflejan de forma optimista en pantalla.
+  // El refresco completo se difiere y agrupa para no castigar a Apps Script
+  // después de cada toque. Varias acciones cercanas generan un solo refresh.
+  function scheduleSilentSync(delay = 6500) {
     if (!isConfigured()) return;
     if (silentSyncTimer) window.clearTimeout(silentSyncTimer);
 
     silentSyncTimer = window.setTimeout(() => {
       silentSyncTimer = null;
-      syncFromSheets(false);
+      void syncFromSheets(false);
     }, delay);
   }
 
@@ -1449,26 +1456,56 @@
     unlockSyncInFlight = (async () => {
       try {
         let response;
+        let usedFullDataFallback = false;
 
         try {
           response = await jsonp("getUnlockState");
         } catch (lightSyncError) {
+          // Si ya existe un snapshot válido no escalamos un heartbeat fallido
+          // a un getData pesado. La app sigue instantánea con el último estado.
+          if (state.remoteReady) throw lightSyncError;
           response = await jsonp("getData", { viewerGuestId: currentGuest?.id || state.currentGuestId || "", viewerTeamId: currentGuest?.team || viewerTeamIdFromGuestId(state.currentGuestId) || "" });
+          usedFullDataFallback = true;
         }
 
         // Los candados se aplican apenas llega la respuesta liviana.
         const previousMode = appMode();
         const remoteState = response?.data || {};
+
+        if (usedFullDataFallback) {
+          mergeRemoteData(remoteState);
+          if (currentGuest && render) {
+            renderCurrentRoute({ preserveActiveForm: true });
+          }
+          setRemoteStatus("online", "Datos al día");
+          return true;
+        }
+        const localRevisionBefore = String(state.serverRevision || "");
+        const remoteRevision = String(remoteState.serverRevision || "");
         applyRemoteUnlockSnapshot(
           remoteState,
           { render }
         );
 
-        if (
+        const modeChanged = Boolean(
           remoteState.appSettings &&
           appMode() !== previousMode
-        ) {
+        );
+        const lastFullSync = Date.parse(state.lastSyncAt || "") || 0;
+        const revisionRequiresFullSync = Boolean(
+          currentGuest && (
+            !state.remoteReady ||
+            (remoteRevision && (!localRevisionBefore || remoteRevision !== localRevisionBefore)) ||
+            (!remoteRevision && Date.now() - lastFullSync > FULL_SYNC_STALE_MS)
+          )
+        );
+
+        // getUnlockState funciona como heartbeat/revision check. Solo bajamos
+        // el getData grande cuando realmente cambió algo en el servidor.
+        if (modeChanged || revisionRequiresFullSync) {
           await syncFromSheets(false);
+        } else if (state.remoteReady) {
+          setRemoteStatus("online", "Datos al día");
         }
 
         return true;
@@ -1510,21 +1547,12 @@
       navigator.onLine === false
     ) return;
 
+    // Un heartbeat liviano compara serverRevision. getData solo se ejecuta
+    // si el servidor cambió desde el último snapshot completo.
     void syncUnlockState({
       force: true,
       render: true
     });
-
-    const lastFullSync = Date.parse(
-      state.lastSyncAt || ""
-    ) || 0;
-
-    if (
-      !state.remoteReady ||
-      Date.now() - lastFullSync > FULL_SYNC_STALE_MS
-    ) {
-      void syncFromSheets(false);
-    }
   }
 
 
@@ -1817,7 +1845,9 @@
       return runningResult;
     }
 
-    setRemoteStatus("connecting");
+    if (!state.remoteReady || showToast) {
+      setRemoteStatus("connecting");
+    }
 
     fullSyncInFlight = (async () => {
       try {
@@ -1852,7 +1882,11 @@
         return true;
       } catch (error) {
         state.lastRemoteError = error.message;
-        setRemoteStatus("error");
+        if (state.remoteReady && !showToast) {
+          setRemoteStatus("online", "Últimos datos guardados");
+        } else {
+          setRemoteStatus("error");
+        }
 
         if (currentGuest) {
           renderCurrentRoute({ preserveActiveForm: true });
@@ -2346,10 +2380,27 @@
 
     const initialSection = requestedInitialSection();
     const photoDeepLink = initialSection === "fotos";
-    setRemoteStatus(isConfigured() ? "connecting" : "idle");
-    // Prioridad máxima: empezar a traer el estado remoto apenas arranca JS,
-    // antes de logos, instalación, service worker y chequeos secundarios.
-    const initialSyncPromise = syncFromSheets(false);
+    const restoredCandidate = state.currentGuestId
+      ? getGuestById(state.currentGuestId)
+      : null;
+    const fastRestore = Boolean(
+      restoredCandidate &&
+      isCompetitionGuest(restoredCandidate) &&
+      state.remoteReady
+    );
+
+    setRemoteStatus(
+      isConfigured()
+        ? (fastRestore ? "online" : "connecting")
+        : "idle"
+    );
+
+    // v32637: si este celular ya tiene sesión + snapshot, no bloqueamos el
+    // arranque con getData. La UI abre desde localStorage y applyGuestShell
+    // dispara inmediatamente el heartbeat de revisión en segundo plano.
+    const initialSyncPromise = fastRestore
+      ? Promise.resolve(true)
+      : syncFromSheets(false);
     if (!photoDeepLink) history.replaceState({ screen: "login" }, "", basePageUrl());
     applyPendingWritesToState();
     updateLoginPrivacyUi();
@@ -2395,15 +2446,12 @@
     startTimedCompetitionWatcher();
 
     let restored = false;
-    if (state.currentGuestId) {
-      const guest = getGuestById(state.currentGuestId);
-      if (guest && isCompetitionGuest(guest)) {
-        restored = true;
-        const openRestoredSession = () => {
-          enterApp(guest, false, photoDeepLink ? "replace" : "push", photoDeepLink ? "fotos" : "inicio");
-        };
-        openRestoredSession();
-      }
+    if (restoredCandidate && isCompetitionGuest(restoredCandidate)) {
+      restored = true;
+      const openRestoredSession = () => {
+        enterApp(restoredCandidate, false, photoDeepLink ? "replace" : "push", photoDeepLink ? "fotos" : "inicio");
+      };
+      openRestoredSession();
     }
     if (!restored && photoDeepLink) showPublicPhotosEntry();
   }
@@ -2783,7 +2831,9 @@
       // y la sincronización en curso completa la pantalla en segundo plano.
       enterApp(guest, true);
       if (!state.remoteReady) void syncFromSheets(false);
-      postToSheets("logEvent", { eventName: "login", guestId: guest.id, teamId: guest.team });
+      // v32637: no enviamos telemetría de login. Era una escritura remota que
+      // incrementaba serverRevision y provocaba refrescos completos en todos
+      // los celulares sin aportar nada al funcionamiento del casamiento.
       window.setTimeout(() => {
         button.disabled = false;
         buttonLabel.textContent = "Ingresar";
