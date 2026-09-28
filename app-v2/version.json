@@ -1,8 +1,8 @@
 {
-  "version": "32624",
-  "releasedAt": "2026-09-24T22:45:49-03:00",
+  "version": "32625",
+  "releasedAt": "2026-09-27T21:55:00-03:00",
   "requiredReload": true,
-  "releaseDate": "2026-09-24T22:45:49-03:00",
-  "notes": "Fotos del casamiento migra a álbum compartido de Google Fotos; se elimina la carga propia de archivos desde la app.",
-  "release": "Google Photos shared album"
+  "releaseDate": "2026-09-27T21:55:00-03:00",
+  "notes": "Paneles seguros para Eugenia y Daniela, performance de Ranking/Sumá puntos, Fotos pre-lanzamiento y modo noche.",
+  "release": "Staff control + performance + night mode"
 }

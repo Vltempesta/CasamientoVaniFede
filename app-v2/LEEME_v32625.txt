@@ -1,0 +1,30 @@
+Vani & Fede · APP v32625
+
+BASE EXACTA
+- v32624 Google Photos Album.
+
+CAMBIOS
+1. Modo Eugenia (Kermesse): tickets por equipo, 1 ticket = 10 puntos, confirmación visual y ranking en vivo.
+2. Modo Daniela: juegos de mesa 500/250/100, ramo 250, whisky 250, espíritu 700, baile/banda 50/100/150/200 y ranking en vivo.
+3. Acceso Eugenia/Daniela protegido por backend. La clave NO está en HTML/JS ni en este paquete.
+4. Fotos visible antes del 23/10 con pantalla informativa; carga al álbum habilitada desde el 23/10/2026.
+5. Modo noche junto a notificaciones, persistente en el navegador.
+6. Performance: Inicio/Ranking/Sumá puntos/Fotos/Staff renderizan inmediatamente con el último estado local mientras sincronizan.
+7. Service Worker y version.json actualizados a 32625.
+
+SEGURIDAD (OBLIGATORIO)
+- En Apps Script > Project Settings > Script Properties crear VF_STAFF_PASSWORD con la contraseña acordada.
+- NO escribir esa contraseña en config.js, app.js, index.html ni GitHub.
+- Agregar StaffSecurity_v32625.gs al MISMO Apps Script del backend.
+- Integrar vfStaffHandleAction_(action, params) en doGet como explica el encabezado del archivo .gs.
+- El login usa desafío SHA-256 de un solo uso y sesión temporal de 6 horas. Cinco fallos bloquean temporalmente el usuario.
+
+IMPORTANTE
+Ninguna contraseña de 4 dígitos puede ser literalmente “inhackeable”. Esta implementación evita exponerla en GitHub/frontend y hace la validación del lado servidor. Si querés máxima seguridad, usar una clave más larga y distinta por operador.
+
+PUBLICACIÓN
+- Reemplazar los archivos del frontend por los de este ZIP.
+- Conservar config.js real de producción y assets/icons del repo, igual que en v32624.
+- Actualizar el backend con StaffSecurity_v32625.gs.
+- Crear la Script Property.
+- Publicar una Nueva versión del Web App de Apps Script.

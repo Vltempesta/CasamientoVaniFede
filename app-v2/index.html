@@ -91,6 +91,11 @@
             <input id="adminTestPassword" type="password" inputmode="text" autocomplete="off" placeholder="Ingresá la contraseña" />
             <small>Modo de test: permite abrir los juegos sin guardar respuestas ni modificar puntos.</small>
           </div>
+          <div id="staffLoginRow" class="admin-test-login-row staff-login-row hidden">
+            <label id="staffLoginLabel" for="staffPassword">Acceso organización</label>
+            <input id="staffPassword" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Contraseña" maxlength="12" />
+            <small id="staffLoginHint">Acceso seguro para operación del evento.</small>
+          </div>
           <div id="loginMessage" class="form-message" role="status" aria-live="polite"></div>
           <span id="connectionBadge" class="status-pill idle">Conexión pendiente</span>
           <button
@@ -128,6 +133,10 @@
               <path d="M10 21h4"/>
             </svg>
             <span id="notificationBadge" class="notification-badge hidden">0</span>
+          </button>
+          <button id="themeToggleButton" class="notification-button theme-toggle-button" type="button" aria-label="Activar modo noche" aria-pressed="false" title="Modo noche">
+            <svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.2A8.2 8.2 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></svg>
+            <svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
           </button>
           <button
             id="menuButton"

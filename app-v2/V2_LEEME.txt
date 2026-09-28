@@ -1,4 +1,4 @@
-Vani & Fede · App v32624
+Vani & Fede · App v32625
 Base exacta: v32623_ruleta_sheet_override_fix.
 
 CAMBIO PRINCIPAL
@@ -11,7 +11,7 @@ CAMBIO PRINCIPAL
 - Se mantiene el desbloqueo público de Fotos el 23/10/2026.
 - El deep link ?seccion=fotos sigue funcionando: antes del 23/10 muestra el aviso; desde el 23/10 abre la pantalla pública del álbum.
 - Admin > Fotos ahora abre Google Fotos y deja de consultar contadores del uploader anterior.
-- El PhotosBackend específico de cargas ya no es necesario para esta sección. Puede quedar desplegado, pero v32624 no lo utiliza.
+- El PhotosBackend específico de cargas ya no es necesario para esta sección. Puede quedar desplegado, pero v32625 no lo utiliza.
 
 SE PRESERVA DE v32623
 - Corrección de overrides de Ruleta desde Sheet.
@@ -23,4 +23,7 @@ IMPORTANTE AL SUBIR A GITHUB PAGES
 1. Reemplazar los archivos incluidos en este ZIP.
 2. Conservar config.js real de producción.
 3. Conservar assets/ e icons/ del repositorio.
-4. Hacer recarga completa en el celular para tomar el Service Worker v32624.
+4. Hacer recarga completa en el celular para tomar el Service Worker v32625.
+
+
+Ver LEEME_v32625.txt para cambios y seguridad de esta versión.

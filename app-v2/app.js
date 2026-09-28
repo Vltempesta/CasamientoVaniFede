@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32624";
+  const CURRENT_APP_VERSION = "32625";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -66,6 +66,16 @@
     rouletteResult: null,
     warVotes: { 1: null, 2: null }
   };
+
+  const STAFF_USERS = {
+    eugenia: { id:"staff-eugenia", firstName:"Eugenia", lastName:"", team:"bosque", role:"staff-eugenia", alias:"Eugenia" },
+    daniela: { id:"staff-daniela", firstName:"Daniela", lastName:"", team:"fuego", role:"staff-daniela", alias:"Daniela" }
+  };
+  const STAFF_SESSION_KEY = "vf_staff_session_v32625";
+  const THEME_KEY = "vf_theme_v32625";
+  let staffSession = null;
+  let staffSelectedActivity = "juego-mesa-1";
+
 
   let currentGuest = null;
   let currentRoute = "inicio";
@@ -429,7 +439,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32624"
+        appVersion: CONFIG.APP_VERSION || "32625"
       })
     );
   }
@@ -842,6 +852,79 @@
     return String(guest?.id || "") === ADMIN_TEST_GUEST.id;
   }
 
+
+  function staffAlias(value) {
+    const key = normalize(value);
+    return key === "eugenia" ? "eugenia" : key === "daniela" ? "daniela" : "";
+  }
+
+  function isStaffMode(guest = currentGuest) {
+    return String(guest?.role || "").startsWith("staff-");
+  }
+
+  function staffRole() {
+    return String(currentGuest?.role || "").replace(/^staff-/, "");
+  }
+
+  function updateStaffLoginUi() {
+    const row = $("#staffLoginRow");
+    const input = $("#guestName");
+    if (!row || !input) return;
+    const role = staffAlias(input.value);
+    row.classList.toggle("hidden", !role);
+    if (role) {
+      $("#staffLoginLabel").textContent = `Acceso de ${role === "eugenia" ? "Eugenia" : "Daniela"}`;
+      $("#staffLoginHint").textContent = role === "eugenia" ? "Control de tickets y puntos de Kermesse." : "Control de juegos, performance y ranking en vivo.";
+    } else if ($("#staffPassword")) {
+      $("#staffPassword").value = "";
+    }
+  }
+
+  async function sha256Hex(value) {
+    if (!window.crypto?.subtle) throw new Error("Este navegador no permite el acceso seguro.");
+    const bytes = new TextEncoder().encode(String(value));
+    const hash = await crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,"0")).join("");
+  }
+
+  async function secureStaffLogin(role, password) {
+    const start = await jsonp("staffLoginStart", { role });
+    const challenge = start?.data || {};
+    if (!challenge.challengeId || !challenge.nonce) throw new Error("No se pudo iniciar el acceso seguro.");
+    const proof = await sha256Hex(`${password}|${challenge.nonce}`);
+    const finish = await jsonp("staffLoginFinish", { role, challengeId:challenge.challengeId, proof });
+    const data = finish?.data || {};
+    if (!data.sessionToken) throw new Error("Acceso rechazado.");
+    staffSession = { role, sessionToken:data.sessionToken, expiresAt:data.expiresAt || "" };
+    sessionStorage.setItem(STAFF_SESSION_KEY, JSON.stringify(staffSession));
+    return staffSession;
+  }
+
+  function restoreStaffSession() {
+    try { staffSession = JSON.parse(sessionStorage.getItem(STAFF_SESSION_KEY) || "null"); } catch (_) { staffSession = null; }
+  }
+
+  function applyTheme(theme) {
+    const dark = theme === "dark";
+    document.body.classList.toggle("dark-mode", dark);
+    const button = $("#themeToggleButton");
+    button?.setAttribute("aria-pressed", dark ? "true" : "false");
+    button?.setAttribute("aria-label", dark ? "Activar modo claro" : "Activar modo noche");
+    if (button) button.title = dark ? "Modo claro" : "Modo noche";
+  }
+
+  function initTheme() {
+    let theme = localStorage.getItem(THEME_KEY);
+    if (!theme) theme = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
+    applyTheme(theme);
+  }
+
+  function toggleTheme() {
+    const next = document.body.classList.contains("dark-mode") ? "light" : "dark";
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  }
+
   function updateAdminTestLoginUi() {
     const row = $("#adminTestLoginRow");
     const input = $("#guestName");
@@ -1080,7 +1163,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32624",
+      appVersion: "32625",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2056,11 +2139,10 @@
   }
 
   function applyPhotosAvailabilityUi() {
-    const available = photosSectionAvailable() || isAdminTestMode();
     document.querySelectorAll('.nav-tabs button[data-route="fotos"]').forEach(button => {
-      button.classList.toggle("hidden", !available);
-      button.setAttribute("aria-hidden", available ? "false" : "true");
-      button.tabIndex = available ? 0 : -1;
+      button.classList.remove("hidden");
+      button.setAttribute("aria-hidden", "false");
+      button.tabIndex = 0;
     });
   }
 
@@ -2081,29 +2163,8 @@
 
     if (!photosSectionAvailable()) {
       host.classList.remove("hidden");
-      host.innerHTML = `
-        <div class="photos-public-shell">
-          <div class="photos-public-inner">
-            <div class="photos-public-brand"><strong>VANI &amp; FEDE</strong><small>24 · 10 · 2026</small></div>
-            <section class="section-card photos-coming-soon-v32608">
-              <span aria-hidden="true">📸</span>
-              <small>ÁLBUM COLABORATIVO</small>
-              <h2>Las fotos se habilitan el 23/10</h2>
-              <p>Desde ese día vas a poder subir directamente desde tu celular las fotos que quieras compartir con Vani &amp; Fede.</p>
-              <button type="button" class="photos-public-enter" data-photo-locked-enter>Entrar a la app</button>
-            </section>
-          </div>
-        </div>`;
-      host.querySelector("[data-photo-locked-enter]")?.addEventListener("click", () => {
-        host.classList.add("hidden");
-        host.innerHTML = "";
-        document.getElementById("loginScreen")?.classList.remove("hidden");
-        const url = new URL(location.href);
-        url.searchParams.delete("seccion");
-        url.hash = "";
-        history.replaceState({ screen:"login" }, "", url.pathname + url.search);
-        document.getElementById("guestName")?.focus();
-      });
+      host.innerHTML = `<div class="photos-public-shell"><div class="photos-public-inner"><div class="photos-public-brand"><strong>VANI &amp; FEDE</strong><small>24 · 10 · 2026</small></div>${window.WeddingPhotoUploader?.renderView?.({guest:null, publicMode:true, prelaunch:true}) || ""}<button type="button" class="photos-public-enter" data-photo-locked-enter>Entrar al resto de la app</button></div></div>`;
+      host.querySelector("[data-photo-locked-enter]")?.addEventListener("click", () => { host.classList.add("hidden"); host.innerHTML=""; document.getElementById("loginScreen")?.classList.remove("hidden"); const url=new URL(location.href); url.searchParams.delete("seccion"); url.hash=""; history.replaceState({screen:"login"},"",url.pathname+url.search); document.getElementById("guestName")?.focus(); });
       return true;
     }
 
@@ -2444,6 +2505,8 @@
   function bindShellEvents() {
     bindInstallButtons();
 
+    $("#themeToggleButton")?.addEventListener("click", toggleTheme);
+
     $("#notificationButton")?.addEventListener("click", event => {
       event.stopPropagation();
       const panel = $("#notificationPanel");
@@ -2520,18 +2583,37 @@
       }
     });
 
-    $("#loginForm").addEventListener("submit", event => {
+    $("#loginForm").addEventListener("submit", async event => {
       event.preventDefault();
       const input = $("#guestName");
       const button = $("#loginButton");
       const buttonLabel = $("span", button);
       const message = $("#loginMessage");
       const isAdminLogin = normalize(input.value) === "admin";
+      const staffLoginRole = staffAlias(input.value);
 
       if (!normalize(input.value)) {
         input.setAttribute("aria-invalid", "true");
         message.textContent = "Escribí tu nombre para encontrar la invitación.";
         input.focus();
+        return;
+      }
+
+      if (staffLoginRole) {
+        const passwordInput = $("#staffPassword");
+        const password = String(passwordInput?.value || "");
+        if (!password) { message.textContent="Ingresá la contraseña de organización."; passwordInput?.focus(); return; }
+        button.disabled=true; buttonLabel.textContent="Validando…"; message.textContent="";
+        try {
+          await secureStaffLogin(staffLoginRole, password);
+          const guest=STAFF_USERS[staffLoginRole];
+          enterApp(guest,false,"push","staff");
+          currentRoute="staff"; renderCurrentRoute();
+          toast(`Acceso de ${guest.firstName} habilitado.`);
+        } catch(error) {
+          message.textContent=error?.message || "Contraseña incorrecta o acceso temporalmente bloqueado.";
+          passwordInput?.focus(); passwordInput?.select();
+        } finally { button.disabled=false; buttonLabel.textContent="Ingresar"; }
         return;
       }
 
@@ -2658,10 +2740,6 @@
     if (route === "ficha" || route === "juegos" || route === "info") route = "inicio";
     if (route === "torneo") route = "puntos";
     if (route === "cronograma") route = "inicio";
-    if (route === "fotos" && !photosSectionAvailable() && !isAdminTestMode()) {
-      toast("Fotos del casamiento se habilita el 23/10.");
-      route = "inicio";
-    }
 
     const legacyGameRoutes = ["musica", "trivia-pareja", "trivia-quien", "trivia"];
     const testMode = isAdminTestMode();
@@ -2876,11 +2954,78 @@
         (currentGuest.firstName || "V")
           .charAt(0)
           .toUpperCase();
-      $("#welcomeTeam").textContent =
-        `Equipo ${team.name}`;
+      $("#welcomeTeam").textContent = isStaffMode(currentGuest)
+        ? (staffRole() === "eugenia" ? "Control Kermesse" : "Control de fiesta")
+        : `Equipo ${team.name}`;
     }
 
     renderCurrentRoute();
+  }
+
+
+  function staffRankingHtml() {
+    const ranking = calculateRanking();
+    return `<section class="section-card staff-ranking-mini"><p class="eyebrow">EN VIVO</p><h3>Ranking actual</h3>${ranking.map((row,i)=>`<div class="staff-rank-row"><span>${i+1}°</span><strong>${escapeHTML(getTeam(row.id).name)}</strong><b>${Number(row.total||0).toLocaleString("es-AR")}</b></div>`).join("")}</section>`;
+  }
+
+  function renderStaff() {
+    const role = staffRole();
+    if (!role || !staffSession?.sessionToken) return `<section class="section-card"><h3>Sesión vencida</h3><p>Volvé a ingresar desde el inicio.</p></section>`;
+    const isEuge = role === "eugenia";
+    const teamOptions = Object.keys(DATA.teams).map(id=>`<option value="${id}">${escapeHTML(getTeam(id).name)}</option>`).join("");
+    const euge = `<section class="section-card staff-form"><p class="eyebrow">CANJE DE KERMESSE</p><label for="staffTeam">Equipo</label><select id="staffTeam">${teamOptions}</select><label for="staffTickets">Tickets recibidos</label><div class="staff-ticket-stepper"><button type="button" data-ticket-delta="-1">−</button><input id="staffTickets" type="number" min="0" max="999" inputmode="numeric" value="0"><button type="button" data-ticket-delta="1">+</button></div><div class="staff-activity-grid"><button type="button" data-ticket-add="5">+5</button><button type="button" data-ticket-add="10">+10</button><button type="button" data-ticket-add="20">+20</button><button type="button" data-ticket-clear>Limpiar</button></div><div class="staff-conversion"><small>1 TICKET = 10 PUNTOS</small><strong id="staffTicketPreview">0 pts</strong></div><button id="staffSaveTickets" class="staff-primary" type="button">CONFIRMAR CANJE</button></section>`;
+    const dani = `<section class="section-card staff-form"><p class="eyebrow">CARGA DE PUNTOS</p><label>Actividad</label><div class="staff-activity-grid" id="staffActivityGrid"><button class="active" data-staff-activity="juego-mesa-1">Juego mesa 1</button><button data-staff-activity="juego-mesa-2">Juego mesa 2</button><button data-staff-activity="baile">Performance baile</button><button data-staff-activity="banda">Performance banda</button><button data-staff-activity="ramo">Ramo</button><button data-staff-activity="whisky">Whisky</button><button data-staff-activity="espiritu">Espíritu de equipo</button></div><label for="staffTeam">Equipo</label><select id="staffTeam">${teamOptions}</select><div id="staffDynamicFields"></div><div class="staff-conversion"><small>PUNTOS A CARGAR</small><strong id="staffPointsPreview">500 pts</strong></div><button id="staffSaveDaniela" class="staff-primary" type="button">CONFIRMAR PUNTOS</button></section>`;
+    return `<div class="staff-console-v32625"><section class="staff-console-head"><p class="eyebrow">CONTROL DE FIESTA</p><h2>${isEuge ? "Kermesse · Eugenia" : "Operación · Daniela"}</h2><p>${isEuge ? "Registrá tickets por equipo. La conversión es automática y el ranking se actualiza al guardar." : "Cargá resultados y seguí el ranking para los anuncios durante la fiesta."}</p><span class="staff-live-chip">● Ranking en vivo</span></section>${isEuge ? euge : dani}${staffRankingHtml()}<button type="button" class="ghost-button" style="width:100%;margin-top:10px" data-staff-refresh>Actualizar ranking</button></div>`;
+  }
+
+  function staffDanielaPoints() {
+    const activity = staffSelectedActivity;
+    if (["juego-mesa-1","juego-mesa-2"].includes(activity)) return Number($("#staffPosition")?.value || 500);
+    if (["ramo","whisky"].includes(activity)) return 250;
+    if (activity === "espiritu") return 700;
+    return Number($("#staffPerformancePoints")?.value || 100);
+  }
+
+  function renderStaffDynamicFields() {
+    const host = $("#staffDynamicFields"); if (!host) return;
+    if (["juego-mesa-1","juego-mesa-2"].includes(staffSelectedActivity)) host.innerHTML=`<label for="staffPosition">Posición</label><select id="staffPosition"><option value="500">1° · 500 puntos</option><option value="250">2° · 250 puntos</option><option value="100">3° · 100 puntos</option></select>`;
+    else if (["baile","banda"].includes(staffSelectedActivity)) host.innerHTML=`<label for="staffPerformancePoints">Reconocimiento</label><select id="staffPerformancePoints"><option value="50">Mención · 50</option><option value="100" selected>Buena · 100</option><option value="150">Muy buena · 150</option><option value="200">Excelente · 200</option></select>`;
+    else host.innerHTML="";
+    const preview=$("#staffPointsPreview"); if (preview) preview.textContent=`${staffDanielaPoints()} pts`;
+    host.querySelectorAll("select").forEach(el=>el.addEventListener("change",()=>{ const p=$("#staffPointsPreview"); if(p)p.textContent=`${staffDanielaPoints()} pts`; }));
+  }
+
+  function staffActivityLabel(id) { return ({"juego-mesa-1":"Juego de mesa 1","juego-mesa-2":"Juego de mesa 2",baile:"Performance en baile",banda:"Performance con la banda",ramo:"Ramo",whisky:"Whisky",espiritu:"Espíritu de equipo",kermesse:"Kermesse · tickets"})[id] || id; }
+
+  function showStaffPointsFlash(points, teamId, extra="") {
+    const el=document.createElement("div"); el.className="staff-save-flash"; el.innerHTML=`<div><small>REGISTRADO</small><strong>+${Number(points).toLocaleString("es-AR")}</strong><span>${escapeHTML(getTeam(teamId).name)}${extra ? `<br><small>${escapeHTML(extra)}</small>`:""}</span></div>`; document.body.appendChild(el); setTimeout(()=>el.remove(),1450);
+  }
+
+  async function staffSaveScore({teamId, points, activity, tickets=0}) {
+    if (!staffSession?.sessionToken) { toast("La sesión venció. Volvé a ingresar."); return false; }
+    const payload={ sessionToken:staffSession.sessionToken, role:staffSession.role, teamId, points:Number(points), activity, tickets:Number(tickets||0), appVersion:CURRENT_APP_VERSION, requestId:newRequestId("staffSaveScore"), timestamp:new Date().toISOString() };
+    try {
+      const response=await jsonp("staffSaveScore", { payload:JSON.stringify(payload) }, {timeoutMs:10000});
+      const record=response?.data?.record || {gameId:`staff-${activity}`,teamId,points:Number(points),comment:`${staffActivityLabel(activity)} · ${staffSession.role}`,timestamp:payload.timestamp,requestId:payload.requestId};
+      state.scoreEntries.push(record); state.scoreEntries=dedupeScores(state.scoreEntries);
+      const sr=Array.isArray(state.serverRanking)?state.serverRanking:[]; const row=sr.find(r=>r.id===teamId); if(row) row.total=Number(row.total||0)+Number(points); else sr.push({id:teamId,total:Number(points)}); state.serverRanking=sr; saveState();
+      return true;
+    } catch(error) { console.warn("staffSaveScore",error); toast(error?.message || "No se pudo guardar."); return false; }
+  }
+
+  function bindStaffEvents() {
+    if (!isStaffMode()) return;
+    if (staffRole()==="eugenia") {
+      const tickets=$("#staffTickets"), preview=$("#staffTicketPreview"); const update=()=>{const n=Math.max(0,Number(tickets?.value||0)); if(preview)preview.textContent=`${n*10} pts`;};
+      $$('[data-ticket-delta]').forEach(b=>b.addEventListener("click",()=>{tickets.value=Math.max(0,Number(tickets.value||0)+Number(b.dataset.ticketDelta));update();}));
+      $$('[data-ticket-add]').forEach(b=>b.addEventListener("click",()=>{tickets.value=Math.max(0,Number(tickets.value||0)+Number(b.dataset.ticketAdd));update();}));
+      $('[data-ticket-clear]')?.addEventListener("click",()=>{tickets.value=0;update();}); tickets?.addEventListener("input",update); update();
+      $("#staffSaveTickets")?.addEventListener("click",async e=>{const teamId=$("#staffTeam")?.value; const n=Math.max(0,Number(tickets.value||0)); if(!teamId||!n){toast("Elegí un equipo e ingresá tickets.");return;} const btn=e.currentTarget;btn.disabled=true;btn.textContent="Guardando…";const ok=await staffSaveScore({teamId,points:n*10,activity:"kermesse",tickets:n});if(ok){showStaffPointsFlash(n*10,teamId,`${n} tickets`);tickets.value=0;setTimeout(()=>renderCurrentRoute(),1450);}else{btn.disabled=false;btn.textContent="CONFIRMAR CANJE";}});
+    } else {
+      $$('[data-staff-activity]').forEach(b=>b.addEventListener("click",()=>{staffSelectedActivity=b.dataset.staffActivity;$$('[data-staff-activity]').forEach(x=>x.classList.toggle("active",x===b));renderStaffDynamicFields();})); renderStaffDynamicFields();
+      $("#staffSaveDaniela")?.addEventListener("click",async e=>{const teamId=$("#staffTeam")?.value;const points=staffDanielaPoints();if(!teamId||!points)return;const btn=e.currentTarget;btn.disabled=true;btn.textContent="Guardando…";const ok=await staffSaveScore({teamId,points,activity:staffSelectedActivity});if(ok){showStaffPointsFlash(points,teamId,staffActivityLabel(staffSelectedActivity));setTimeout(()=>renderCurrentRoute(),1450);}else{btn.disabled=false;btn.textContent="CONFIRMAR PUNTOS";}});
+    }
+    $('[data-staff-refresh]')?.addEventListener("click",async e=>{const b=e.currentTarget;b.disabled=true;b.textContent="Actualizando…";await syncFromSheets(false);if(b.isConnected){b.disabled=false;b.textContent="Actualizar ranking";}toast("Ranking actualizado.");});
   }
 
   function renderCurrentRoute(options = {}) {
@@ -2908,13 +3053,14 @@
       invitados: renderGuests,
       social: renderSocial,
       regalos: renderGifts,
-      admin: renderAdmin
+      admin: renderAdmin,
+      staff: renderStaff
     };
 
     updateSectionNavigationState();
 
-    const homeCanRenderImmediately = currentRoute === "inicio" && Boolean(currentGuest);
-    const routeHtml = !state.remoteReady && currentRoute !== "admin" && !homeCanRenderImmediately
+    const routeCanRenderImmediately = ["inicio","ranking","puntos","fotos","staff"].includes(currentRoute) && Boolean(currentGuest);
+    const routeHtml = !state.remoteReady && currentRoute !== "admin" && !routeCanRenderImmediately
       ? renderLoadingSkeleton()
       : !isSectionOpen(currentRoute)
         ? renderLockedSection(currentRoute)
@@ -4885,7 +5031,7 @@
 
   function renderPhotosV2() {
     if (!window.WeddingPhotoUploader) return `<section class="section-card"><h3>Fotos del casamiento</h3><p>El módulo de fotos no pudo cargarse. Actualizá la app e intentá de nuevo.</p></section>`;
-    return window.WeddingPhotoUploader.renderView({ guest: currentGuest, publicMode:false });
+    return window.WeddingPhotoUploader.renderView({ guest: currentGuest, publicMode:false, prelaunch: !photosSectionAvailable() && !isAdminTestMode() });
   }
 
   function homePendingGames() {
@@ -12371,6 +12517,7 @@
       const photoRoot = document.querySelector("[data-photo-root]");
       window.WeddingPhotoUploader?.bindView?.(photoRoot, { guest: currentGuest, publicMode:false });
     }
+    if (route === "staff") bindStaffEvents();
 
     $$('[data-go]').forEach(button => button.addEventListener("click", () => {
       if (button.dataset.go === "equipo") {

@@ -17,7 +17,7 @@
     return data?.teams?.[teamId]?.name || "";
   }
 
-  function renderView({ guest = null, publicMode = false } = {}) {
+  function renderView({ guest = null, publicMode = false, prelaunch = false } = {}) {
     const identified = Boolean(guest?.id && guest.id !== "admin-test");
     const team = teamLabel(guest?.team);
     const greeting = identified
@@ -27,44 +27,42 @@
       ? `<h3>Hola, ${escapeHTML(guest.firstName || fullGuestName(guest))}</h3>`
       : `<h3>Compartí tus fotos y videos</h3>`;
 
+    if (prelaunch) {
+      return `
+        <div class="photos-v2 photos-google-v32625 photos-prelaunch-v32625" data-photo-root data-public-mode="${publicMode ? "true" : "false"}">
+          <section class="photos-hero">
+            ${greeting}
+            <h2>Fotos del casamiento 📸</h2>
+            <p><strong>Queremos guardar la noche también desde tus ojos.</strong></p>
+          </section>
+          <section class="section-card photos-picker-card photos-google-card photos-prelaunch-card">
+            <div class="photos-picker-icon" aria-hidden="true">📷</div>
+            ${hello}
+            <p>El día de la boda —o después— nos vas a poder ayudar subiendo a este álbum de Google Fotos tus mejores recuerdos de la noche.</p>
+            <div class="photos-launch-date"><small>SE HABILITA</small><strong>23 · 10 · 2026</strong></div>
+            <button class="photos-google-btn photos-google-btn-primary" type="button" disabled aria-disabled="true"><span aria-hidden="true">🔒</span><span>Álbum disponible desde el 23/10</span></button>
+          </section>
+        </div>`;
+    }
+
     return `
-      <div class="photos-v2 photos-google-v32624" data-photo-root data-public-mode="${publicMode ? "true" : "false"}">
+      <div class="photos-v2 photos-google-v32625" data-photo-root data-public-mode="${publicMode ? "true" : "false"}">
         <section class="photos-hero">
           ${greeting}
           <h2>Fotos del casamiento 📸</h2>
           <p><strong>Tu mirada también hace esta historia ❤️</strong><br>Sumá las fotos y videos que saques durante la fiesta al álbum compartido de Vani &amp; Fede.</p>
         </section>
-
         <section class="section-card photos-picker-card photos-google-card">
           <div class="photos-picker-icon" aria-hidden="true">📷</div>
           ${hello}
           <p>Todo queda reunido en nuestro álbum de Google Fotos. Podés subir varias fotos y videos de una sola vez.</p>
-
           <div class="photos-google-actions">
-            <a class="photos-google-btn photos-google-btn-primary" href="${ALBUM_URL}" target="_blank" rel="noopener noreferrer" data-google-photos-open="upload">
-              <span aria-hidden="true">＋</span>
-              <span>Subir fotos y videos</span>
-            </a>
-            <a class="photos-google-btn photos-google-btn-secondary" href="${ALBUM_URL}" target="_blank" rel="noopener noreferrer" data-google-photos-open="view">
-              <span aria-hidden="true">▦</span>
-              <span>Ver álbum</span>
-            </a>
+            <a class="photos-google-btn photos-google-btn-primary" href="${ALBUM_URL}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">＋</span><span>Subir fotos y videos</span></a>
+            <a class="photos-google-btn photos-google-btn-secondary" href="${ALBUM_URL}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">▦</span><span>Ver álbum</span></a>
           </div>
-
-          <div class="photos-google-note">
-            <span aria-hidden="true">↗</span>
-            <p>Se abrirá Google Fotos. Para agregar contenido, Google puede pedirte iniciar sesión.</p>
-          </div>
+          <div class="photos-google-note"><span aria-hidden="true">↗</span><p>Se abrirá Google Fotos. Para agregar contenido, Google puede pedirte iniciar sesión.</p></div>
         </section>
-
-        <section class="section-card photos-google-tip">
-          <span aria-hidden="true">❤️</span>
-          <div>
-            <small>ENTRE TODOS</small>
-            <strong>Un mismo álbum, todos los puntos de vista.</strong>
-            <p>Subí lo que quieras durante la noche; después vamos a tener todos los recuerdos juntos.</p>
-          </div>
-        </section>
+        <section class="section-card photos-google-tip"><span aria-hidden="true">❤️</span><div><small>ENTRE TODOS</small><strong>Un mismo álbum, todos los puntos de vista.</strong><p>Subí lo que quieras durante la noche; después vamos a tener todos los recuerdos juntos.</p></div></section>
       </div>`;
   }
 
