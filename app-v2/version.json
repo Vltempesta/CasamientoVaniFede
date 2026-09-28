@@ -1,5 +1,5 @@
 {
-  "version": "32630",
+  "version": "32631",
   "updatedAt": "2026-09-28T14:40:00Z",
   "notes": "safe patch from v32628: staff-only shell, embedded seal, compact menu, dark mode cleanup"
 }
