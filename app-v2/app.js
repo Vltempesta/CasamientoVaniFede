@@ -1,14 +1,63 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32632";
+  const CURRENT_APP_VERSION = "32636";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
+  const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
   const LAST_BACKUP_KEY = "vf_last_backup_at";
   const TABLE_ASSIGNMENT_GAME_ID = "event-table-assignment-v1";
   const TRANSPORT_CHECKIN_GAME_ID = "event-transport-checkin-v1";
   const ADMIN_OPERATOR_STORAGE_KEY = "vf_admin_points_operator_v1";
+
+  // v32636 · Privacidad Guerra: mientras una ronda está activa, el navegador
+  // conserva únicamente registros sensibles de su propio equipo. Los demás
+  // equipos nunca quedan persistidos localmente aunque provengan de una caché vieja.
+  const WAR_PRIVATE_ACTIVE_GAME_ROUND = Object.freeze({
+    "war-strategy-r1": 1,
+    "war-tiebreak-r1": 1,
+    "war-strategy-r2": 2,
+    "war-tiebreak-r2": 2
+  });
+  const WAR_PRIVATE_END_AT = Object.freeze({
+    1: new Date("2026-09-28T23:59:00-03:00").getTime(),
+    2: new Date("2026-09-30T23:59:00-03:00").getTime()
+  });
+
+  function warPrivateRoundForRecord(record) {
+    return Number(WAR_PRIVATE_ACTIVE_GAME_ROUND[String(record?.gameId || "")] || 0);
+  }
+
+  function warPrivacyActiveForRecord(record, now = Date.now()) {
+    const round = warPrivateRoundForRecord(record);
+    return Boolean(round && now < Number(WAR_PRIVATE_END_AT[round] || 0));
+  }
+
+  function sanitizeWarPrivateRecords(records, viewerTeamId, now = Date.now()) {
+    const source = records && typeof records === "object" ? records : {};
+    const safeTeam = String(viewerTeamId || "");
+    const clean = {};
+    Object.entries(source).forEach(([key, record]) => {
+      if (!warPrivacyActiveForRecord(record, now)) {
+        clean[key] = record;
+        return;
+      }
+      if (safeTeam && String(record?.teamId || "") === safeTeam) {
+        clean[key] = record;
+      }
+    });
+    return clean;
+  }
+
+  function viewerTeamIdFromGuestId(guestId) {
+    const id = String(guestId || "");
+    if (!id) return "";
+    const staff = Object.values(STAFF_USERS || {}).find(item => String(item?.id || "") === id);
+    if (staff?.team) return String(staff.team);
+    const guest = DATA?.guests?.find(item => String(item?.id || "") === id);
+    return String(guest?.team || "");
+  }
   const ONLINE_COPY = {
     idle: "Conexión pendiente",
     connecting: "Consultando datos…",
@@ -72,7 +121,6 @@
     daniela: { id:"staff-daniela", firstName:"Daniela", lastName:"", team:"fuego", role:"staff-daniela", alias:"Daniela" }
   };
   const STAFF_SESSION_KEY = "vf_staff_session_v32628";
-  const THEME_KEY = "vf_theme_v32628";
   let staffSession = null;
   let staffSelectedActivity = "juego-mesa-1";
 
@@ -415,12 +463,35 @@
       const stored = JSON.parse(
         localStorage.getItem(STORAGE_KEY) || "{}"
       );
+      let snapshot = null;
+      try {
+        snapshot = JSON.parse(localStorage.getItem(REMOTE_SNAPSHOT_KEY) || "null");
+      } catch (_) {
+        snapshot = null;
+      }
 
-      // El celular sólo recuerda quién ingresó.
-      // Los datos funcionales siempre llegan desde Apps Script.
+      const hasSnapshot = snapshot && typeof snapshot === "object";
+      const restoredGuestId = stored.currentGuestId || null;
+      const restoredTeamId = viewerTeamIdFromGuestId(restoredGuestId);
       return {
         ...defaultState,
-        currentGuestId: stored.currentGuestId || null,
+        ...(hasSnapshot ? {
+          rsvps: snapshot.rsvps && typeof snapshot.rsvps === "object" ? snapshot.rsvps : {},
+          profiles: snapshot.profiles && typeof snapshot.profiles === "object" ? snapshot.profiles : {},
+          gameSubmissions: sanitizeWarPrivateRecords(
+            snapshot.gameSubmissions && typeof snapshot.gameSubmissions === "object" ? snapshot.gameSubmissions : {},
+            restoredTeamId
+          ),
+          scoreEntries: Array.isArray(snapshot.scoreEntries) ? snapshot.scoreEntries : [],
+          serverRanking: Array.isArray(snapshot.serverRanking) ? snapshot.serverRanking : [],
+          manualUnlocks: snapshot.manualUnlocks && typeof snapshot.manualUnlocks === "object" ? snapshot.manualUnlocks : {},
+          unlockRevision: String(snapshot.unlockRevision || ""),
+          dataResetAt: snapshot.dataResetAt || null,
+          lastSyncAt: snapshot.lastSyncAt || null,
+          backendVersion: String(snapshot.backendVersion || ""),
+          remoteReady: true
+        } : {}),
+        currentGuestId: restoredGuestId,
         adminUnlocked: false,
         adminPassword: ""
       };
@@ -434,14 +505,42 @@
     }
   }
 
+  function saveRemoteSnapshot() {
+    if (!state.remoteReady) return;
+    try {
+      localStorage.setItem(
+        REMOTE_SNAPSHOT_KEY,
+        JSON.stringify({
+          rsvps: state.rsvps || {},
+          profiles: state.profiles || {},
+          gameSubmissions: sanitizeWarPrivateRecords(
+            state.gameSubmissions || {},
+            currentGuest?.team || viewerTeamIdFromGuestId(state.currentGuestId)
+          ),
+          scoreEntries: Array.isArray(state.scoreEntries) ? state.scoreEntries : [],
+          serverRanking: Array.isArray(state.serverRanking) ? state.serverRanking : [],
+          manualUnlocks: state.manualUnlocks || {},
+          unlockRevision: state.unlockRevision || "",
+          dataResetAt: state.dataResetAt || null,
+          lastSyncAt: state.lastSyncAt || null,
+          backendVersion: state.backendVersion || "",
+          cachedAt: new Date().toISOString()
+        })
+      );
+    } catch (error) {
+      console.warn("No se pudo guardar el snapshot local", error);
+    }
+  }
+
   function saveState() {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32632"
+        appVersion: CONFIG.APP_VERSION || "32636"
       })
     );
+    saveRemoteSnapshot();
   }
 
 
@@ -904,27 +1003,6 @@
     try { staffSession = JSON.parse(sessionStorage.getItem(STAFF_SESSION_KEY) || "null"); } catch (_) { staffSession = null; }
   }
 
-  function applyTheme(theme) {
-    const dark = theme === "dark";
-    document.body.classList.toggle("dark-mode", dark);
-    const button = $("#themeToggleButton");
-    button?.setAttribute("aria-pressed", dark ? "true" : "false");
-    button?.setAttribute("aria-label", dark ? "Activar modo claro" : "Activar modo noche");
-    if (button) button.title = dark ? "Modo claro" : "Modo noche";
-  }
-
-  function initTheme() {
-    let theme = localStorage.getItem(THEME_KEY);
-    if (!theme) theme = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
-    applyTheme(theme);
-  }
-
-  function toggleTheme() {
-    const next = document.body.classList.contains("dark-mode") ? "light" : "dark";
-    localStorage.setItem(THEME_KEY, next);
-    applyTheme(next);
-  }
-
   function updateAdminTestLoginUi() {
     const row = $("#adminTestLoginRow");
     const input = $("#guestName");
@@ -1163,7 +1241,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32632",
+      appVersion: "32636",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -1375,7 +1453,7 @@
         try {
           response = await jsonp("getUnlockState");
         } catch (lightSyncError) {
-          response = await jsonp("getData");
+          response = await jsonp("getData", { viewerGuestId: currentGuest?.id || state.currentGuestId || "", viewerTeamId: currentGuest?.team || viewerTeamIdFromGuestId(state.currentGuestId) || "" });
         }
 
         // Los candados se aplican apenas llega la respuesta liviana.
@@ -1613,17 +1691,38 @@
       state.dataResetAt
     );
 
-    const remoteGameSubmissions =
+    const viewerTeamId = String(
+      currentGuest?.team ||
+      viewerTeamIdFromGuestId(state.currentGuestId) ||
+      ""
+    );
+    const localPrivateWarRecords = sanitizeWarPrivateRecords(
+      state.gameSubmissions || {},
+      viewerTeamId
+    );
+    const remoteGameSubmissionsRaw =
       remote.gameSubmissions &&
       typeof remote.gameSubmissions === "object"
         ? remote.gameSubmissions
         : {};
+    const remoteGameSubmissions = sanitizeWarPrivateRecords(
+      remoteGameSubmissionsRaw,
+      viewerTeamId
+    );
 
     state.gameSubmissions = mergeRecordsAfterReset(
       {},
       remoteGameSubmissions,
       state.dataResetAt
     );
+
+    // Si el servidor oculta votos activos, conservamos solamente los del
+    // propio equipo ya confirmados en este dispositivo. Nunca los rivales.
+    Object.entries(localPrivateWarRecords).forEach(([key, record]) => {
+      if (warPrivacyActiveForRecord(record) && String(record?.teamId || "") === viewerTeamId) {
+        if (!state.gameSubmissions[key]) state.gameSubmissions[key] = record;
+      }
+    });
 
     applyRecentConfirmedGames(
       remoteGameSubmissions
@@ -1722,7 +1821,7 @@
 
     fullSyncInFlight = (async () => {
       try {
-        const payload = await jsonp("getData");
+        const payload = await jsonp("getData", { viewerGuestId: currentGuest?.id || state.currentGuestId || "", viewerTeamId: currentGuest?.team || viewerTeamIdFromGuestId(state.currentGuestId) || "" });
         mergeRemoteData(payload.data || {});
 
         setRemoteStatus(
@@ -1755,6 +1854,9 @@
         state.lastRemoteError = error.message;
         setRemoteStatus("error");
 
+        if (currentGuest) {
+          renderCurrentRoute({ preserveActiveForm: true });
+        }
         if (showToast) {
           toast(
             state.remoteReady
@@ -2230,9 +2332,24 @@
   }
 
   function boot() {
+    // v32635: modo oscuro eliminado. Forzar siempre el diseño claro aprobado.
+    document.body.classList.remove("dark-mode");
+    try {
+      localStorage.removeItem("vf_theme_v32628");
+      localStorage.removeItem("vf_theme_v32629");
+      localStorage.removeItem("vf_theme_v32630");
+      localStorage.removeItem("vf_theme_v32631");
+      localStorage.removeItem("vf_theme_v32632");
+      localStorage.removeItem("vf_theme_v32633");
+      localStorage.removeItem("vf_theme_v32634");
+    } catch (_) {}
+
     const initialSection = requestedInitialSection();
     const photoDeepLink = initialSection === "fotos";
     setRemoteStatus(isConfigured() ? "connecting" : "idle");
+    // Prioridad máxima: empezar a traer el estado remoto apenas arranca JS,
+    // antes de logos, instalación, service worker y chequeos secundarios.
+    const initialSyncPromise = syncFromSheets(false);
     if (!photoDeepLink) history.replaceState({ screen: "login" }, "", basePageUrl());
     applyPendingWritesToState();
     updateLoginPrivacyUi();
@@ -2240,7 +2357,8 @@
     fillGuestSuggestions();
     configureNavigation();
     applyPhotosAvailabilityUi();
-    preloadTeamLogos();
+    Promise.resolve(initialSyncPromise).finally(() => void preloadTeamLogos());
+    window.setTimeout(() => { if (!teamLogosReady) void preloadTeamLogos(); }, 1400);
     configureInstallExperience();
     registerServiceWorker();
     void checkForAppUpdate();
@@ -2281,11 +2399,13 @@
       const guest = getGuestById(state.currentGuestId);
       if (guest && isCompetitionGuest(guest)) {
         restored = true;
-        enterApp(guest, false, photoDeepLink ? "replace" : "push", photoDeepLink ? "fotos" : "inicio");
+        const openRestoredSession = () => {
+          enterApp(guest, false, photoDeepLink ? "replace" : "push", photoDeepLink ? "fotos" : "inicio");
+        };
+        openRestoredSession();
       }
     }
     if (!restored && photoDeepLink) showPublicPhotosEntry();
-    syncFromSheets(false);
   }
 
   function applyGuestShell(guest) {
@@ -2507,8 +2627,6 @@
   function bindShellEvents() {
     bindInstallButtons();
 
-    $("#themeToggleButton")?.addEventListener("click", toggleTheme);
-
     $("#notificationButton")?.addEventListener("click", event => {
       event.stopPropagation();
       const panel = $("#notificationPanel");
@@ -2660,12 +2778,16 @@
       button.disabled = true;
       buttonLabel.textContent = "Ingresando…";
 
+      // Entrada optimista: el usuario entra en el acto. Si todavía no llegó
+      // la base remota, renderizamos placeholders reales (nunca ceros falsos)
+      // y la sincronización en curso completa la pantalla en segundo plano.
+      enterApp(guest, true);
+      if (!state.remoteReady) void syncFromSheets(false);
+      postToSheets("logEvent", { eventName: "login", guestId: guest.id, teamId: guest.team });
       window.setTimeout(() => {
-        enterApp(guest, true);
-        postToSheets("logEvent", { eventName: "login", guestId: guest.id, teamId: guest.team });
         button.disabled = false;
         buttonLabel.textContent = "Ingresar";
-      }, 180);
+      }, 80);
     });
 
     $("#logoutButton").addEventListener("click", () => {
@@ -2729,13 +2851,10 @@
       }
     };
 
-    if (teamLogosReady) {
-      openApp();
-      return;
-    }
-
-    void preloadTeamLogos()
-      .finally(openApp);
+    // La navegación nunca espera a los logos. La app abre ya y los recursos
+    // visuales terminan de cargar en segundo plano.
+    openApp();
+    if (!teamLogosReady) void preloadTeamLogos();
   }
 
   function navigate(route, options = {}) {
@@ -2877,20 +2996,31 @@
 
   function renderLoadingSkeleton() {
     const hasError = Boolean(state.lastRemoteError);
+    const guest = currentGuest;
+    const team = guest ? getTeam(guest.team) : null;
+    const firstName = guest?.firstName || guestFullName(guest || {}) || "";
     return `
-      <section class="app-loading-skeleton section-card">
-        <div class="skeleton-head">
-          <span class="skeleton-block skeleton-circle"></span>
-          <span class="skeleton-block skeleton-title"></span>
+      <section class="instant-entry-shell section-card" aria-busy="${hasError ? "false" : "true"}">
+        <div class="instant-entry-head">
+          ${team ? teamLogo(team, "instant-entry-logo") : `<span class="skeleton-block skeleton-circle"></span>`}
+          <div>
+            <p class="eyebrow">${hasError ? "SIN CONEXIÓN" : "BIENVENIDO"}</p>
+            <h3>${escapeHTML(firstName)}</h3>
+            ${team ? `<p>Equipo ${escapeHTML(team.name)}</p>` : ""}
+          </div>
         </div>
-        <span class="skeleton-block skeleton-line"></span>
-        <span class="skeleton-block skeleton-line short"></span>
-        <div class="skeleton-grid">
-          <span class="skeleton-block skeleton-card"></span>
-          <span class="skeleton-block skeleton-card"></span>
-          <span class="skeleton-block skeleton-card"></span>
-        </div>
-        <p>${hasError ? "No pudimos consultar la base oficial. Revisá la conexión y tocá Sincronizar." : "Cargando la información actualizada…"}</p>
+        ${hasError ? `
+          <div class="instant-entry-error">
+            <strong>Tu información sigue guardada.</strong>
+            <p>No pudimos actualizar la base en este momento.</p>
+            <button type="button" class="ghost-button" data-fast-retry>Reintentar</button>
+          </div>` : `
+          <div class="instant-entry-grid" aria-hidden="true">
+            <span class="skeleton-block instant-skeleton-wide"></span>
+            <span class="skeleton-block instant-skeleton-card"></span>
+            <span class="skeleton-block instant-skeleton-card"></span>
+            <span class="skeleton-block instant-skeleton-line"></span>
+          </div>`}
       </section>`;
   }
 
@@ -3061,7 +3191,7 @@
 
     updateSectionNavigationState();
 
-    const routeCanRenderImmediately = ["inicio","ranking","puntos","fotos","staff"].includes(currentRoute) && Boolean(currentGuest);
+    const routeCanRenderImmediately = ["fotos","staff"].includes(currentRoute) && Boolean(currentGuest);
     const routeHtml = !state.remoteReady && currentRoute !== "admin" && !routeCanRenderImmediately
       ? renderLoadingSkeleton()
       : !isSectionOpen(currentRoute)
@@ -3074,6 +3204,14 @@
     `;
 
     $("#view").innerHTML = html;
+    $("[data-fast-retry]")?.addEventListener("click", async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      button.textContent = "Reintentando…";
+      state.lastRemoteError = "";
+      renderCurrentRoute();
+      await syncFromSheets(false);
+    });
     $("[data-exit-admin-preview]")?.addEventListener("click", exitAdminGuestPreview);
     bindInstallButtons($("#view"));
     markNotificationsForRoute(currentRoute);
