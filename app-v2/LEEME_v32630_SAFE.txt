@@ -1,0 +1,17 @@
+VANI & FEDE · v32630 SAFE
+
+Base: v32628 estable.
+No modifica backend, Google Sheets, juegos, puntajes, ni lógica de restauración/navegación.
+
+Cambios:
+- Eugenia y Daniela ven solo su consola de puntos/ranking (sin navegación de invitado).
+- Sello V&F embebido en la portada: ya no depende de un archivo assets/branding faltante.
+- Menú hamburguesa más compacto.
+- Dark mode reforzado: cards, transportes, puntos, ranking y navegación quedan oscuros.
+- TODAS las referencias de versión son 32630 para evitar el loop que tuvo v32629.
+
+Publicación:
+Reemplazar index.html, app.js, styles.css, sw.js y version.json.
+También es seguro reemplazar ui-v2.css, photos.js, data.js y manifest.webmanifest por los incluidos (son los de v32628 salvo el versionado del HTML/SW).
+NO reemplazar config.js.
+NO tocar Apps Script.

@@ -1,8 +1,5 @@
 {
-  "version": "32628",
-  "releasedAt": "2026-09-28T00:02:00-03:00",
-  "requiredReload": true,
-  "releaseDate": "2026-09-28T00:02:00-03:00",
-  "notes": "Rediseño integral del modo noche: contraste total, superficies oscuras coherentes y mejor legibilidad móvil.",
-  "release": "Premium dark mode"
+  "version": "32630",
+  "updatedAt": "2026-09-28T14:40:00Z",
+  "notes": "safe patch from v32628: staff-only shell, embedded seal, compact menu, dark mode cleanup"
 }

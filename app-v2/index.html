@@ -17,10 +17,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Vani & Fede" />
-  <link rel="manifest" href="manifest.webmanifest?v=32624" />
-  <link rel="icon" href="icons/favicon.ico?v=32624" sizes="any" />
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=32624" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=32624" />
+  <link rel="manifest" href="manifest.webmanifest?v=32630" />
+  <link rel="icon" href="icons/favicon.ico?v=32630" sizes="any" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=32630" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=32630" />
   <link rel="preload" as="image" href="assets/team-logos/bosque.png" fetchpriority="high" />
   <link rel="preload" as="image" href="assets/team-logos/fuego.png" fetchpriority="high" />
   <link rel="preload" as="image" href="assets/team-logos/luz.png" fetchpriority="high" />
@@ -30,8 +30,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=32628" />
-  <link rel="stylesheet" href="ui-v2.css?v=32628" />
+  <link rel="stylesheet" href="styles.css?v=32630" />
+  <link rel="stylesheet" href="ui-v2.css?v=32630" />
 </head>
 <body>
   <div class="scene" aria-hidden="true">
@@ -47,7 +47,18 @@
     <section id="loginScreen" class="login-screen">
       <div class="login-frame">
         <header class="login-brand">
-          <img class="seal-image" src="assets/branding/vyf-seal.png?v=32624" alt="Sello de Vani y Fede" width="105" height="113" />
+          <svg class="seal-image seal-inline" viewBox="0 0 210 226" width="105" height="113" role="img" aria-label="Sello de Vani y Fede" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="sealPaper" cx="35%" cy="30%" r="85%"><stop offset="0%" stop-color="#fffdf8"/><stop offset="78%" stop-color="#f1e7d2"/><stop offset="100%" stop-color="#e5d7b8"/></radialGradient>
+    <linearGradient id="sealEdge" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#e2c98f"/><stop offset="100%" stop-color="#a77d3f"/></linearGradient>
+  </defs>
+  <ellipse cx="105" cy="113" rx="89" ry="98" fill="url(#sealPaper)" stroke="url(#sealEdge)" stroke-width="3"/>
+  <ellipse cx="105" cy="113" rx="75" ry="84" fill="none" stroke="#c6a664" stroke-width="1.4" opacity=".88"/>
+  <path d="M49 92c17-20 35-26 56-26s39 6 56 26" fill="none" stroke="#9e7b48" stroke-width="1.2" opacity=".6"/>
+  <text x="105" y="70" text-anchor="middle" font-family="Cormorant Garamond,Georgia,serif" font-size="15" font-weight="700" letter-spacing="3" fill="#7d5637">VANI Y FEDE</text>
+  <text x="105" y="130" text-anchor="middle" font-family="Cinzel,Georgia,serif" font-size="51" font-weight="700" fill="#223c5b">V&amp;F</text>
+  <text x="105" y="159" text-anchor="middle" font-family="Cormorant Garamond,Georgia,serif" font-size="18" font-weight="700" letter-spacing="1.8" fill="#7b2941">24 · 10 · 2026</text>
+</svg>
 
           <h1 class="couple-wordmark couple-wordmark--elegant" aria-label="Vani y Fede">
             <span>VANI</span>
@@ -266,9 +277,9 @@
 
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
 
-  <script src="config.js?v=32628"></script>
-  <script src="data.js?v=32628"></script>
-  <script src="photos.js?v=32628"></script>
-  <script src="app.js?v=32628"></script>
+  <script src="config.js?v=32630"></script>
+  <script src="data.js?v=32630"></script>
+  <script src="photos.js?v=32630"></script>
+  <script src="app.js?v=32630"></script>
 </body>
 </html>
