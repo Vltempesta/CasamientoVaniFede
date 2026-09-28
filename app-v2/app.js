@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32628";
+  const CURRENT_APP_VERSION = "32629";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -71,8 +71,8 @@
     eugenia: { id:"staff-eugenia", firstName:"Eugenia", lastName:"", team:"bosque", role:"staff-eugenia", alias:"Eugenia" },
     daniela: { id:"staff-daniela", firstName:"Daniela", lastName:"", team:"fuego", role:"staff-daniela", alias:"Daniela" }
   };
-  const STAFF_SESSION_KEY = "vf_staff_session_v32628";
-  const THEME_KEY = "vf_theme_v32628";
+  const STAFF_SESSION_KEY = "vf_staff_session_v32629";
+  const THEME_KEY = "vf_theme_v32629";
   let staffSession = null;
   let staffSelectedActivity = "juego-mesa-1";
 
@@ -439,7 +439,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32628"
+        appVersion: CONFIG.APP_VERSION || "32629"
       })
     );
   }
@@ -844,8 +844,11 @@
   }
 
   function getGuestById(id) {
-    if (String(id || "") === ADMIN_TEST_GUEST.id) return ADMIN_TEST_GUEST;
-    return DATA.guests.find(guest => guest.id === id);
+    const normalizedId = String(id || "");
+    if (normalizedId === ADMIN_TEST_GUEST.id) return ADMIN_TEST_GUEST;
+    const staffGuest = Object.values(STAFF_USERS).find(guest => guest.id === normalizedId);
+    if (staffGuest) return staffGuest;
+    return DATA.guests.find(guest => guest.id === normalizedId);
   }
 
   function isAdminTestMode(guest = currentGuest) {
@@ -860,6 +863,10 @@
 
   function isStaffMode(guest = currentGuest) {
     return String(guest?.role || "").startsWith("staff-");
+  }
+
+  function canUseMainShell(guest) {
+    return Boolean(guest) && (isCompetitionGuest(guest) || isStaffMode(guest) || isAdminTestMode(guest));
   }
 
   function staffRole() {
@@ -1163,7 +1170,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32628",
+      appVersion: "32629",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2279,7 +2286,7 @@
     let restored = false;
     if (state.currentGuestId) {
       const guest = getGuestById(state.currentGuestId);
-      if (guest && isCompetitionGuest(guest)) {
+      if (guest && canUseMainShell(guest)) {
         restored = true;
         enterApp(guest, false, photoDeepLink ? "replace" : "push", photoDeepLink ? "fotos" : "inicio");
       }
@@ -2291,7 +2298,9 @@
   function applyGuestShell(guest) {
     currentGuest = guest;
     const team = getTeam(guest.team);
+    const staffMode = isStaffMode(guest);
     document.documentElement.style.setProperty("--team-accent", team.accent || "#c8a75d");
+    document.body.classList.toggle("staff-shell", staffMode);
     $("#loginScreen").classList.add("hidden");
     $("#mainScreen").classList.remove("hidden");
     $("#welcomeTitle").textContent =
@@ -2302,7 +2311,14 @@
         .toUpperCase();
     $("#welcomeTeam").textContent = isAdminTestMode(guest)
       ? "Modo prueba · sin puntos"
-      : `Equipo ${team.name}`;
+      : staffMode
+        ? "Operación"
+        : `Equipo ${team.name}`;
+
+    if (staffMode) {
+      closeMenu();
+      setNotificationPanelOpen(false);
+    }
 
     migrateSectionNotificationBaselineBeforeSync();
     updateNotificationUi();
@@ -2320,6 +2336,7 @@
   function showLandingFromHistory() {
     closeMenu();
     currentGuest = null;
+    document.body.classList.remove("staff-shell");
     $("#mainScreen").classList.add("hidden");
     $("#loginScreen").classList.remove("hidden");
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -2340,7 +2357,7 @@
       destination.guestId || state.currentGuestId
     );
 
-    if (!guest || !isCompetitionGuest(guest)) {
+    if (!guest || !canUseMainShell(guest)) {
       showLandingFromHistory();
       return;
     }
@@ -2357,6 +2374,34 @@
     );
   }
 
+
+  function performLogout() {
+    closeMenu();
+    state.adminUnlocked = false;
+    state.adminPassword = "";
+    currentGuest = null;
+    staffSession = null;
+    sessionStorage.removeItem(STAFF_SESSION_KEY);
+    document.body.classList.remove("staff-shell");
+    state.currentGuestId = null;
+    saveState();
+    history.replaceState({ screen: "login" }, "", basePageUrl());
+    $("#mainScreen").classList.add("hidden");
+    $("#loginScreen").classList.remove("hidden");
+    selectedGuestId = null;
+    suggestionMatches = [];
+    activeSuggestionIndex = -1;
+    $("#guestName").value = "";
+    $("#guestName").removeAttribute("aria-invalid");
+    $("#adminTestPassword") && ($("#adminTestPassword").value = "");
+    $("#staffPassword") && ($("#staffPassword").value = "");
+    $("#adminTestLoginRow")?.classList.add("hidden");
+    $("#staffLoginRow")?.classList.add("hidden");
+    adminTestSession.rouletteResult = null;
+    adminTestSession.warVotes = { 1: null, 2: null };
+    $("#loginMessage").textContent = "";
+    $("#guestName").focus();
+  }
 
   function fillGuestSuggestions() {
     const input = $("#guestName");
@@ -2668,28 +2713,7 @@
       }, 180);
     });
 
-    $("#logoutButton").addEventListener("click", () => {
-      closeMenu();
-      state.adminUnlocked = false;
-      state.adminPassword = "";
-      currentGuest = null;
-      state.currentGuestId = null;
-      saveState();
-      history.replaceState({ screen: "login" }, "", basePageUrl());
-      $("#mainScreen").classList.add("hidden");
-      $("#loginScreen").classList.remove("hidden");
-      selectedGuestId = null;
-      suggestionMatches = [];
-      activeSuggestionIndex = -1;
-      $("#guestName").value = "";
-      $("#guestName").removeAttribute("aria-invalid");
-      $("#adminTestPassword") && ($("#adminTestPassword").value = "");
-      $("#adminTestLoginRow")?.classList.add("hidden");
-      adminTestSession.rouletteResult = null;
-      adminTestSession.warVotes = { 1: null, 2: null };
-      $("#loginMessage").textContent = "";
-      $("#guestName").focus();
-    });
+    $("#logoutButton").addEventListener("click", performLogout);
 
     $("#homeButton")?.addEventListener("click", () => {
       selectedTeamViewId = null;
@@ -2909,7 +2933,7 @@
 
   function startAdminGuestPreview(guestId) {
     const guest = getGuestById(guestId);
-    if (!guest || !isCompetitionGuest(guest)) {
+    if (!guest || !canUseMainShell(guest)) {
       toast("Elegí un invitado válido.");
       return;
     }
@@ -2977,7 +3001,7 @@
     const teamOptions = Object.keys(DATA.teams).map(id=>`<option value="${id}">${escapeHTML(getTeam(id).name)}</option>`).join("");
     const euge = `<section class="section-card staff-form"><p class="eyebrow">CANJE DE KERMESSE</p><label for="staffTeam">Equipo</label><select id="staffTeam">${teamOptions}</select><label for="staffTickets">Tickets recibidos</label><div class="staff-ticket-stepper"><button type="button" data-ticket-delta="-1">−</button><input id="staffTickets" type="number" min="0" max="999" inputmode="numeric" value="0"><button type="button" data-ticket-delta="1">+</button></div><div class="staff-activity-grid"><button type="button" data-ticket-add="5">+5</button><button type="button" data-ticket-add="10">+10</button><button type="button" data-ticket-add="20">+20</button><button type="button" data-ticket-clear>Limpiar</button></div><div class="staff-conversion"><small>1 TICKET = 10 PUNTOS</small><strong id="staffTicketPreview">0 pts</strong></div><button id="staffSaveTickets" class="staff-primary" type="button">CONFIRMAR CANJE</button></section>`;
     const dani = `<section class="section-card staff-form"><p class="eyebrow">CARGA DE PUNTOS</p><label>Actividad</label><div class="staff-activity-grid" id="staffActivityGrid"><button class="active" data-staff-activity="juego-mesa-1">Juego mesa 1</button><button data-staff-activity="juego-mesa-2">Juego mesa 2</button><button data-staff-activity="baile">Performance baile</button><button data-staff-activity="banda">Performance banda</button><button data-staff-activity="ramo">Ramo</button><button data-staff-activity="whisky">Whisky</button><button data-staff-activity="espiritu">Espíritu de equipo</button></div><label for="staffTeam">Equipo</label><select id="staffTeam">${teamOptions}</select><div id="staffDynamicFields"></div><div class="staff-conversion"><small>PUNTOS A CARGAR</small><strong id="staffPointsPreview">500 pts</strong></div><button id="staffSaveDaniela" class="staff-primary" type="button">CONFIRMAR PUNTOS</button></section>`;
-    return `<div class="staff-console-v32628"><section class="staff-console-head"><p class="eyebrow">CONTROL DE FIESTA</p><h2>${isEuge ? "Kermesse · Eugenia" : "Operación · Daniela"}</h2><p>${isEuge ? "Registrá tickets por equipo. La conversión es automática y el ranking se actualiza al guardar." : "Cargá resultados y seguí el ranking para los anuncios durante la fiesta."}</p><span class="staff-live-chip">● Ranking en vivo</span></section>${isEuge ? euge : dani}${staffRankingHtml()}<button type="button" class="ghost-button" style="width:100%;margin-top:10px" data-staff-refresh>Actualizar ranking</button></div>`;
+    return `<div class="staff-console-v32629"><section class="staff-console-head"><p class="eyebrow">OPERACIÓN</p><h2>${isEuge ? "Eugenia" : "Daniela"}</h2><p>${isEuge ? "Cargá tickets por equipo. La conversión es automática y el ranking se actualiza al guardar." : "Cargá puntos por actividad y seguí el ranking en vivo para los anuncios."}</p><span class="staff-live-chip">● Ranking en vivo</span></section>${isEuge ? euge : dani}${staffRankingHtml()}<div class="staff-bottom-actions"><button type="button" class="ghost-button" data-staff-refresh>Actualizar ranking</button><button type="button" class="ghost-button staff-logout-button" data-staff-logout>Salir</button></div></div>`;
   }
 
   function staffDanielaPoints() {
@@ -3028,6 +3052,7 @@
       $("#staffSaveDaniela")?.addEventListener("click",async e=>{const teamId=$("#staffTeam")?.value;const points=staffDanielaPoints();if(!teamId||!points)return;const btn=e.currentTarget;btn.disabled=true;btn.textContent="Guardando…";const ok=await staffSaveScore({teamId,points,activity:staffSelectedActivity});if(ok){showStaffPointsFlash(points,teamId,staffActivityLabel(staffSelectedActivity));setTimeout(()=>renderCurrentRoute(),1450);}else{btn.disabled=false;btn.textContent="CONFIRMAR PUNTOS";}});
     }
     $('[data-staff-refresh]')?.addEventListener("click",async e=>{const b=e.currentTarget;b.disabled=true;b.textContent="Actualizando…";await syncFromSheets(false);if(b.isConnected){b.disabled=false;b.textContent="Actualizar ranking";}toast("Ranking actualizado.");});
+    $('[data-staff-logout]')?.addEventListener("click", performLogout);
   }
 
   function renderCurrentRoute(options = {}) {
