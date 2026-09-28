@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32631";
+  const CURRENT_APP_VERSION = "32632";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
@@ -439,7 +439,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32628"
+        appVersion: CONFIG.APP_VERSION || "32632"
       })
     );
   }
@@ -1163,7 +1163,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32628",
+      appVersion: "32632",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -2291,9 +2291,7 @@
   function applyGuestShell(guest) {
     currentGuest = guest;
     const team = getTeam(guest.team);
-    const staffMode = isStaffMode(guest);
     document.documentElement.style.setProperty("--team-accent", team.accent || "#c8a75d");
-    document.body.classList.toggle("staff-shell", staffMode);
     $("#loginScreen").classList.add("hidden");
     $("#mainScreen").classList.remove("hidden");
     $("#welcomeTitle").textContent =
@@ -2304,9 +2302,7 @@
         .toUpperCase();
     $("#welcomeTeam").textContent = isAdminTestMode(guest)
       ? "Modo prueba · sin puntos"
-      : staffMode
-        ? "Operación"
-        : `Equipo ${team.name}`;
+      : `Equipo ${team.name}`;
 
     migrateSectionNotificationBaselineBeforeSync();
     updateNotificationUi();
@@ -2324,7 +2320,6 @@
   function showLandingFromHistory() {
     closeMenu();
     currentGuest = null;
-    document.body.classList.remove("staff-shell");
     $("#mainScreen").classList.add("hidden");
     $("#loginScreen").classList.remove("hidden");
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -2675,9 +2670,6 @@
 
     $("#logoutButton").addEventListener("click", () => {
       closeMenu();
-      document.body.classList.remove("staff-shell");
-      staffSession = null;
-      sessionStorage.removeItem(STAFF_SESSION_KEY);
       state.adminUnlocked = false;
       state.adminPassword = "";
       currentGuest = null;
@@ -2985,7 +2977,7 @@
     const teamOptions = Object.keys(DATA.teams).map(id=>`<option value="${id}">${escapeHTML(getTeam(id).name)}</option>`).join("");
     const euge = `<section class="section-card staff-form"><p class="eyebrow">CANJE DE KERMESSE</p><label for="staffTeam">Equipo</label><select id="staffTeam">${teamOptions}</select><label for="staffTickets">Tickets recibidos</label><div class="staff-ticket-stepper"><button type="button" data-ticket-delta="-1">−</button><input id="staffTickets" type="number" min="0" max="999" inputmode="numeric" value="0"><button type="button" data-ticket-delta="1">+</button></div><div class="staff-activity-grid"><button type="button" data-ticket-add="5">+5</button><button type="button" data-ticket-add="10">+10</button><button type="button" data-ticket-add="20">+20</button><button type="button" data-ticket-clear>Limpiar</button></div><div class="staff-conversion"><small>1 TICKET = 10 PUNTOS</small><strong id="staffTicketPreview">0 pts</strong></div><button id="staffSaveTickets" class="staff-primary" type="button">CONFIRMAR CANJE</button></section>`;
     const dani = `<section class="section-card staff-form"><p class="eyebrow">CARGA DE PUNTOS</p><label>Actividad</label><div class="staff-activity-grid" id="staffActivityGrid"><button class="active" data-staff-activity="juego-mesa-1">Juego mesa 1</button><button data-staff-activity="juego-mesa-2">Juego mesa 2</button><button data-staff-activity="baile">Performance baile</button><button data-staff-activity="banda">Performance banda</button><button data-staff-activity="ramo">Ramo</button><button data-staff-activity="whisky">Whisky</button><button data-staff-activity="espiritu">Espíritu de equipo</button></div><label for="staffTeam">Equipo</label><select id="staffTeam">${teamOptions}</select><div id="staffDynamicFields"></div><div class="staff-conversion"><small>PUNTOS A CARGAR</small><strong id="staffPointsPreview">500 pts</strong></div><button id="staffSaveDaniela" class="staff-primary" type="button">CONFIRMAR PUNTOS</button></section>`;
-    return `<div class="staff-console-v32631"><section class="staff-console-head"><p class="eyebrow">OPERACIÓN</p><h2>${isEuge ? "Eugenia" : "Daniela"}</h2><p>${isEuge ? "Cargá tickets por equipo. La conversión es automática y el ranking se actualiza al guardar." : "Cargá puntos por actividad y seguí el ranking en vivo para los anuncios."}</p><span class="staff-live-chip">● Ranking en vivo</span></section>${isEuge ? euge : dani}${staffRankingHtml()}<div class="staff-bottom-actions"><button type="button" class="ghost-button" data-staff-refresh>Actualizar ranking</button><button type="button" class="ghost-button staff-logout-button" data-staff-logout>Salir</button></div></div>`;
+    return `<div class="staff-console-v32628"><section class="staff-console-head"><p class="eyebrow">CONTROL DE FIESTA</p><h2>${isEuge ? "Kermesse · Eugenia" : "Operación · Daniela"}</h2><p>${isEuge ? "Registrá tickets por equipo. La conversión es automática y el ranking se actualiza al guardar." : "Cargá resultados y seguí el ranking para los anuncios durante la fiesta."}</p><span class="staff-live-chip">● Ranking en vivo</span></section>${isEuge ? euge : dani}${staffRankingHtml()}<button type="button" class="ghost-button" style="width:100%;margin-top:10px" data-staff-refresh>Actualizar ranking</button></div>`;
   }
 
   function staffDanielaPoints() {
@@ -3036,7 +3028,6 @@
       $("#staffSaveDaniela")?.addEventListener("click",async e=>{const teamId=$("#staffTeam")?.value;const points=staffDanielaPoints();if(!teamId||!points)return;const btn=e.currentTarget;btn.disabled=true;btn.textContent="Guardando…";const ok=await staffSaveScore({teamId,points,activity:staffSelectedActivity});if(ok){showStaffPointsFlash(points,teamId,staffActivityLabel(staffSelectedActivity));setTimeout(()=>renderCurrentRoute(),1450);}else{btn.disabled=false;btn.textContent="CONFIRMAR PUNTOS";}});
     }
     $('[data-staff-refresh]')?.addEventListener("click",async e=>{const b=e.currentTarget;b.disabled=true;b.textContent="Actualizando…";await syncFromSheets(false);if(b.isConnected){b.disabled=false;b.textContent="Actualizar ranking";}toast("Ranking actualizado.");});
-    $('[data-staff-logout]')?.addEventListener("click",()=>$("#logoutButton")?.click());
   }
 
   function renderCurrentRoute(options = {}) {
@@ -3427,14 +3418,16 @@
 
   // Calendario definitivo de la previa (hora Argentina, UTC-3).
   // Ruleta: hasta viernes 25/09/2026 17:00.
-  // Guerra R1: viernes 25/09 18:00 → lunes 28/09 18:00.
-  // Guerra R2: comienza al cerrar R1 y conserva una ventana de 24 h.
+  // Guerra R1: viernes 25/09 18:00 → lunes 28/09 23:59.
+  // Guerra R2: comienza al cerrar R1 y vence el miércoles 30/09 a las 23:59.
   const PRE_EVENT_ROULETTE_END_AT =
     new Date("2026-09-25T17:00:00-03:00").getTime();
   const PRE_EVENT_WAR1_START_AT =
     new Date("2026-09-25T18:00:00-03:00").getTime();
   const PRE_EVENT_WAR1_END_AT =
-    new Date("2026-09-28T18:00:00-03:00").getTime();
+    new Date("2026-09-28T23:59:00-03:00").getTime();
+  const PRE_EVENT_WAR2_END_AT =
+    new Date("2026-09-30T23:59:00-03:00").getTime();
 
   // Ruleta v32523: 8 positivos y 4 negativos, sin cero.
   // La rueda parte de una tabla base calibrada para el equipo activo más grande y se escala
@@ -3529,9 +3522,9 @@
     const war1Start = PRE_EVENT_WAR1_START_AT;
     const war1End = PRE_EVENT_WAR1_END_AT;
 
-    // R2 arranca inmediatamente al cerrar R1 y dura 24 horas.
+    // R2 arranca inmediatamente al cerrar R1 y vence el 30/09 a las 23:59.
     const war2Start = war1End;
-    const war2End = war2Start + PRE_EVENT_DAY_MS;
+    const war2End = PRE_EVENT_WAR2_END_AT;
 
     return {
       rouletteStart,
@@ -3602,9 +3595,10 @@
       activatedAt: nowIso,
       rouletteEndsAt: "2026-09-25T17:00:00-03:00",
       war1StartsAt: "2026-09-25T18:00:00-03:00",
-      war1EndsAt: "2026-09-28T18:00:00-03:00",
-      war2Hours: 24,
-      mode: "fixed-roulette-then-war1-then-war2",
+      war1EndsAt: "2026-09-28T23:59:00-03:00",
+      war2EndsAt: "2026-09-30T23:59:00-03:00",
+      war2Hours: 48,
+      mode: "fixed-roulette-then-war1-then-war2-extended",
       eligibleCounts: competitionEligibilitySnapshot(),
       eligibleGuestIdsByTeam
     };
@@ -3613,7 +3607,7 @@
       guestId: PRE_EVENT_SEQUENCE_GUEST_ID,
       teamId: "system",
       answer: JSON.stringify(answer),
-      comment: "Secuencia: Ruleta hasta 25/09 17:00 → Guerra R1 25/09 18:00 a 28/09 18:00 → Guerra R2 24h",
+      comment: "Secuencia extendida: Guerra R1 hasta 28/09 23:59 → Guerra R2 hasta 30/09 23:59",
       earnedPoints: 0,
       status: "active",
       activatedAt: nowIso,
@@ -8191,8 +8185,8 @@
       { order:30, icon:"🎯", title:"¿Cuánto conocés a Vani y Fede?", text:triviaDone ? "Trivia completada." : "Respondé 5 preguntas.", done:triviaDone, active:false, route:"trivia-pareja", progressText:triviaDone ? `${coupleEarnedPoints} puntos obtenidos` : `Hasta ${coupleMaxPoints} puntos`, actionLabel:triviaDone ? "ABRIR RESULTADO" : "COMENZAR", locked:(!rsvpDone && !testMode) || !triviaOpen },
       { order:40, icon:"⚖️", title:"¿Vani o Fede?", text:whoTriviaDone ? "Trivia completada." : "Elegí: ¿Vani o Fede?", done:whoTriviaDone, active:false, route:"trivia-quien", progressText:whoTriviaDone ? `${whoEarnedPoints} puntos obtenidos` : `Hasta ${whoMaxPoints} puntos`, actionLabel:whoTriviaDone ? "ABRIR RESULTADO" : "COMENZAR", locked:(!rsvpDone && !testMode) || !whoTriviaOpen },
       { order:50, icon:"🎡", title:"Ruleta · Todo o Nada", text:rouletteText, done:rouletteDone, active:rouletteOpen && !rouletteDone, route:"ruleta", progressText:rouletteProgress, actionLabel:rouletteDone ? "ABRIR RULETA" : "ENTRAR AHORA", locked:!attending || (!rouletteOpen && !rouletteDone) },
-      { order:60, icon:"⚔️", title:"Guerra de Equipos · Ronda 1", text:war1Text, done:war1Done, active:war1Open && !war1Done, route:"guerra", warRound:1, progressText:war1Done ? "Ronda 1 finalizada" : testMode ? "Disponible para test" : war1Open ? timedStageChip("war1") : "25/09 18:00 → 28/09 18:00", actionLabel:war1Done ? "ABRIR RONDA" : war1Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 1", locked:!attending || (!war1Open && !war1Done) },
-      { order:70, icon:"🛡️", title:"Guerra de Equipos · Ronda 2", text:war2Text, done:war2Done, active:war2Open && !war2Done, route:"guerra", warRound:2, progressText:war2Done ? "Ronda 2 finalizada" : testMode ? "Disponible para test" : war2Open ? timedStageChip("war2") : "24 horas para votar", actionLabel:war2Done ? "ABRIR RONDA" : war2Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 2", locked:!attending || (!war2Open && !war2Done) }
+      { order:60, icon:"⚔️", title:"Guerra de Equipos · Ronda 1", text:war1Text, done:war1Done, active:war1Open && !war1Done, route:"guerra", warRound:1, progressText:war1Done ? "Ronda 1 finalizada" : testMode ? "Disponible para test" : war1Open ? timedStageChip("war1") : "25/09 18:00 → 28/09 23:59", actionLabel:war1Done ? "ABRIR RONDA" : war1Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 1", locked:!attending || (!war1Open && !war1Done) },
+      { order:70, icon:"🛡️", title:"Guerra de Equipos · Ronda 2", text:war2Text, done:war2Done, active:war2Open && !war2Done, route:"guerra", warRound:2, progressText:war2Done ? "Ronda 2 finalizada" : testMode ? "Disponible para test" : war2Open ? timedStageChip("war2") : "Hasta 30/09 23:59", actionLabel:war2Done ? "ABRIR RONDA" : war2Vote ? "CAMBIAR MI VOTO" : "ENTRAR A RONDA 2", locked:!attending || (!war2Open && !war2Done) }
     ];
 
     const pendingCards = cards.filter(card => !card.done).sort((a,b) => Number(b.active)-Number(a.active) || Number(a.locked)-Number(b.locked) || b.order-a.order);
@@ -11157,7 +11151,7 @@
     return `
       <section class="section-card admin-war-control admin-timed-sequence">
         <div class="admin-war-control-head">
-          <div><p class="eyebrow">Juegos nuevos</p><h4>Ruleta primero · Guerra después</h4><p>Al lanzar los juegos se abre únicamente la Ruleta durante 24h. Al vencer, se habilita Guerra R1 por 24h y, después, Guerra R2 por otras 24h. El ranking y los botines quedan congelados al abrir cada ronda.</p></div>
+          <div><p class="eyebrow">Juegos nuevos</p><h4>Ruleta primero · Guerra después</h4><p>La Guerra de Equipos tiene una extensión especial: Ronda 1 vence hoy 28/09 a las 23:59 y Ronda 2 queda abierta hasta el 30/09 a las 23:59. El ranking y los botines quedan congelados al abrir cada ronda.</p></div>
           <span>${!launched ? "Sin lanzar" : warRoundRevealed(2) ? "Finalizada" : "⏱ Automático"}</span>
         </div>
         <div class="admin-timed-sequence-grid">
@@ -11972,7 +11966,7 @@
               {
                 key: "game-roulette",
                 title: "Lanzar nuevos juegos",
-                text: "Lanza la Ruleta por 24h. Recién cuando termina ese reloj se libera Guerra R1 por 24h; después se abre R2 por otras 24h. El balance y la nómina de participantes quedan congelados al lanzamiento."
+                text: "Secuencia especial vigente: Guerra R1 hasta 28/09 23:59 y Guerra R2 hasta 30/09 23:59. El balance y la nómina de participantes quedan congelados al lanzamiento."
               }
             ].map(game => {
               const open = game.key === "game-roulette" ? manualGameFlag(game.key) : isTriviaGameOpen(game.key);

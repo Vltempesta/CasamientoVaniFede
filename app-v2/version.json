@@ -1,5 +1,8 @@
 {
-  "version": "32631",
-  "updatedAt": "2026-09-28T14:40:00Z",
-  "notes": "safe patch from v32628: staff-only shell, embedded seal, compact menu, dark mode cleanup"
+  "version": "32632",
+  "releasedAt": "2026-09-28T11:40:00-03:00",
+  "requiredReload": true,
+  "releaseDate": "2026-09-28T11:40:00-03:00",
+  "notes": "Extensión Guerra de Equipos: Ronda 1 hasta 28/09 23:59 y Ronda 2 hasta 30/09 23:59.",
+  "release": "Guerra extendida"
 }

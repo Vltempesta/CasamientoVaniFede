@@ -1,0 +1,7 @@
+VANI & FEDE · v32632
+
+Base: v32628_login_limpio estable.
+Único cambio funcional: extensión de Guerra de Equipos.
+- Ronda 1: hasta 28/09/2026 23:59 (Argentina).
+- Ronda 2: desde el cierre de R1 hasta 30/09/2026 23:59 (Argentina).
+No requiere cambios en Apps Script.
