@@ -1,18 +1,18 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32639";
+  const CURRENT_APP_VERSION = "32640";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
-  const REMOTE_SNAPSHOT_SCHEMA = 2;
+  const REMOTE_SNAPSHOT_SCHEMA = 3;
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
   const LAST_BACKUP_KEY = "vf_last_backup_at";
   const TABLE_ASSIGNMENT_GAME_ID = "event-table-assignment-v1";
   const TRANSPORT_CHECKIN_GAME_ID = "event-transport-checkin-v1";
   const ADMIN_OPERATOR_STORAGE_KEY = "vf_admin_points_operator_v1";
 
-  // v32639 · Privacidad Guerra: mientras una ronda está activa, el navegador
+  // v32640 · Privacidad Guerra: mientras una ronda está activa, el navegador
   // conserva únicamente registros sensibles de su propio equipo. Los demás
   // equipos nunca quedan persistidos localmente aunque provengan de una caché vieja.
   const WAR_PRIVATE_ACTIVE_GAME_ROUND = Object.freeze({
@@ -180,6 +180,7 @@
     rsvps: {},
     profiles: {},
     gameSubmissions: {},
+    warParticipation: { 1: {}, 2: {} },
     scoreEntries: [],
     socialMessages: [],
     socialLikes: {},
@@ -484,6 +485,7 @@
             snapshot.gameSubmissions && typeof snapshot.gameSubmissions === "object" ? snapshot.gameSubmissions : {},
             restoredTeamId
           ),
+          warParticipation: normalizeWarParticipation(snapshot.warParticipation),
           scoreEntries: Array.isArray(snapshot.scoreEntries) ? snapshot.scoreEntries : [],
           socialMessages: Array.isArray(snapshot.socialMessages) ? dedupeSocialMessages(snapshot.socialMessages) : [],
           socialLikes: snapshot.socialLikes && typeof snapshot.socialLikes === "object" ? snapshot.socialLikes : {},
@@ -527,6 +529,7 @@
             state.gameSubmissions || {},
             currentGuest?.team || viewerTeamIdFromGuestId(state.currentGuestId)
           ),
+          warParticipation: normalizeWarParticipation(state.warParticipation),
           scoreEntries: Array.isArray(state.scoreEntries) ? state.scoreEntries : [],
           socialMessages: Array.isArray(state.socialMessages) ? dedupeSocialMessages(state.socialMessages) : [],
           socialLikes: state.socialLikes || {},
@@ -553,7 +556,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32639"
+        appVersion: CONFIG.APP_VERSION || "32640"
       })
     );
     saveRemoteSnapshot();
@@ -1257,7 +1260,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32639",
+      appVersion: "32640",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -1362,7 +1365,7 @@
     return true;
   }
 
-  // v32639 · Las escrituras ya se reflejan de forma optimista en pantalla.
+  // v32640 · Las escrituras ya se reflejan de forma optimista en pantalla.
   // El refresco completo se difiere y agrupa para no castigar a Apps Script
   // después de cada toque. Varias acciones cercanas generan un solo refresh.
   function scheduleSilentSync(delay = 6500) {
@@ -1769,6 +1772,8 @@
     applyRecentConfirmedGames(
       remoteGameSubmissions
     );
+
+    state.warParticipation = normalizeWarParticipation(remote.warParticipation);
 
     state.scoreEntries = Array.isArray(remote.scoreEntries)
       ? dedupeScores(remote.scoreEntries)
@@ -2411,7 +2416,7 @@
         : "idle"
     );
 
-    // v32639: solo usamos el arranque ultrarrápido cuando el snapshot contiene
+    // v32640: solo usamos el arranque ultrarrápido cuando el snapshot contiene
     // también Social/notificaciones/configuración. Los snapshots antiguos se
     // reparan con un único getData completo y desde ahí vuelven a ser instantáneos.
     const initialSyncPromise = fastRestore
@@ -2846,13 +2851,13 @@
       // la base remota, renderizamos placeholders reales (nunca ceros falsos)
       // y la sincronización en curso completa la pantalla en segundo plano.
       enterApp(guest, true);
-      // v32639: un ingreso manual puede corresponder a otra identidad.
+      // v32640: un ingreso manual puede corresponder a otra identidad.
       // Aunque exista un snapshot válido, ese snapshot fue servido para el
       // viewer anterior (y Guerra además está filtrada por equipo). Forzamos
       // un getData completo para la identidad recién elegida. Las sesiones
       // restauradas automáticamente siguen usando el arranque instantáneo.
       void syncFromSheets(false);
-      // v32639: no enviamos telemetría de login. Era una escritura remota que
+      // v32640: no enviamos telemetría de login. Era una escritura remota que
       // incrementaba serverRevision y provocaba refrescos completos en todos
       // los celulares sin aportar nada al funcionamiento del casamiento.
       window.setTimeout(() => {
@@ -2932,6 +2937,13 @@
     if (route === "ficha" || route === "juegos" || route === "info") route = "inicio";
     if (route === "torneo") route = "puntos";
     if (route === "cronograma") route = "inicio";
+
+    // v32640: al abrir vistas que dependen de actividad de otras personas,
+    // hacemos un heartbeat liviano. Si serverRevision cambió, recién ahí
+    // se baja getData. Evita perfiles/social/ranking viejos sin penalizar Inicio.
+    if (currentGuest && ["equipo", "social", "ranking"].includes(route) && navigator.onLine !== false) {
+      void syncUnlockState({ force: true, render: true });
+    }
 
     const legacyGameRoutes = ["musica", "trivia-pareja", "trivia-quien", "trivia"];
     const testMode = isAdminTestMode();
@@ -5088,6 +5100,36 @@
     return timedStageStatus("war2").active && warRoundRevealed(1);
   }
 
+  function normalizeWarParticipation(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const out = { 1: {}, 2: {} };
+
+    [1, 2].forEach(round => {
+      const bucket = source[round] ?? source[String(round)] ?? {};
+      if (Array.isArray(bucket)) {
+        bucket.forEach(guestId => {
+          const id = String(guestId || "");
+          if (id) out[round][id] = true;
+        });
+      } else if (bucket && typeof bucket === "object") {
+        Object.entries(bucket).forEach(([guestId, played]) => {
+          const id = String(guestId || "");
+          if (id && Boolean(played)) out[round][id] = true;
+        });
+      }
+    });
+
+    return out;
+  }
+
+  function hasWarParticipation(guestId, round) {
+    const id = String(guestId || "");
+    const r = Number(round);
+    if (!id || ![1, 2].includes(r)) return false;
+    if (warVoteForGuest(id, r)) return true;
+    return Boolean(state.warParticipation?.[r]?.[id]);
+  }
+
   function warVoteForGuest(guestId, round) {
     if (String(guestId || "") === ADMIN_TEST_GUEST.id) return adminTestSession.warVotes[Number(round)] || null;
     return parseWarVoteSubmission(
@@ -7175,14 +7217,14 @@
           key: "war1",
           label: "Guerra R1",
           done: Boolean(
-            warVoteForGuest(guest.id, 1)
+            hasWarParticipation(guest.id, 1)
           )
         },
         {
           key: "war2",
           label: "Guerra R2",
           done: Boolean(
-            warVoteForGuest(guest.id, 2)
+            hasWarParticipation(guest.id, 2)
           )
         }
       );
@@ -7437,10 +7479,10 @@
   function renderCaptainPanel(teamId) {
     const members = timedCompetitionMembers(teamId);
     const rouletteDone = members.filter(g => rouletteSubmissionFor(g.id)?.status === "completed");
-    const r1Votes = members.filter(g => warVoteForGuest(g.id, 1));
-    const r2Votes = members.filter(g => warVoteForGuest(g.id, 2));
+    const r1Votes = members.filter(g => hasWarParticipation(g.id, 1));
+    const r2Votes = members.filter(g => hasWarParticipation(g.id, 2));
     const stage = timedStageStatus("roulette").active ? "roulette" : timedStageStatus("war1").active ? "war1" : timedStageStatus("war2").active ? "war2" : "idle";
-    const pending = stage === "roulette" ? members.filter(g => !rouletteSubmissionFor(g.id)?.status) : stage === "war1" ? members.filter(g => !warVoteForGuest(g.id, 1)) : stage === "war2" ? members.filter(g => !warVoteForGuest(g.id, 2)) : [];
+    const pending = stage === "roulette" ? members.filter(g => !rouletteSubmissionFor(g.id)?.status) : stage === "war1" ? members.filter(g => !hasWarParticipation(g.id, 1)) : stage === "war2" ? members.filter(g => !hasWarParticipation(g.id, 2)) : [];
     return `
       <section class="section-card captain-live-panel">
         <div class="captain-live-head"><span>🧭</span><div><small>PANEL DEL CAPITÁN</small><strong>Mové a tu equipo</strong><p>Ves participación, no votos individuales.</p></div></div>
@@ -11332,7 +11374,7 @@
   function warAdminProgress(round) {
     const teams = Object.values(DATA.teams).map(team => {
       const eligible = timedCompetitionMembers(team.id).length;
-      const votes = warVotesForTeam(team.id, round).length;
+      const votes = timedCompetitionMembers(team.id).filter(guest => hasWarParticipation(guest.id, round)).length;
       return { team, eligible, votes };
     });
     return {

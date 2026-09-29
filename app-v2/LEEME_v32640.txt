@@ -1,0 +1,10 @@
+v32640 · perfiles y actividad siempre actualizados
+
+- Mantiene privacidad de Guerra: otros equipos no reciben la estrategia ni el objetivo.
+- Agrega warParticipation seguro: sólo informa si un invitado ya votó.
+- Perfiles/progreso ya no muestran falsamente “no jugó” por la privacidad.
+- Al abrir Equipo, Social o Ranking se hace un heartbeat liviano; getData completo sólo baja si serverRevision cambió.
+- Snapshot schema 3 fuerza una única reparación de caché al actualizar.
+
+GitHub: index.html, app.js, sw.js, version.json.
+Apps Script: reemplazar WarPrivacy_v32636.gs por WarPrivacy_v32640.gs y crear nueva implementación.
