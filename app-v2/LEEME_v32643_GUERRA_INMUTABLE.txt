@@ -1,0 +1,33 @@
+V32643 - GUERRA INMUTABLE
+
+FRONTEND
+- Si una ronda venció, el celular NO calcula resultados si antes no pudo completar un getData exitoso.
+- Mantiene privacidad, performance, perfiles frescos y cambios de micros de v32642.
+
+BACKEND
+Agregar WarResultLock_v32643.gs y realizar 3 cambios pequeños en Code.gs:
+
+1) En getData, reemplazar:
+   data: vfProtectWarVotes_(vfApplyGameSheetOverrides_(buildData_()), params),
+
+   por:
+   data: vfProtectWarVotes_(
+     vfApplyWarCanonicalResults_(
+       vfApplyGameSheetOverrides_(buildData_())
+     ),
+     params
+   ),
+
+2) En doGet, dentro del withLock_ de escrituras, reemplazar:
+   const saved = handleWrite_(payload);
+   por:
+   const saved = vfHandleWarResultWrite_(payload);
+
+3) En doPost, dentro del withLock_, hacer el mismo reemplazo.
+
+Luego guardar y desplegar NUEVA VERSION del Web App, sin cambiar la URL.
+
+EFECTO SOBRE RONDA 1
+Si quedaron duplicados históricos, getData vuelve a tomar el PRIMER resultado oficial.
+En el caso de Bosque, el resultado canónico es ATACAR a Luz, +500.
+No hace falta borrar filas para que ranking/reveal usen el resultado correcto.

@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32641";
+  const CURRENT_APP_VERSION = "32643";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
@@ -12,7 +12,7 @@
   const TRANSPORT_CHECKIN_GAME_ID = "event-transport-checkin-v1";
   const ADMIN_OPERATOR_STORAGE_KEY = "vf_admin_points_operator_v1";
 
-  // v32641 · Privacidad Guerra: mientras una ronda está activa, el navegador
+  // v32643 · Privacidad Guerra: mientras una ronda está activa, el navegador
   // conserva únicamente registros sensibles de su propio equipo. Los demás
   // equipos nunca quedan persistidos localmente aunque provengan de una caché vieja.
   const WAR_PRIVATE_ACTIVE_GAME_ROUND = Object.freeze({
@@ -92,14 +92,15 @@
   };
 
   const TRANSPORT_CAPACITY_BY_ZONE = {
-    "capital-obelisco": 45,
-    "wilde": 24,
+    "capital-obelisco": 60,
+    "wilde": 60,
     "longchamps": 19
   };
+  const WILDE_OBELISCO_SHARED_CAPACITY = 60;
 
   const TRANSPORT_SCHEDULE_BY_ZONE = {
-    "capital-obelisco": { shortLabel: "Capital · Obelisco", beThere: "16:30", departure: "16:45" },
-    "wilde": { shortLabel: "Wilde", beThere: "16:15", departure: "16:30" },
+    "capital-obelisco": { shortLabel: "Obelisco · parada del micro Wilde", beThere: "16:30", departure: "16:45" },
+    "wilde": { shortLabel: "Wilde · inicio del recorrido", beThere: "15:45", departure: "16:00" },
     "longchamps": { shortLabel: "Longchamps", beThere: "15:45", departure: "16:00" }
   };
 
@@ -1262,7 +1263,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32641",
+      appVersion: "32643",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -1367,7 +1368,7 @@
     return true;
   }
 
-  // v32641 · Las escrituras ya se reflejan de forma optimista en pantalla.
+  // v32643 · Las escrituras ya se reflejan de forma optimista en pantalla.
   // El refresco completo se difiere y agrupa para no castigar a Apps Script
   // después de cada toque. Varias acciones cercanas generan un solo refresh.
   function scheduleSilentSync(delay = 6500) {
@@ -2444,7 +2445,7 @@
         : "idle"
     );
 
-    // v32641: solo usamos el arranque ultrarrápido cuando el snapshot contiene
+    // v32643: solo usamos el arranque ultrarrápido cuando el snapshot contiene
     // también Social/notificaciones/configuración. Los snapshots antiguos se
     // reparan con un único getData completo y desde ahí vuelven a ser instantáneos.
     const initialSyncPromise = fastRestore
@@ -2879,13 +2880,13 @@
       // la base remota, renderizamos placeholders reales (nunca ceros falsos)
       // y la sincronización en curso completa la pantalla en segundo plano.
       enterApp(guest, true);
-      // v32641: un ingreso manual puede corresponder a otra identidad.
+      // v32643: un ingreso manual puede corresponder a otra identidad.
       // Aunque exista un snapshot válido, ese snapshot fue servido para el
       // viewer anterior (y Guerra además está filtrada por equipo). Forzamos
       // un getData completo para la identidad recién elegida. Las sesiones
       // restauradas automáticamente siguen usando el arranque instantáneo.
       void syncFromSheets(false);
-      // v32641: no enviamos telemetría de login. Era una escritura remota que
+      // v32643: no enviamos telemetría de login. Era una escritura remota que
       // incrementaba serverRevision y provocaba refrescos completos en todos
       // los celulares sin aportar nada al funcionamiento del casamiento.
       window.setTimeout(() => {
@@ -2966,7 +2967,7 @@
     if (route === "torneo") route = "puntos";
     if (route === "cronograma") route = "inicio";
 
-    // v32641: Equipo/Perfiles, Social y Ranking muestran el caché al instante,
+    // v32643: Equipo/Perfiles, Social y Ranking muestran el caché al instante,
     // pero disparan un getData completo silencioso. Así la actividad de terceros
     // no depende únicamente del heartbeat de serverRevision.
     if (currentGuest && ["equipo", "invitados", "social", "ranking"].includes(route) && navigator.onLine !== false) {
@@ -5701,8 +5702,8 @@
           <span class="card-icon">🚌</span>
           <h4>Micro misterioso</h4>
           <p><strong>Relax, no te preocupes por cómo ir ni cómo volver.</strong></p>
-          <p>Vamos a disponer un micro que saldrá desde el <strong>Obelisco</strong> y llevará a los invitados hasta el lugar secreto.</p>
-          <div class="micro-steps"><span>Subís en el Obelisco</span><span>→</span><span>Bajás en el bosque</span></div>
+          <p>Vamos a disponer un <strong>micro grande de 60 personas</strong> que saldrá desde <strong>Wilde</strong>, hará una parada en el <strong>Obelisco</strong> y continuará hasta el lugar secreto.</p>
+          <div class="micro-steps"><span>Wilde 16:00</span><span>→</span><span>Obelisco 16:45</span><span>→</span><span>Bajás en el bosque</span></div>
           <p>Regreso previsto: <strong>03:00 hs</strong>.</p>
           <small>Si querés recibir información del micro, marcá “Necesito información del micro” al confirmar asistencia.</small>
         </article>
@@ -5731,7 +5732,7 @@
         <article class="section-card ${menuOpen ? "" : "locked-panel"}"><div class="card-title-row"><h4>🍽️ Menú</h4><span class="badge">${menuOpen ? "Disponible" : "Bloqueado"}</span></div>${menuOpen ? `<div class="grid two compact">${Object.entries(DATA.info.menu).map(([key, value]) => `<div class="menu-line"><strong>${menuLabel(key)}</strong><p>${escapeHTML(value)}</p></div>`).join("")}</div>` : `<p>Se revelará más adelante.</p><p>Si tenés restricciones alimentarias, alergias o preferencias importantes, cargalas en <strong>Confirmar asistencia</strong>.</p>`}</article>
       </section>
 
-      <section class="section-card"><div class="card-title-row"><h4>Preguntas rápidas</h4><span class="badge muted">FAQ</span></div><div class="faq-grid"><div><strong>¿Dónde es?</strong><p>Todavía es secreto. El destino final se revelará más adelante.</p></div><div><strong>¿Hay micro?</strong><p>Sí. Saldrá desde el Obelisco y volverá al finalizar la fiesta.</p></div><div><strong>¿A qué hora es?</strong><p>El evento es de 18:00 a 03:00 hs.</p></div><div><strong>¿Qué calzado conviene?</strong><p>Algo elegante, pero cómodo para caminar sobre pasto.</p></div></div></section>`;
+      <section class="section-card"><div class="card-title-row"><h4>Preguntas rápidas</h4><span class="badge muted">FAQ</span></div><div class="faq-grid"><div><strong>¿Dónde es?</strong><p>Todavía es secreto. El destino final se revelará más adelante.</p></div><div><strong>¿Hay micro?</strong><p>Sí. El micro grande sale de Wilde a las 16:00, para en el Obelisco a las 16:45 y vuelve al finalizar la fiesta.</p></div><div><strong>¿A qué hora es?</strong><p>El evento es de 18:00 a 03:00 hs.</p></div><div><strong>¿Qué calzado conviene?</strong><p>Algo elegante, pero cómodo para caminar sobre pasto.</p></div></div></section>`;
   }
 
   function renderTransport() {
@@ -5810,7 +5811,7 @@
       ${sectionHeader(
         "TRASLADOS",
         "Micros y combis",
-        "Horarios y lugares disponibles."
+        "Wilde y Obelisco viajan en el mismo micro grande de 60 personas."
       )}
 
       <section
@@ -5900,12 +5901,29 @@
         </small>
       </section>
 
+      <section class="section-card transport-route-note">
+        <p class="eyebrow">MISMO MICRO · CUPO TOTAL 60</p>
+        <h4>Wilde → Obelisco → Estancia</h4>
+        <p><strong>Wilde:</strong> salida puntual 16:00 · <strong>Obelisco:</strong> salida puntual 16:45. Los pasajeros de ambos puntos comparten el mismo cupo de 60 personas.</p>
+      </section>
+
       <section class="transport-zones-grid transport-confirmed-grid">
+        ${transportZoneCard({
+          key: "wilde",
+          area: "Wilde",
+          place: "Las Flores y Mitre · inicio del recorrido",
+          vehicle: "Micro grande · 60 personas",
+          beThere: "15:45",
+          departure: "16:00",
+          availability: wilde,
+          selected: selectedZone === "wilde",
+          canJoin: canJoinMicro
+        })}
         ${transportZoneCard({
           key: "capital-obelisco",
           area: "Capital · Obelisco",
-          place: "CABA · Obelisco",
-          vehicle: "Micro 45",
+          place: "CABA · parada del mismo micro",
+          vehicle: "Micro grande · 60 personas",
           beThere: "16:30",
           departure: "16:45",
           availability: capital,
@@ -5921,17 +5939,6 @@
           departure: "16:00",
           availability: longchamps,
           selected: selectedZone === "longchamps",
-          canJoin: canJoinMicro
-        })}
-        ${transportZoneCard({
-          key: "wilde",
-          area: "Wilde",
-          place: "Las Flores y Mitre",
-          vehicle: "Minibús 24",
-          beThere: "16:15",
-          departure: "16:30",
-          availability: wilde,
-          selected: selectedZone === "wilde",
           canJoin: canJoinMicro
         })}
       </section>
@@ -6964,66 +6971,57 @@
         if (
           !hasCompletedRsvp(rsvp) ||
           rsvp.attendance !== "si" ||
-          !["combi", "micro"].includes(
-            String(rsvp.transport || "")
-          )
+          !["combi", "micro"].includes(String(rsvp.transport || ""))
         ) {
           return;
         }
 
-        const zone = String(
-          rsvp.pickupZone || ""
-        );
-
-        if (
-          Object.prototype.hasOwnProperty.call(
-            TRANSPORT_CAPACITY_BY_ZONE,
-            zone
-          )
-        ) {
+        const zone = String(rsvp.pickupZone || "");
+        if (Object.prototype.hasOwnProperty.call(counts, zone) && zone !== "sin-definir") {
           counts[zone] += 1;
         } else {
           counts["sin-definir"] += 1;
         }
       });
 
-    const zones = {};
+    // Wilde y Obelisco son dos paradas del MISMO micro de 60 pasajeros.
+    // Se conserva el pickupZone individual para check-in y logística,
+    // pero el cupo se calcula de forma compartida para evitar sobreventa.
+    const sharedBooked = Number(counts.wilde || 0) + Number(counts["capital-obelisco"] || 0);
+    const sharedRawRemaining = WILDE_OBELISCO_SHARED_CAPACITY - sharedBooked;
+    const sharedAvailability = {
+      capacity: WILDE_OBELISCO_SHARED_CAPACITY,
+      booked: sharedBooked,
+      remaining: Math.max(0, sharedRawRemaining),
+      overbooked: Math.max(0, -sharedRawRemaining),
+      full: sharedRawRemaining <= 0,
+      sharedRoute: true
+    };
 
-    Object.entries(
-      TRANSPORT_CAPACITY_BY_ZONE
-    ).forEach(([zone, capacity]) => {
-      const booked = Number(counts[zone] || 0);
-      const rawRemaining =
-        Number(capacity || 0) - booked;
+    const longchampsBooked = Number(counts.longchamps || 0);
+    const longchampsCapacity = Number(TRANSPORT_CAPACITY_BY_ZONE.longchamps || 0);
+    const longchampsRawRemaining = longchampsCapacity - longchampsBooked;
 
-      zones[zone] = {
-        zone,
-        capacity: Number(capacity || 0),
-        booked,
-        remaining: Math.max(
-          0,
-          rawRemaining
-        ),
-        overbooked: Math.max(
-          0,
-          -rawRemaining
-        ),
-        full: rawRemaining <= 0
-      };
-    });
-
-    const totalRemaining =
-      Object.values(zones).reduce(
-        (sum, item) =>
-          sum + item.remaining,
-        0
-      );
+    const zones = {
+      "wilde": { ...sharedAvailability, zone: "wilde" },
+      "capital-obelisco": { ...sharedAvailability, zone: "capital-obelisco" },
+      "longchamps": {
+        zone: "longchamps",
+        capacity: longchampsCapacity,
+        booked: longchampsBooked,
+        remaining: Math.max(0, longchampsRawRemaining),
+        overbooked: Math.max(0, -longchampsRawRemaining),
+        full: longchampsRawRemaining <= 0,
+        sharedRoute: false
+      }
+    };
 
     return {
       counts,
       zones,
-      totalRemaining,
-      unassigned: counts["sin-definir"]
+      totalRemaining: sharedAvailability.remaining + zones.longchamps.remaining,
+      unassigned: counts["sin-definir"],
+      wildeObelisco: { ...sharedAvailability }
     };
   }
 
@@ -7053,40 +7051,30 @@
 
   function transportCapacityDetail(item) {
     if (!item) return "";
-
+    if (item.sharedRoute) {
+      return `${item.booked}/${item.capacity} ocupados · cupo compartido Wilde + Obelisco`;
+    }
     return `${item.booked}/${item.capacity} ocupados`;
   }
 
-  function transportAvailabilitySentence(
-    snapshot
-  ) {
-    const labels = {
-      "capital-obelisco": "Capital",
-      "wilde": "Wilde",
-      "longchamps": "Longchamps"
-    };
+  function transportAvailabilitySentence(snapshot) {
+    const shared = snapshot.wildeObelisco || snapshot.zones.wilde;
+    const longchamps = snapshot.zones.longchamps;
+    const parts = [];
 
-    return Object.entries(snapshot.zones)
-      .map(([zone, item]) => {
-        const label = labels[zone] || zone;
+    if (shared) {
+      if (shared.overbooked > 0) parts.push(`Wilde + Obelisco está excedido por ${shared.overbooked}`);
+      else if (shared.full) parts.push("Wilde + Obelisco está completo");
+      else parts.push(`Wilde + Obelisco tiene ${shared.remaining} ${shared.remaining === 1 ? "lugar" : "lugares"}`);
+    }
 
-        if (item.overbooked > 0) {
-          return `${label} está excedido por ${item.overbooked}`;
-        }
+    if (longchamps) {
+      if (longchamps.overbooked > 0) parts.push(`Longchamps está excedido por ${longchamps.overbooked}`);
+      else if (longchamps.full) parts.push("Longchamps está completo");
+      else parts.push(`Longchamps tiene ${longchamps.remaining} ${longchamps.remaining === 1 ? "lugar" : "lugares"}`);
+    }
 
-        if (item.full) {
-          return `${label} está completo`;
-        }
-
-        return `${label} tiene ${
-          item.remaining
-        } ${
-          item.remaining === 1
-            ? "lugar"
-            : "lugares"
-        }`;
-      })
-      .join(", ");
+    return parts.join(", ");
   }
 
   function rsvpThanksTitle(saved) {
@@ -11512,7 +11500,11 @@
     if ((!autoAllowed && !captainAllowed && !adminAllowed) || warRoundRevealed(round)) return false;
     if (!autoAllowed && !warRoundEnabled(round)) return false;
 
-    await syncFromSheets(false);
+    const syncedForResolution = await syncFromSheets(false);
+    if (!syncedForResolution) {
+      console.warn(`Guerra R${round}: no se resuelve sin sincronización completa y exitosa.`);
+      return false;
+    }
     if (warRoundRevealed(round)) return true;
     const official = {};
     for (const teamId of Object.keys(DATA.teams)) {
