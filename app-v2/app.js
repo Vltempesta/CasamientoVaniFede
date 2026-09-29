@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32640";
+  const CURRENT_APP_VERSION = "32641";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
@@ -12,7 +12,7 @@
   const TRANSPORT_CHECKIN_GAME_ID = "event-transport-checkin-v1";
   const ADMIN_OPERATOR_STORAGE_KEY = "vf_admin_points_operator_v1";
 
-  // v32640 · Privacidad Guerra: mientras una ronda está activa, el navegador
+  // v32641 · Privacidad Guerra: mientras una ronda está activa, el navegador
   // conserva únicamente registros sensibles de su propio equipo. Los demás
   // equipos nunca quedan persistidos localmente aunque provengan de una caché vieja.
   const WAR_PRIVATE_ACTIVE_GAME_ROUND = Object.freeze({
@@ -143,6 +143,8 @@
   const UNLOCK_SYNC_INTERVAL_MS = 30000;
   const UNLOCK_SYNC_MIN_GAP_MS = 4000;
   const FULL_SYNC_STALE_MS = 45000;
+  const SHARED_VIEW_FULL_SYNC_MIN_GAP_MS = 12000;
+  let lastSharedViewFullSyncAt = 0;
   let deferredInstallPrompt = null;
   let appUpdateCheckInFlight = null;
   let activeWriteKeys = new Set();
@@ -1260,7 +1262,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32640",
+      appVersion: "32641",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -1365,7 +1367,7 @@
     return true;
   }
 
-  // v32640 · Las escrituras ya se reflejan de forma optimista en pantalla.
+  // v32641 · Las escrituras ya se reflejan de forma optimista en pantalla.
   // El refresco completo se difiere y agrupa para no castigar a Apps Script
   // después de cada toque. Varias acciones cercanas generan un solo refresh.
   function scheduleSilentSync(delay = 6500) {
@@ -1541,6 +1543,22 @@
   }
 
 
+  function sharedActivityRoute(route = currentRoute) {
+    return ["equipo", "invitados", "social", "ranking"].includes(String(route || ""));
+  }
+
+  async function refreshSharedActivitySilently(force = false) {
+    if (!currentGuest || !isConfigured() || navigator.onLine === false) return false;
+
+    const now = Date.now();
+    if (!force && now - lastSharedViewFullSyncAt < SHARED_VIEW_FULL_SYNC_MIN_GAP_MS) {
+      return false;
+    }
+
+    lastSharedViewFullSyncAt = now;
+    return syncFromSheets(false);
+  }
+
   function startUnlockAutoSync() {
     if (unlockSyncInterval) {
       window.clearInterval(unlockSyncInterval);
@@ -1552,7 +1570,11 @@
         document.visibilityState === "visible" &&
         navigator.onLine !== false
       ) {
-        syncUnlockState({ render: true });
+        if (sharedActivityRoute()) {
+          void refreshSharedActivitySilently(false);
+        } else {
+          void syncUnlockState({ render: true });
+        }
       }
     }, UNLOCK_SYNC_INTERVAL_MS);
   }
@@ -1564,8 +1586,14 @@
       navigator.onLine === false
     ) return;
 
-    // Un heartbeat liviano compara serverRevision. getData solo se ejecuta
-    // si el servidor cambió desde el último snapshot completo.
+    // Las vistas compartidas necesitan una garantía fuerte de frescura:
+    // muestran el caché de inmediato y actualizan getData detrás.
+    if (sharedActivityRoute()) {
+      void refreshSharedActivitySilently(true);
+      return;
+    }
+
+    // Para Inicio y vistas personales alcanza con el heartbeat liviano.
     void syncUnlockState({
       force: true,
       render: true
@@ -2416,7 +2444,7 @@
         : "idle"
     );
 
-    // v32640: solo usamos el arranque ultrarrápido cuando el snapshot contiene
+    // v32641: solo usamos el arranque ultrarrápido cuando el snapshot contiene
     // también Social/notificaciones/configuración. Los snapshots antiguos se
     // reparan con un único getData completo y desde ahí vuelven a ser instantáneos.
     const initialSyncPromise = fastRestore
@@ -2851,13 +2879,13 @@
       // la base remota, renderizamos placeholders reales (nunca ceros falsos)
       // y la sincronización en curso completa la pantalla en segundo plano.
       enterApp(guest, true);
-      // v32640: un ingreso manual puede corresponder a otra identidad.
+      // v32641: un ingreso manual puede corresponder a otra identidad.
       // Aunque exista un snapshot válido, ese snapshot fue servido para el
       // viewer anterior (y Guerra además está filtrada por equipo). Forzamos
       // un getData completo para la identidad recién elegida. Las sesiones
       // restauradas automáticamente siguen usando el arranque instantáneo.
       void syncFromSheets(false);
-      // v32640: no enviamos telemetría de login. Era una escritura remota que
+      // v32641: no enviamos telemetría de login. Era una escritura remota que
       // incrementaba serverRevision y provocaba refrescos completos en todos
       // los celulares sin aportar nada al funcionamiento del casamiento.
       window.setTimeout(() => {
@@ -2938,11 +2966,11 @@
     if (route === "torneo") route = "puntos";
     if (route === "cronograma") route = "inicio";
 
-    // v32640: al abrir vistas que dependen de actividad de otras personas,
-    // hacemos un heartbeat liviano. Si serverRevision cambió, recién ahí
-    // se baja getData. Evita perfiles/social/ranking viejos sin penalizar Inicio.
-    if (currentGuest && ["equipo", "social", "ranking"].includes(route) && navigator.onLine !== false) {
-      void syncUnlockState({ force: true, render: true });
+    // v32641: Equipo/Perfiles, Social y Ranking muestran el caché al instante,
+    // pero disparan un getData completo silencioso. Así la actividad de terceros
+    // no depende únicamente del heartbeat de serverRevision.
+    if (currentGuest && ["equipo", "invitados", "social", "ranking"].includes(route) && navigator.onLine !== false) {
+      void refreshSharedActivitySilently(false);
     }
 
     const legacyGameRoutes = ["musica", "trivia-pareja", "trivia-quien", "trivia"];
@@ -13058,6 +13086,7 @@
             navigate("equipo");
           } else {
             renderCurrentRoute();
+            void refreshSharedActivitySilently(false);
           }
         });
       });
@@ -13078,6 +13107,7 @@
           renderCurrentRoute();
 
           if (willOpen) {
+            void refreshSharedActivitySilently(false);
             scrollGuestTeamToStart(teamId);
           }
         });
