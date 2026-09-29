@@ -1,17 +1,18 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32637";
+  const CURRENT_APP_VERSION = "32639";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
+  const REMOTE_SNAPSHOT_SCHEMA = 2;
   const PENDING_WRITES_KEY = "vf_pending_writes_v1";
   const LAST_BACKUP_KEY = "vf_last_backup_at";
   const TABLE_ASSIGNMENT_GAME_ID = "event-table-assignment-v1";
   const TRANSPORT_CHECKIN_GAME_ID = "event-transport-checkin-v1";
   const ADMIN_OPERATOR_STORAGE_KEY = "vf_admin_points_operator_v1";
 
-  // v32637 · Privacidad Guerra: mientras una ronda está activa, el navegador
+  // v32639 · Privacidad Guerra: mientras una ronda está activa, el navegador
   // conserva únicamente registros sensibles de su propio equipo. Los demás
   // equipos nunca quedan persistidos localmente aunque provengan de una caché vieja.
   const WAR_PRIVATE_ACTIVE_GAME_ROUND = Object.freeze({
@@ -186,6 +187,7 @@
     manualUnlocks: {},
     unlockRevision: "",
     serverRevision: "",
+    snapshotSchemaVersion: 0,
     serverRanking: [],
     backendVersion: "",
     appSettings: {
@@ -483,6 +485,9 @@
             restoredTeamId
           ),
           scoreEntries: Array.isArray(snapshot.scoreEntries) ? snapshot.scoreEntries : [],
+          socialMessages: Array.isArray(snapshot.socialMessages) ? dedupeSocialMessages(snapshot.socialMessages) : [],
+          socialLikes: snapshot.socialLikes && typeof snapshot.socialLikes === "object" ? snapshot.socialLikes : {},
+          notificationsByGuest: snapshot.notificationsByGuest && typeof snapshot.notificationsByGuest === "object" ? snapshot.notificationsByGuest : {},
           serverRanking: Array.isArray(snapshot.serverRanking) ? snapshot.serverRanking : [],
           manualUnlocks: snapshot.manualUnlocks && typeof snapshot.manualUnlocks === "object" ? snapshot.manualUnlocks : {},
           unlockRevision: String(snapshot.unlockRevision || ""),
@@ -490,6 +495,10 @@
           lastSyncAt: snapshot.lastSyncAt || null,
           backendVersion: String(snapshot.backendVersion || ""),
           serverRevision: String(snapshot.serverRevision || ""),
+          appSettings: snapshot.appSettings && typeof snapshot.appSettings === "object"
+            ? { ...defaultState.appSettings, ...snapshot.appSettings }
+            : { ...defaultState.appSettings },
+          snapshotSchemaVersion: Number(snapshot.snapshotSchemaVersion || 0),
           remoteReady: true
         } : {}),
         currentGuestId: restoredGuestId,
@@ -519,6 +528,9 @@
             currentGuest?.team || viewerTeamIdFromGuestId(state.currentGuestId)
           ),
           scoreEntries: Array.isArray(state.scoreEntries) ? state.scoreEntries : [],
+          socialMessages: Array.isArray(state.socialMessages) ? dedupeSocialMessages(state.socialMessages) : [],
+          socialLikes: state.socialLikes || {},
+          notificationsByGuest: state.notificationsByGuest || {},
           serverRanking: Array.isArray(state.serverRanking) ? state.serverRanking : [],
           manualUnlocks: state.manualUnlocks || {},
           unlockRevision: state.unlockRevision || "",
@@ -526,6 +538,8 @@
           lastSyncAt: state.lastSyncAt || null,
           backendVersion: state.backendVersion || "",
           serverRevision: state.serverRevision || "",
+          appSettings: state.appSettings || {},
+          snapshotSchemaVersion: REMOTE_SNAPSHOT_SCHEMA,
           cachedAt: new Date().toISOString()
         })
       );
@@ -539,7 +553,7 @@
       STORAGE_KEY,
       JSON.stringify({
         currentGuestId: state.currentGuestId || null,
-        appVersion: CONFIG.APP_VERSION || "32637"
+        appVersion: CONFIG.APP_VERSION || "32639"
       })
     );
     saveRemoteSnapshot();
@@ -1243,7 +1257,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32637",
+      appVersion: "32639",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -1348,7 +1362,7 @@
     return true;
   }
 
-  // v32637 · Las escrituras ya se reflejan de forma optimista en pantalla.
+  // v32639 · Las escrituras ya se reflejan de forma optimista en pantalla.
   // El refresco completo se difiere y agrupa para no castigar a Apps Script
   // después de cada toque. Varias acciones cercanas generan un solo refresh.
   function scheduleSilentSync(delay = 6500) {
@@ -1783,6 +1797,7 @@
       : [];
 
     state.serverRevision = String(remote.serverRevision || "");
+    state.snapshotSchemaVersion = REMOTE_SNAPSHOT_SCHEMA;
 
     if (
       Object.prototype.hasOwnProperty.call(remote, "manualUnlocks")
@@ -2386,7 +2401,8 @@
     const fastRestore = Boolean(
       restoredCandidate &&
       isCompetitionGuest(restoredCandidate) &&
-      state.remoteReady
+      state.remoteReady &&
+      Number(state.snapshotSchemaVersion || 0) >= REMOTE_SNAPSHOT_SCHEMA
     );
 
     setRemoteStatus(
@@ -2395,9 +2411,9 @@
         : "idle"
     );
 
-    // v32637: si este celular ya tiene sesión + snapshot, no bloqueamos el
-    // arranque con getData. La UI abre desde localStorage y applyGuestShell
-    // dispara inmediatamente el heartbeat de revisión en segundo plano.
+    // v32639: solo usamos el arranque ultrarrápido cuando el snapshot contiene
+    // también Social/notificaciones/configuración. Los snapshots antiguos se
+    // reparan con un único getData completo y desde ahí vuelven a ser instantáneos.
     const initialSyncPromise = fastRestore
       ? Promise.resolve(true)
       : syncFromSheets(false);
@@ -2830,8 +2846,13 @@
       // la base remota, renderizamos placeholders reales (nunca ceros falsos)
       // y la sincronización en curso completa la pantalla en segundo plano.
       enterApp(guest, true);
-      if (!state.remoteReady) void syncFromSheets(false);
-      // v32637: no enviamos telemetría de login. Era una escritura remota que
+      // v32639: un ingreso manual puede corresponder a otra identidad.
+      // Aunque exista un snapshot válido, ese snapshot fue servido para el
+      // viewer anterior (y Guerra además está filtrada por equipo). Forzamos
+      // un getData completo para la identidad recién elegida. Las sesiones
+      // restauradas automáticamente siguen usando el arranque instantáneo.
+      void syncFromSheets(false);
+      // v32639: no enviamos telemetría de login. Era una escritura remota que
       // incrementaba serverRevision y provocaba refrescos completos en todos
       // los celulares sin aportar nada al funcionamiento del casamiento.
       window.setTimeout(() => {

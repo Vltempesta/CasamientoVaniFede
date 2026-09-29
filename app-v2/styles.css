@@ -14973,3 +14973,22 @@ body.dark-mode *{scrollbar-color:#35414d #0e151c}
   body.dark-mode .topbar{background:#121a22!important}
   body.dark-mode .rank-item{box-shadow:none!important}
 }
+
+
+/* v32634 · ingreso instantáneo / hidratación invisible */
+.instant-entry-shell{padding:18px!important;overflow:hidden;position:relative}
+.instant-entry-head{display:grid;grid-template-columns:58px minmax(0,1fr);gap:13px;align-items:center}
+.instant-entry-logo{width:56px!important;height:56px!important}
+.instant-entry-head h3{margin:2px 0 1px;font-family:var(--font-title);font-size:clamp(25px,7vw,34px);line-height:1}
+.instant-entry-head p{margin:3px 0 0;color:var(--muted);font-size:12px}
+.instant-entry-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.instant-entry-grid .skeleton-block{display:block;background:linear-gradient(100deg,rgba(49,83,110,.08) 20%,rgba(201,170,114,.16) 42%,rgba(49,83,110,.08) 64%);background-size:220% 100%;animation:vfInstantShimmer 1.05s linear infinite;border:1px solid rgba(49,83,110,.08)}
+.instant-skeleton-wide{grid-column:1/-1;height:74px;border-radius:18px}
+.instant-skeleton-card{height:94px;border-radius:18px}
+.instant-skeleton-line{grid-column:1/-1;height:52px;border-radius:16px}
+.instant-entry-error{margin-top:16px;padding:14px;border:1px solid rgba(185,87,77,.18);border-radius:16px;background:rgba(185,87,77,.06)}
+.instant-entry-error strong,.instant-entry-error p{display:block;margin:0}.instant-entry-error p{margin:4px 0 11px;color:var(--muted)}
+@keyframes vfInstantShimmer{to{background-position:-220% 0}}
+body.dark-mode .instant-entry-shell{background:linear-gradient(180deg,#151d26,#101720)!important;border-color:rgba(216,184,117,.17)!important}
+body.dark-mode .instant-entry-grid .skeleton-block{background:linear-gradient(100deg,#18222c 20%,#263442 42%,#18222c 64%);background-size:220% 100%;border-color:rgba(216,184,117,.10)}
+@media(max-width:520px){.instant-entry-shell{padding:15px!important}.instant-entry-head{grid-template-columns:50px minmax(0,1fr)}.instant-entry-logo{width:48px!important;height:48px!important}.instant-entry-grid{gap:8px;margin-top:14px}.instant-skeleton-card{height:82px}}

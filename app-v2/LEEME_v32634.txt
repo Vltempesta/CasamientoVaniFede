@@ -1,0 +1,11 @@
+v32634 — PERFORMANCE PERCIBIDA
+
+Base: v32633. No requiere cambios en Apps Script.
+
+Cambios:
+- La sincronización remota empieza al comienzo del boot, antes de recursos secundarios.
+- Ingreso inmediato: nunca espera Google Sheets ni la precarga de logos.
+- En un dispositivo sin snapshot, muestra placeholders personalizados en vez de ceros falsos.
+- En dispositivos conocidos usa el último snapshot real y actualiza silenciosamente.
+- Los seis logos de equipo dejan de competir por ancho de banda al cargar la portada.
+- Mantiene las fechas extendidas de Guerra de Equipos de v32632/v32633.

@@ -1,0 +1,26 @@
+VANI & FEDE · v32637 · PERFORMANCE
+
+Base: v32636 (incluye privacidad de Guerra y modo oscuro eliminado).
+
+Cambios de rendimiento:
+1. Service Worker cache-first para archivos versionados. Usuarios recurrentes cargan el shell desde cache de inmediato.
+2. Navegación stale-while-revalidate: index.html aparece desde cache y se refresca en segundo plano.
+3. Sesión recurrente: si hay snapshot local válido, NO ejecuta getData grande al arrancar.
+4. Heartbeat liviano: getUnlockState compara serverRevision. Solo ejecuta getData si realmente hubo cambios.
+5. Al volver a la app/foco ya no hace full-sync por antigüedad si la revisión del servidor no cambió.
+6. Eliminada la escritura remota de telemetría de login, que antes incrementaba serverRevision y podía generar refrescos innecesarios en todos los celulares.
+7. Escrituras optimistas mantienen respuesta inmediata; el refresh silencioso se agrupa y difiere 6,5 s.
+8. El estado serverRevision se guarda dentro del snapshot local para que las siguientes aperturas sean livianas.
+9. Un fallo de heartbeat no dispara un getData pesado si el celular ya tiene un snapshot válido.
+
+No requiere cambios nuevos en Apps Script. Usa getUnlockState/serverRevision que ya existen en el backend actual.
+No reemplazar config.js.
+
+Archivos recomendados para GitHub:
+- index.html
+- app.js
+- sw.js
+- version.json
+
+IMPORTANTE:
+La primera apertura después de pasar de v32636 a v32637 puede hacer un getData completo una vez para guardar serverRevision. A partir de ahí, las aperturas recurrentes usan snapshot + revisión liviana.

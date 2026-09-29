@@ -1,0 +1,8 @@
+v32635 — Modo oscuro eliminado
+
+Base: v32634.
+Cambios:
+- Se elimina el botón de modo noche de la barra superior.
+- La app fuerza siempre el diseño claro aprobado.
+- Se limpian preferencias viejas de tema oscuro guardadas en el navegador.
+- No se modifica Apps Script, puntos, juegos, horarios ni datos.

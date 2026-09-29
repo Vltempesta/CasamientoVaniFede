@@ -1,0 +1,29 @@
+VANI & FEDE · v32636 · PRIVACIDAD GUERRA
+
+BASE: v32635.
+
+QUÉ CAMBIA
+- Mientras R1/R2 están activas, getData no entrega al navegador votos ni desempates de equipos rivales.
+- El equipo propio sigue recibiendo sus votos para conservar participación, panel de capitán y desempates.
+- Al vencer la ronda, se liberan los votos al cliente para que la resolución automática existente siga funcionando sin cambiar reglas.
+- La caché local se sanea: elimina votos activos rivales que hayan quedado guardados por versiones anteriores.
+
+BACKEND (OBLIGATORIO)
+1. Crear un archivo Apps Script llamado WarPrivacy_v32636.gs y pegar el contenido incluido.
+2. En doGet, dentro de action === 'getData', cambiar SOLO:
+
+   data: vfApplyGameSheetOverrides_(buildData_()),
+
+   por:
+
+   data: vfProtectWarVotes_(vfApplyGameSheetOverrides_(buildData_()), params),
+
+3. Guardar y desplegar una nueva versión del Web App.
+
+FRONTEND
+Subir index.html, app.js, sw.js y version.json de esta versión.
+No reemplazar config.js.
+
+NOTA DE SEGURIDAD
+Esto evita que un invitado vea votos rivales inspeccionando Network/Local Storage en su sesión normal.
+El acceso general de invitados sigue siendo por nombre, por lo que no equivale a autenticación individual fuerte.
