@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32643";
+  const CURRENT_APP_VERSION = "32644";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
@@ -12,7 +12,7 @@
   const TRANSPORT_CHECKIN_GAME_ID = "event-transport-checkin-v1";
   const ADMIN_OPERATOR_STORAGE_KEY = "vf_admin_points_operator_v1";
 
-  // v32643 · Privacidad Guerra: mientras una ronda está activa, el navegador
+  // v32644 · Privacidad Guerra: mientras una ronda está activa, el navegador
   // conserva únicamente registros sensibles de su propio equipo. Los demás
   // equipos nunca quedan persistidos localmente aunque provengan de una caché vieja.
   const WAR_PRIVATE_ACTIVE_GAME_ROUND = Object.freeze({
@@ -1263,7 +1263,7 @@
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32643",
+      appVersion: "32644",
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -1368,7 +1368,7 @@
     return true;
   }
 
-  // v32643 · Las escrituras ya se reflejan de forma optimista en pantalla.
+  // v32644 · Las escrituras ya se reflejan de forma optimista en pantalla.
   // El refresco completo se difiere y agrupa para no castigar a Apps Script
   // después de cada toque. Varias acciones cercanas generan un solo refresh.
   function scheduleSilentSync(delay = 6500) {
@@ -2445,7 +2445,7 @@
         : "idle"
     );
 
-    // v32643: solo usamos el arranque ultrarrápido cuando el snapshot contiene
+    // v32644: solo usamos el arranque ultrarrápido cuando el snapshot contiene
     // también Social/notificaciones/configuración. Los snapshots antiguos se
     // reparan con un único getData completo y desde ahí vuelven a ser instantáneos.
     const initialSyncPromise = fastRestore
@@ -2880,13 +2880,13 @@
       // la base remota, renderizamos placeholders reales (nunca ceros falsos)
       // y la sincronización en curso completa la pantalla en segundo plano.
       enterApp(guest, true);
-      // v32643: un ingreso manual puede corresponder a otra identidad.
+      // v32644: un ingreso manual puede corresponder a otra identidad.
       // Aunque exista un snapshot válido, ese snapshot fue servido para el
       // viewer anterior (y Guerra además está filtrada por equipo). Forzamos
       // un getData completo para la identidad recién elegida. Las sesiones
       // restauradas automáticamente siguen usando el arranque instantáneo.
       void syncFromSheets(false);
-      // v32643: no enviamos telemetría de login. Era una escritura remota que
+      // v32644: no enviamos telemetría de login. Era una escritura remota que
       // incrementaba serverRevision y provocaba refrescos completos en todos
       // los celulares sin aportar nada al funcionamiento del casamiento.
       window.setTimeout(() => {
@@ -2967,7 +2967,7 @@
     if (route === "torneo") route = "puntos";
     if (route === "cronograma") route = "inicio";
 
-    // v32643: Equipo/Perfiles, Social y Ranking muestran el caché al instante,
+    // v32644: Equipo/Perfiles, Social y Ranking muestran el caché al instante,
     // pero disparan un getData completo silencioso. Así la actividad de terceros
     // no depende únicamente del heartbeat de serverRevision.
     if (currentGuest && ["equipo", "invitados", "social", "ranking"].includes(route) && navigator.onLine !== false) {
@@ -4010,8 +4010,8 @@
       const locationMainText = usesMicro
         ? "Elegiste Micro / Combi. No necesitás conocer la dirección: nosotros coordinamos el recorrido hasta la estancia."
         : usesParticular
-          ? "Elegiste viajar de forma particular. La estancia está en zona Pilar: consultá a los novios para recibir la dirección exacta."
-          : "La estancia está en zona Pilar. Si viajás en Micro / Combi no necesitás la dirección; si vas particular, consultá a los novios.";
+          ? "Elegiste viajar de forma particular. La estancia está en Solís, a aproximadamente 1 hora de Capital: consultá a los novios para recibir la dirección exacta."
+          : "La estancia está en Solís, a aproximadamente 1 hora de Capital. Si viajás en Micro / Combi no necesitás la dirección; si vas particular, consultá a los novios.";
 
       const locationStatus = usesMicro
         ? "Tu traslado está resuelto"
@@ -4313,7 +4313,7 @@
                 ${uiIcon("pin")}
               </span>
               <div>
-                <strong>Zona Pilar</strong>
+                <strong>Solís</strong>
                 <small>${escapeHTML(locationStatus)}</small>
               </div>
             </section>
@@ -5797,9 +5797,9 @@
     const mainText = usesMicro
       ? `Tu salida: <strong>${escapeHTML(selectedZoneLabel)}</strong>.`
       : usesParticular
-        ? "La estancia está en <strong>zona Pilar y queda lejos</strong>. Podés sumarte a un micro con lugar."
+        ? "La estancia está en <strong>Solís, a aproximadamente 1 hora de Capital</strong>. Podés sumarte a un micro con lugar."
         : transportUndecided
-          ? "La estancia está en <strong>zona Pilar y queda lejos</strong>. Elegí abajo una salida con lugar."
+          ? "La estancia está en <strong>Solís, a aproximadamente 1 hora de Capital</strong>. Elegí abajo una salida con lugar."
           : pendingRsvp
             ? "Revisá horarios y lugares antes de confirmar. Plazo final: <strong>24/09</strong>."
             : declined
@@ -6282,7 +6282,7 @@
                 <em>
                   ${
                     usesParticular
-                      ? "Zona Pilar · podés revisar micros con lugar."
+                      ? "Solís · podés revisar micros con lugar."
                       : usesUndecided
                         ? "Revisá micros y lugares disponibles."
                         : "Punto y horario confirmados · ver Traslados."
@@ -6487,7 +6487,7 @@
                 "transportCar",
                 savedTransport,
                 true,
-                "Zona Pilar · viaje largo."
+                "Solís · aprox. 1 hora desde Capital."
               )}
               ${choicePillIcon(
                 "transport",
@@ -9801,7 +9801,7 @@
       ${locationStyles()}
       ${sectionHeader(
         "UBICACIÓN",
-        usesMicro ? "Tu traslado está resuelto" : "Zona Pilar",
+        usesMicro ? "Tu traslado está resuelto" : "Solís",
         ""
       )}
 
@@ -9811,7 +9811,7 @@
           <strong>${
             usesMicro
               ? "No necesitás conocer la dirección"
-              : "La estancia queda en zona Pilar"
+              : "La estancia queda en Solís, a aproximadamente 1 hora de Capital"
           }</strong>
           <p>${
             usesMicro
