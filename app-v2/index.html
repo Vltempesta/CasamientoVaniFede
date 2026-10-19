@@ -17,15 +17,15 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Vani & Fede" />
-  <link rel="manifest" href="manifest.webmanifest?v=32644" />
-  <link rel="icon" href="icons/favicon.ico?v=32644" sizes="any" />
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=32644" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=32644" />
+  <link rel="manifest" href="manifest.webmanifest?v=32646" />
+  <link rel="icon" href="icons/favicon.ico?v=32646" sizes="any" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=32646" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=32646" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=32644" />
-  <link rel="stylesheet" href="ui-v2.css?v=32644" />
+  <link rel="stylesheet" href="styles.css?v=32646" />
+  <link rel="stylesheet" href="ui-v2.css?v=32646" />
 </head>
 <body>
   <div class="scene" aria-hidden="true">
@@ -41,7 +41,7 @@
     <section id="loginScreen" class="login-screen">
       <div class="login-frame">
         <header class="login-brand">
-          <img class="seal-image" src="assets/branding/vyf-seal.png?v=32644" alt="Sello de Vani y Fede" width="105" height="113" />
+          <img class="seal-image" src="assets/branding/vyf-seal.png?v=32646" alt="Sello de Vani y Fede" width="105" height="113" />
 
           <h1 class="couple-wordmark couple-wordmark--elegant" aria-label="Vani y Fede">
             <span>VANI</span>
@@ -87,7 +87,7 @@
           </div>
           <div id="staffLoginRow" class="admin-test-login-row staff-login-row hidden">
             <label id="staffLoginLabel" for="staffPassword">Acceso organización</label>
-            <input id="staffPassword" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Contraseña" maxlength="12" />
+            <input id="staffPassword" type="password" inputmode="text" autocomplete="current-password" placeholder="Contraseña" maxlength="12" />
             <small id="staffLoginHint">Acceso seguro para operación del evento.</small>
           </div>
           <div id="loginMessage" class="form-message" role="status" aria-live="polite"></div>
@@ -178,6 +178,7 @@
             <button data-route="puntos"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 14.6 8.3 20.5 9.2 16.2 13.3 17.2 19.2 12 16.4 6.8 19.2 7.8 13.3 3.5 9.2 9.4 8.3 12 3Z"/></svg></span><span>Juegos y puntos</span></button>
             <button data-route="ranking"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10h4v10"/><path d="M10 20V4h4v16"/><path d="M15 20v-7h4v7"/></svg></span><span>Ranking</span></button>
             <button data-route="equipo"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 6v6c0 4.7-3.1 7.5-8 9-4.9-1.5-8-4.3-8-9V6l8-3Z"/><circle cx="12" cy="9" r="2.2"/><path d="M8.5 15.5c.6-2.2 1.7-3.3 3.5-3.3s2.9 1.1 3.5 3.3"/></svg></span><span>Mi equipo</span></button>
+            <button id="codesMenuButton" data-route="codigos" class="hidden" aria-hidden="true" tabindex="-1"><span class="menu-item-icon"><svg class="menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8 13.7 8l5.3-1.2-3.6 4.1 3.6 4.1-5.3-1.2L12 19l-1.7-5.2L5 15l3.6-4.1L5 6.8 10.3 8 12 2.8Z"/><circle cx="12" cy="10.9" r="1.7"/></svg></span><span>CÓDIGOS</span></button>
           </div>
 
           <div class="menu-group" aria-label="Comunidad">
@@ -256,9 +257,9 @@
 
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
 
-  <script src="config.js?v=32644"></script>
-  <script src="data.js?v=32644"></script>
-  <script src="photos.js?v=32644"></script>
-  <script src="app.js?v=32644"></script>
+  <script src="config.js?v=32646"></script>
+  <script src="data.js?v=32646"></script>
+  <script src="photos.js?v=32646"></script>
+  <script src="app.js?v=32646"></script>
 </body>
 </html>

@@ -1,0 +1,50 @@
+VANI & FEDE · APP v32646 · CÓDIGOS
+
+BASE
+- Construida sobre v32644.
+- Conserva Solís, micros, Guerra inmutable, privacidad, cache/performance y todas las funciones existentes.
+
+CÓDIGOS
+- Solo aparece en menú hamburguesa.
+- Apertura servidor: 24/10/2026 19:00 Argentina.
+- Cierre inicial: 25/10/2026 02:00 Argentina, configurable desde Admin.
+- Antes de abrir no aparece ni permite acceso directo.
+- QR: si el invitado no está identificado, el código queda guardado durante el login y luego abre CÓDIGOS precompletado.
+- El invitado siempre debe tocar DESCUBRIR.
+
+PREMIOS DEFINITIVOS
+- P01-P12: 12 QR debajo de platos, 200 pts cada uno = 2.400.
+  Distribución: uno por mesa y P12 como segundo QR en la mesa Noche.
+- B01-B02: dos QR de baños, 200 pts cada uno = 400.
+- E01 Sobre misterioso: LAPIZ = 300.
+- E02 Fotografía imposible: 1265 = 300.
+- E03 Carta destruida: frase completa = 300.
+- E04 Mensaje en espejo: LOS CANDILES GUARDAN SECRETOS = 300.
+- E05 Invitación del pasado: SIMBA = 300.
+TOTAL MÁXIMO = 4.300 pts.
+
+SEGURIDAD / CONSISTENCIA
+- Catálogo y respuestas SOLO en Apps Script.
+- LockService para evitar dos ganadores simultáneos.
+- Un scoreRequestId fijo por secreto impide doble impacto en ranking incluso ante reintentos.
+- Equipo resuelto nuevamente por backend desde el guestId conocido.
+- Rate limit de intentos incorrectos.
+- Auditoría en SECRETOS_AUDIT.
+- Admin puede habilitar/deshabilitar, probar sin puntuar, cambiar horarios y anular canjes con reversa de puntos.
+
+FRONTEND GITHUB
+Reemplazar cuando se apruebe/despliegue:
+- index.html
+- app.js
+- styles.css
+- sw.js
+- version.json
+
+BACKEND
+Ver PATCH_Code_v32646.txt y SecretCodes_v32646.gs.
+NO subir SecretCodes_v32646.gs ni CODIGOS_v32646_MAPA_PRIVADO.txt a GitHub.
+
+NOTA DE SEGURIDAD ADICIONAL
+- El viejo password local del usuario de prueba Admin contenía la secuencia 1265.
+- En v32646 se cambió únicamente ese password de prueba local a: vf-demo-2026
+- Esto no modifica la contraseña real de Administración ni Staff; evita dejar la respuesta de Fotografía imposible escrita literalmente en app.js.

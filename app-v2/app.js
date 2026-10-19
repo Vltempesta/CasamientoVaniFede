@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32644";
+  const CURRENT_APP_VERSION = "32646";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
@@ -12,7 +12,7 @@
   const TRANSPORT_CHECKIN_GAME_ID = "event-transport-checkin-v1";
   const ADMIN_OPERATOR_STORAGE_KEY = "vf_admin_points_operator_v1";
 
-  // v32644 · Privacidad Guerra: mientras una ronda está activa, el navegador
+  // v32645 · Privacidad Guerra: mientras una ronda está activa, el navegador
   // conserva únicamente registros sensibles de su propio equipo. Los demás
   // equipos nunca quedan persistidos localmente aunque provengan de una caché vieja.
   const WAR_PRIVATE_ACTIVE_GAME_ROUND = Object.freeze({
@@ -112,7 +112,7 @@
     role: "admin-test",
     alias: "Admin"
   };
-  const ADMIN_TEST_PASSWORD = "simba1265";
+  const ADMIN_TEST_PASSWORD = "vf-demo-2026";
   const adminTestSession = {
     rouletteResult: null,
     warVotes: { 1: null, 2: null }
@@ -122,9 +122,23 @@
     eugenia: { id:"staff-eugenia", firstName:"Eugenia", lastName:"", team:"bosque", role:"staff-eugenia", alias:"Eugenia" },
     daniela: { id:"staff-daniela", firstName:"Daniela", lastName:"", team:"fuego", role:"staff-daniela", alias:"Daniela" }
   };
-  const STAFF_SESSION_KEY = "vf_staff_session_v32628";
+  const STAFF_SESSION_KEY = "vf_staff_session_v32646";
   let staffSession = null;
-  let staffSelectedActivity = "juego-mesa-1";
+  let staffSelectedSection = "resumen";
+  let staffSelectedEnvelope = 1;
+  let staffRemoteState = null;
+  let staffRemoteLoading = false;
+
+  // v32645 · CÓDIGOS SECRETOS. El catálogo y las respuestas viven solo en Apps Script.
+  const SECRET_PENDING_STORAGE_KEY = "vf_pending_secret_v32645";
+  const SECRET_STATUS_MIN_GAP_MS = 7000;
+  let secretAccess = { known:false, open:false, state:"unknown", testMode:false, openAt:"", closeAt:"", serverNow:"" };
+  let secretStatusInFlight = null;
+  let lastSecretStatusAt = 0;
+  let pendingSecretToken = "";
+  let secretClaimInFlight = false;
+  let secretAdminSnapshot = null;
+  let secretAdminLoading = false;
 
 
   let currentGuest = null;
@@ -1023,6 +1037,46 @@
 
   function restoreStaffSession() {
     try { staffSession = JSON.parse(sessionStorage.getItem(STAFF_SESSION_KEY) || "null"); } catch (_) { staffSession = null; }
+    if (staffSession?.expiresAt && new Date(staffSession.expiresAt).getTime() <= Date.now()) {
+      staffSession = null;
+      sessionStorage.removeItem(STAFF_SESSION_KEY);
+    }
+  }
+
+  function requestedStaffRole() {
+    try {
+      const role = normalize(new URL(window.location.href).searchParams.get("staff") || "");
+      return role === "daniela" || role === "eugenia" ? role : "";
+    } catch (_) { return ""; }
+  }
+
+  function staffDirectUrl(role) {
+    const url = new URL(basePageUrl(), window.location.href);
+    url.searchParams.set("staff", role);
+    return url.toString();
+  }
+
+  function configureDirectStaffLogin(role) {
+    if (!role) return;
+    const guest = STAFF_USERS[role];
+    const form = $("#loginForm");
+    const row = $("#staffLoginRow");
+    const inputRow = $("#loginForm .input-row");
+    const guestSearch = $("#loginForm .guest-search");
+    const input = $("#guestName");
+    const buttonLabel = $("#loginButton span");
+    const subtitle = $("#loginScreen .subtitle");
+    document.body.classList.add("staff-direct-entry");
+    if (input) { input.value = guest.firstName; input.readOnly = true; }
+    if (guestSearch) guestSearch.classList.add("hidden");
+    updateStaffLoginUi();
+    if (form && row && inputRow && row.nextElementSibling !== inputRow) form.insertBefore(row, inputRow);
+    row?.classList.remove("hidden");
+    if (buttonLabel) buttonLabel.textContent = "Ingresar";
+    if (subtitle) subtitle.textContent = role === "daniela"
+      ? "Centro de control de juegos y puntajes · acceso exclusivo para Daniela."
+      : "Centro de canje de kermesse · acceso exclusivo para Eugenia.";
+    $("#staffPassword")?.focus();
   }
 
   function updateAdminTestLoginUi() {
@@ -1259,11 +1313,305 @@
     });
   }
 
+  function capturePendingSecretToken() {
+    try {
+      const url = new URL(location.href);
+      const fromUrl = String(url.searchParams.get("secret") || "").trim();
+      if (fromUrl) {
+        pendingSecretToken = fromUrl.slice(0, 160);
+        sessionStorage.setItem(SECRET_PENDING_STORAGE_KEY, pendingSecretToken);
+        url.searchParams.delete("secret");
+        url.searchParams.delete("seccion");
+        history.replaceState(history.state || { screen:"login" }, "", `${url.pathname}${url.search}${url.hash || ""}`);
+      } else {
+        pendingSecretToken = String(sessionStorage.getItem(SECRET_PENDING_STORAGE_KEY) || "").trim().slice(0,160);
+      }
+    } catch (_) {}
+    return pendingSecretToken;
+  }
+
+  function clearPendingSecretToken() {
+    pendingSecretToken = "";
+    try { sessionStorage.removeItem(SECRET_PENDING_STORAGE_KEY); } catch (_) {}
+  }
+
+  function secretModuleOpen() {
+    return Boolean(secretAccess.known && secretAccess.open);
+  }
+
+  function updateCodesMenuVisibility() {
+    const button = $("#codesMenuButton");
+    if (!button) return;
+    const visible = secretModuleOpen() && Boolean(currentGuest) && !isStaffMode();
+    button.classList.toggle("hidden", !visible);
+    button.hidden = !visible;
+    button.setAttribute("aria-hidden", String(!visible));
+    button.tabIndex = visible ? 0 : -1;
+  }
+
+  async function refreshSecretStatus(options = {}) {
+    if (!isConfigured()) return false;
+    const force = Boolean(options.force);
+    const now = Date.now();
+    if (!force && now - lastSecretStatusAt < SECRET_STATUS_MIN_GAP_MS) return secretAccess.open;
+    if (secretStatusInFlight) return secretStatusInFlight;
+    lastSecretStatusAt = now;
+    secretStatusInFlight = (async () => {
+      try {
+        const response = await jsonp("secretStatus", {}, { timeoutMs:8000 });
+        const data = response?.data || {};
+        const wasOpen = Boolean(secretAccess.open);
+        secretAccess = {
+          known:true,
+          open:Boolean(data.open),
+          state:String(data.state || (data.open ? "open" : "closed")),
+          testMode:Boolean(data.testMode),
+          openAt:String(data.openAt || ""),
+          closeAt:String(data.closeAt || ""),
+          serverNow:String(data.serverNow || "")
+        };
+        updateCodesMenuVisibility();
+        if (!secretAccess.open && currentRoute === "codigos") {
+          currentRoute = "inicio";
+          renderCurrentRoute();
+        }
+        if (currentGuest && pendingSecretToken && secretAccess.open && currentRoute !== "codigos") {
+          navigate("codigos", { historyMode:"replace" });
+        } else if (currentGuest && wasOpen !== secretAccess.open && options.render !== false) {
+          updateSectionNavigationState();
+        }
+        return secretAccess.open;
+      } catch (error) {
+        console.warn("No se pudo consultar CÓDIGOS", error);
+        secretAccess.known = false;
+        updateCodesMenuVisibility();
+        return false;
+      } finally {
+        secretStatusInFlight = null;
+      }
+    })();
+    return secretStatusInFlight;
+  }
+
+  function secretStatusLabel() {
+    if (secretAccess.testMode) return "MODO PRUEBA";
+    if (secretAccess.state === "closed") return "FINALIZADO";
+    return secretAccess.open ? "ACTIVO" : "BLOQUEADO";
+  }
+
+  function renderSecretCodes() {
+    if (!secretModuleOpen()) return renderHomeSafe_();
+    const prefill = pendingSecretToken ? escapeHTML(pendingSecretToken) : "";
+    return `
+      <section class="codes-v32645">
+        <header class="section-head codes-section-head">
+          <p class="eyebrow">SECRETOS DE LA NOCHE</p>
+          <h2>CÓDIGOS</h2>
+          <p>Hay secretos que solo algunos descubren.</p>
+        </header>
+        <section class="section-card codes-secret-card">
+          <div class="codes-ornament" aria-hidden="true">✦</div>
+          <div class="codes-secret-inner">
+            <h3>CÓDIGOS</h3>
+            <p class="codes-secret-phrase">“Hay secretos que solo algunos descubren.”</p>
+            ${secretAccess.testMode ? `<div class="codes-test-banner">MODO PRUEBA · ningún canje modifica el ranking</div>` : ""}
+            <form id="secretClaimForm" class="codes-form" autocomplete="off">
+              <label class="sr-only" for="secretClaimInput">Ingresá tu código</label>
+              <input id="secretClaimInput" type="text" maxlength="180" placeholder="Ingresá tu código..." value="${prefill}" autocapitalize="characters" spellcheck="false" required>
+              <button id="secretClaimButton" type="submit">DESCUBRIR</button>
+            </form>
+            <div id="secretClaimFeedback" class="codes-feedback hidden" role="status" aria-live="polite"></div>
+          </div>
+        </section>
+      </section>`;
+  }
+
+  function secretFeedback(type, title, text, points = 0) {
+    const host = $("#secretClaimFeedback");
+    if (!host) return;
+    host.className = `codes-feedback ${type}`;
+    host.innerHTML = `<strong>${escapeHTML(title)}</strong>${points ? `<b>+${Number(points).toLocaleString("es-AR")} PUNTOS PARA TU EQUIPO</b>` : ""}<p>${escapeHTML(text)}</p>`;
+    host.classList.remove("hidden");
+  }
+
+  async function claimSecretCode(rawValue) {
+    if (secretClaimInFlight || !currentGuest) return;
+    const value = String(rawValue || "").trim();
+    if (!value) return;
+    secretClaimInFlight = true;
+    const button = $("#secretClaimButton");
+    if (button) { button.disabled = true; button.textContent = "COMPROBANDO…"; }
+    try {
+      const payload = {
+        guestId: currentGuest.id,
+        teamId: currentGuest.team,
+        code: value,
+        requestId: newRequestId("secretClaim"),
+        appVersion: CURRENT_APP_VERSION,
+        pageUrl: location.href,
+        userAgent: navigator.userAgent,
+        submittedAt: new Date().toISOString()
+      };
+      const response = await jsonp("claimSecret", { payload:JSON.stringify(payload) }, { timeoutMs:12000 });
+      const data = response?.data || {};
+      if (data.result === "won") {
+        const pts = Number(data.points || 0);
+        secretFeedback("good", "¡DESCUBRISTE UN SECRETO!", "Tu curiosidad acaba de cambiar el destino de tu equipo.", pts);
+        clearPendingSecretToken();
+        if (!data.testOnly && pts) {
+          const scoreRecord = data.scoreRecord || {
+            timestamp: data.claimedAt || new Date().toISOString(),
+            gameId: `secret-${data.secretId || "premio"}`,
+            teamId: currentGuest.team,
+            points: pts,
+            comment: "CÓDIGOS · secreto descubierto",
+            adminName: "CODIGOS",
+            requestId: data.scoreRequestId || `secret-score-${data.secretId || "premio"}`
+          };
+          state.scoreEntries.push(scoreRecord);
+          state.scoreEntries = dedupeScores(state.scoreEntries);
+          const serverRows = Array.isArray(state.serverRanking) ? state.serverRanking : [];
+          const row = serverRows.find(item => item.id === currentGuest.team);
+          if (row) row.total = Number(row.total || 0) + pts;
+          else serverRows.push({ id:currentGuest.team, total:pts });
+          state.serverRanking = serverRows;
+          saveState();
+          window.setTimeout(() => void syncFromSheets(false), 200);
+        }
+      } else if (data.result === "claimed") {
+        secretFeedback("late", "¡LLEGASTE DEMASIADO TARDE!", "Este secreto ya fue descubierto por alguien más.");
+      } else if (data.result === "rate_limited") {
+        secretFeedback("bad", "¡NO ES POR AHÍ!", "Fijate bien, estate atento a todos los detalles.");
+      } else if (data.result === "closed") {
+        secretFeedback("late", "CÓDIGOS NO ESTÁ DISPONIBLE", "Este acceso ya no está habilitado.");
+        void refreshSecretStatus({ force:true, render:true });
+      } else {
+        secretFeedback("bad", "¡NO ES POR AHÍ!", "Fijate bien, estate atento a todos los detalles.");
+      }
+    } catch (error) {
+      console.warn("claimSecret", error);
+      toast("No pudimos comprobar el código. Probá nuevamente.");
+    } finally {
+      secretClaimInFlight = false;
+      if (button?.isConnected) { button.disabled = false; button.textContent = "DESCUBRIR"; }
+    }
+  }
+
+  function bindSecretCodeEvents() {
+    $("#secretClaimForm")?.addEventListener("submit", event => {
+      event.preventDefault();
+      void claimSecretCode($("#secretClaimInput")?.value || "");
+    });
+    if (pendingSecretToken) {
+      window.setTimeout(() => $("#secretClaimButton")?.focus(), 60);
+    }
+  }
+
+  async function loadSecretAdminSnapshot(force = false) {
+    if (!state.adminUnlocked || !state.adminPassword || !isConfigured()) return null;
+    if (secretAdminLoading && !force) return secretAdminSnapshot;
+    secretAdminLoading = true;
+    try {
+      const response = await jsonp("secretAdminGet", { adminPassword:state.adminPassword }, { timeoutMs:10000 });
+      secretAdminSnapshot = response?.data || null;
+      if (currentRoute === "admin" && adminSubsection === "codes") renderCurrentRoute();
+      return secretAdminSnapshot;
+    } catch (error) {
+      console.warn("secretAdminGet", error);
+      toast(error?.message || "No se pudo cargar CÓDIGOS.");
+      return null;
+    } finally { secretAdminLoading = false; }
+  }
+
+  function renderAdminCodes() {
+    const snap = secretAdminSnapshot;
+    if (!snap) {
+      return `${renderAdminSubsectionHeader({icon:"star",eyebrow:"Administración",title:"CÓDIGOS",text:"Canjes secretos, estado de premios y pruebas sin afectar el ranking."})}<section class="section-card"><p>Cargando estado del módulo…</p><button type="button" class="ghost-button" data-secret-admin-refresh>Actualizar</button></section>`;
+    }
+    const items = Array.isArray(snap.items) ? snap.items : [];
+    return `
+      ${renderAdminSubsectionHeader({icon:"star",eyebrow:"Administración",title:"CÓDIGOS",text:"Canjes secretos, estado de premios y pruebas sin afectar el ranking."})}
+      <section class="section-card admin-secret-summary">
+        <div><small>ESTADO</small><strong>${escapeHTML(String(snap.testMode ? "PRUEBA" : snap.state || "-" ).toUpperCase())}</strong></div>
+        <div><small>DESCUBIERTOS</small><strong>${Number(snap.claimedCount||0)}/${Number(snap.totalCount||0)}</strong></div>
+        <div><small>PUNTOS ENTREGADOS</small><strong>${Number(snap.pointsAwarded||0).toLocaleString("es-AR")}</strong></div>
+      </section>
+      <section class="section-card admin-secret-config">
+        <p class="eyebrow">VENTANA DEL MÓDULO</p>
+        <label>Apertura <input id="secretAdminOpenAt" type="datetime-local" value="${escapeHTML(String(snap.openAtLocalInput||""))}"></label>
+        <label>Cierre <input id="secretAdminCloseAt" type="datetime-local" value="${escapeHTML(String(snap.closeAtLocalInput||""))}"></label>
+        <div class="admin-secret-actions">
+          <button type="button" data-secret-save-config>Guardar horarios</button>
+          <button type="button" class="${snap.testMode?"is-danger":""}" data-secret-test-mode="${snap.testMode?"false":"true"}">${snap.testMode?"Desactivar modo prueba":"Activar modo prueba"}</button>
+          <button type="button" class="ghost-button" data-secret-admin-refresh>Actualizar</button>
+        </div>
+      </section>
+      <section class="section-card admin-secret-test">
+        <p class="eyebrow">PRUEBA SEGURA</p><h4>Verificar un código o respuesta</h4>
+        <p>No reclama el premio ni modifica el ranking.</p>
+        <form id="secretAdminTestForm"><input name="code" placeholder="Código o respuesta" required><button type="submit">PROBAR</button></form>
+        <div id="secretAdminTestResult" class="form-message"></div>
+      </section>
+      <section class="section-card admin-secret-list-card">
+        <p class="eyebrow">PREMIOS</p>
+        <div class="admin-secret-list">${items.map(item=>`
+          <article class="admin-secret-row">
+            <div><strong>${escapeHTML(item.label||item.id)}</strong><small>${escapeHTML(item.printId||item.id)} · ${Number(item.points||0)} pts · ${escapeHTML(item.category||"")}</small>${item.winnerGuestId?`<em>${escapeHTML(item.winnerGuestName||item.winnerGuestId)} · ${escapeHTML(item.winnerTeamName||item.winnerTeamId||"")} · ${escapeHTML(item.claimedAtLabel||"")}</em>`:""}</div>
+            <span class="admin-secret-state ${item.status === "claimed" ? "is-claimed" : item.enabled ? "is-ready" : "is-off"}">${item.status === "claimed" ? "RECLAMADO" : item.enabled ? "DISPONIBLE" : "DESHABILITADO"}</span>
+            <div class="admin-secret-row-actions">
+              ${item.status !== "claimed" ? `<button type="button" data-secret-toggle="${escapeHTML(item.id)}" data-secret-enable="${item.enabled?"false":"true"}">${item.enabled?"Deshabilitar":"Habilitar"}</button>` : `<button type="button" class="is-danger" data-secret-reset="${escapeHTML(item.id)}">Anular canje</button>`}
+            </div>
+          </article>`).join("")}</div>
+      </section>`;
+  }
+
+  async function secretAdminAction(action, params = {}) {
+    try {
+      const response = await jsonp(action, { adminPassword:state.adminPassword, ...params }, { timeoutMs:12000 });
+      secretAdminSnapshot = response?.data?.snapshot || response?.data || secretAdminSnapshot;
+      return response?.data || null;
+    } catch (error) {
+      toast(error?.message || "No se pudo actualizar CÓDIGOS.");
+      return null;
+    }
+  }
+
+  function bindAdminSecretEvents() {
+    if (adminSubsection !== "codes" || !state.adminUnlocked) return;
+    if (!secretAdminSnapshot && !secretAdminLoading) void loadSecretAdminSnapshot();
+    $$('[data-secret-admin-refresh]').forEach(button=>button.addEventListener('click', async()=>{ button.disabled=true; await loadSecretAdminSnapshot(true); }));
+    $('[data-secret-save-config]')?.addEventListener('click', async()=>{
+      const openAt = $('#secretAdminOpenAt')?.value || '';
+      const closeAt = $('#secretAdminCloseAt')?.value || '';
+      const result = await secretAdminAction('secretAdminSetConfig',{ openAt, closeAt });
+      if(result){ toast('Horarios de CÓDIGOS actualizados.'); await loadSecretAdminSnapshot(true); }
+    });
+    $('[data-secret-test-mode]')?.addEventListener('click', async event=>{
+      const enabled = event.currentTarget.dataset.secretTestMode === 'true';
+      const result = await secretAdminAction('secretAdminSetTestMode',{ enabled:String(enabled) });
+      if(result){ toast(enabled?'Modo prueba activado.':'Modo prueba desactivado.'); await loadSecretAdminSnapshot(true); void refreshSecretStatus({force:true}); }
+    });
+    $$('[data-secret-toggle]').forEach(button=>button.addEventListener('click', async()=>{
+      const result = await secretAdminAction('secretAdminToggle',{ secretId:button.dataset.secretToggle, enabled:button.dataset.secretEnable });
+      if(result) await loadSecretAdminSnapshot(true);
+    }));
+    $$('[data-secret-reset]').forEach(button=>button.addEventListener('click', async()=>{
+      if(!window.confirm('¿Anular este canje? Se descontarán los puntos otorgados y el secreto volverá a estar disponible.')) return;
+      const result = await secretAdminAction('secretAdminReset',{ secretId:button.dataset.secretReset });
+      if(result){ toast('Canje anulado con auditoría.'); await loadSecretAdminSnapshot(true); void syncFromSheets(false); }
+    }));
+    $('#secretAdminTestForm')?.addEventListener('submit', async event=>{
+      event.preventDefault(); const code=String(new FormData(event.currentTarget).get('code')||'');
+      const result=await secretAdminAction('secretAdminTest',{ code });
+      const host=$('#secretAdminTestResult'); if(host&&result) host.textContent=result.valid ? `Válido · ${result.label} · ${result.points} pts · ${result.status}` : 'No coincide con ningún secreto habilitado.';
+    });
+  }
+
   function buildRemoteEnvelope(action, payload) {
     return {
       action,
       token: CONFIG.PUBLIC_WRITE_TOKEN || "",
-      appVersion: "32644",
+      appVersion: CURRENT_APP_VERSION,
       pageUrl: location.href,
       userAgent: navigator.userAgent,
       submittedAt: new Date().toISOString(),
@@ -1368,7 +1716,7 @@
     return true;
   }
 
-  // v32644 · Las escrituras ya se reflejan de forma optimista en pantalla.
+  // v32645 · Las escrituras ya se reflejan de forma optimista en pantalla.
   // El refresco completo se difiere y agrupa para no castigar a Apps Script
   // después de cada toque. Varias acciones cercanas generan un solo refresh.
   function scheduleSilentSync(delay = 6500) {
@@ -1576,6 +1924,7 @@
         } else {
           void syncUnlockState({ render: true });
         }
+        void refreshSecretStatus({ render:true });
       }
     }, UNLOCK_SYNC_INTERVAL_MS);
   }
@@ -1589,6 +1938,7 @@
 
     // Las vistas compartidas necesitan una garantía fuerte de frescura:
     // muestran el caché de inmediato y actualizan getData detrás.
+    void refreshSecretStatus({ force:true, render:true });
     if (sharedActivityRoute()) {
       void refreshSharedActivitySilently(true);
       return;
@@ -2376,6 +2726,7 @@
       "points",
       "responses",
       "photos",
+      "codes",
       "settings"
     ];
 
@@ -2427,9 +2778,12 @@
       localStorage.removeItem("vf_theme_v32634");
     } catch (_) {}
 
+    capturePendingSecretToken();
+    restoreStaffSession();
+    const directStaffRole = requestedStaffRole();
     const initialSection = requestedInitialSection();
     const photoDeepLink = initialSection === "fotos";
-    const restoredCandidate = state.currentGuestId
+    const restoredCandidate = !directStaffRole && state.currentGuestId
       ? getGuestById(state.currentGuestId)
       : null;
     const fastRestore = Boolean(
@@ -2445,19 +2799,20 @@
         : "idle"
     );
 
-    // v32644: solo usamos el arranque ultrarrápido cuando el snapshot contiene
+    // v32645: solo usamos el arranque ultrarrápido cuando el snapshot contiene
     // también Social/notificaciones/configuración. Los snapshots antiguos se
     // reparan con un único getData completo y desde ahí vuelven a ser instantáneos.
     const initialSyncPromise = fastRestore
       ? Promise.resolve(true)
       : syncFromSheets(false);
-    if (!photoDeepLink) history.replaceState({ screen: "login" }, "", basePageUrl());
+    if (!photoDeepLink && !directStaffRole) history.replaceState({ screen: "login" }, "", basePageUrl());
     applyPendingWritesToState();
     updateLoginPrivacyUi();
     updateAdminTestLoginUi();
     fillGuestSuggestions();
     configureNavigation();
     applyPhotosAvailabilityUi();
+    void refreshSecretStatus({ force:true, render:false });
     Promise.resolve(initialSyncPromise).finally(() => void preloadTeamLogos());
     window.setTimeout(() => { if (!teamLogosReady) void preloadTeamLogos(); }, 1400);
     configureInstallExperience();
@@ -2496,7 +2851,17 @@
     startTimedCompetitionWatcher();
 
     let restored = false;
-    if (restoredCandidate && isCompetitionGuest(restoredCandidate)) {
+    if (directStaffRole) {
+      configureDirectStaffLogin(directStaffRole);
+      if (staffSession?.role === directStaffRole && staffSession?.sessionToken) {
+        restored = true;
+        const staffGuest = STAFF_USERS[directStaffRole];
+        enterApp(staffGuest, false, "replace", "staff");
+        currentRoute = "staff";
+        renderCurrentRoute();
+      }
+    }
+    if (!restored && restoredCandidate && isCompetitionGuest(restoredCandidate)) {
       restored = true;
       const openRestoredSession = () => {
         enterApp(restoredCandidate, false, photoDeepLink ? "replace" : "push", photoDeepLink ? "fotos" : "inicio");
@@ -2520,12 +2885,17 @@
         .toUpperCase();
     $("#welcomeTeam").textContent = isAdminTestMode(guest)
       ? "Modo prueba · sin puntos"
-      : `Equipo ${team.name}`;
+      : isStaffMode(guest)
+        ? (staffRole() === "eugenia" ? "Centro de canje · Kermesse" : "Centro de control · Fiesta")
+        : `Equipo ${team.name}`;
+    document.body.classList.toggle("staff-mode", isStaffMode(guest));
 
     migrateSectionNotificationBaselineBeforeSync();
     updateNotificationUi();
 
     applyPhotosAvailabilityUi();
+    updateCodesMenuVisibility();
+    window.setTimeout(() => void refreshSecretStatus({ force:true, render:true }), 0);
 
     window.setTimeout(() => {
       syncUnlockState({
@@ -2554,11 +2924,11 @@
       return;
     }
 
-    const guest = getGuestById(
-      destination.guestId || state.currentGuestId
-    );
+    const destinationGuestId = destination.guestId || state.currentGuestId;
+    const destinationStaffRole = String(destinationGuestId || "").replace(/^staff-/, "");
+    const guest = STAFF_USERS[destinationStaffRole] || getGuestById(destinationGuestId);
 
-    if (!guest || !isCompetitionGuest(guest)) {
+    if (!guest || (!isCompetitionGuest(guest) && !isStaffMode(guest))) {
       showLandingFromHistory();
       return;
     }
@@ -2880,13 +3250,13 @@
       // la base remota, renderizamos placeholders reales (nunca ceros falsos)
       // y la sincronización en curso completa la pantalla en segundo plano.
       enterApp(guest, true);
-      // v32644: un ingreso manual puede corresponder a otra identidad.
+      // v32645: un ingreso manual puede corresponder a otra identidad.
       // Aunque exista un snapshot válido, ese snapshot fue servido para el
       // viewer anterior (y Guerra además está filtrada por equipo). Forzamos
       // un getData completo para la identidad recién elegida. Las sesiones
       // restauradas automáticamente siguen usando el arranque instantáneo.
       void syncFromSheets(false);
-      // v32644: no enviamos telemetría de login. Era una escritura remota que
+      // v32645: no enviamos telemetría de login. Era una escritura remota que
       // incrementaba serverRevision y provocaba refrescos completos en todos
       // los celulares sin aportar nada al funcionamiento del casamiento.
       window.setTimeout(() => {
@@ -2899,10 +3269,14 @@
       closeMenu();
       state.adminUnlocked = false;
       state.adminPassword = "";
+      const exitingStaffRole = staffRole();
       currentGuest = null;
       state.currentGuestId = null;
+      staffSession = null;
+      sessionStorage.removeItem(STAFF_SESSION_KEY);
+      document.body.classList.remove("staff-mode");
       saveState();
-      history.replaceState({ screen: "login" }, "", basePageUrl());
+      history.replaceState({ screen: "login" }, "", exitingStaffRole ? staffDirectUrl(exitingStaffRole) : basePageUrl());
       $("#mainScreen").classList.add("hidden");
       $("#loginScreen").classList.remove("hidden");
       selectedGuestId = null;
@@ -2943,7 +3317,7 @@
   ) {
     const openApp = () => {
       applyGuestShell(guest);
-      state.currentGuestId = guest.id;
+      if (!isStaffMode(guest)) state.currentGuestId = guest.id;
       saveState();
       navigate(initialRoute || "inicio", { historyMode });
 
@@ -2959,6 +3333,11 @@
     // La navegación nunca espera a los logos. La app abre ya y los recursos
     // visuales terminan de cargar en segundo plano.
     openApp();
+    if (pendingSecretToken) {
+      void refreshSecretStatus({ force:true, render:false }).then(open => {
+        if (open && currentGuest && pendingSecretToken) navigate("codigos", { historyMode:"replace" });
+      });
+    }
     if (!teamLogosReady) void preloadTeamLogos();
   }
 
@@ -2966,8 +3345,13 @@
     if (route === "ficha" || route === "juegos" || route === "info") route = "inicio";
     if (route === "torneo") route = "puntos";
     if (route === "cronograma") route = "inicio";
+    if (route === "codigos" && !secretModuleOpen()) {
+      toast(secretAccess.known && secretAccess.state === "closed" ? "CÓDIGOS ya finalizó." : "CÓDIGOS todavía no está habilitado.");
+      route = "inicio";
+      void refreshSecretStatus({ force:true, render:true });
+    }
 
-    // v32644: Equipo/Perfiles, Social y Ranking muestran el caché al instante,
+    // v32645: Equipo/Perfiles, Social y Ranking muestran el caché al instante,
     // pero disparan un getData completo silencioso. Así la actividad de terceros
     // no depende únicamente del heartbeat de serverRevision.
     if (currentGuest && ["equipo", "invitados", "social", "ranking"].includes(route) && navigator.onLine !== false) {
@@ -3023,7 +3407,7 @@
     const activeBottomRoute =
       ["trivia", "ruleta", "guerra"].includes(route)
         ? "puntos"
-        : ["equipo", "invitados", "asistencia", "ubicacion", "social", "regalos", "reglas", "admin"].includes(route)
+        : ["equipo", "invitados", "asistencia", "ubicacion", "social", "regalos", "reglas", "admin", "codigos"].includes(route)
           ? ""
           : route;
 
@@ -3078,7 +3462,9 @@
     const historyMode = options.historyMode || "push";
     if (currentGuest && historyMode !== "none") {
       const historyState = { screen: "app", route, guestId: currentGuest.id };
-      const url = `${basePageUrl()}#${encodeURIComponent(route)}`;
+      const url = isStaffMode(currentGuest)
+        ? `${staffDirectUrl(staffRole())}#staff`
+        : `${basePageUrl()}#${encodeURIComponent(route)}`;
       if (historyMode === "replace") history.replaceState(historyState, "", url);
       else history.pushState(historyState, "", url);
     }
@@ -3209,67 +3595,208 @@
 
   function staffRankingHtml() {
     const ranking = calculateRanking();
-    return `<section class="section-card staff-ranking-mini"><p class="eyebrow">EN VIVO</p><h3>Ranking actual</h3>${ranking.map((row,i)=>`<div class="staff-rank-row"><span>${i+1}°</span><strong>${escapeHTML(getTeam(row.id).name)}</strong><b>${Number(row.total||0).toLocaleString("es-AR")}</b></div>`).join("")}</section>`;
+    return `<section class="section-card staff-ranking-mini"><div class="staff-section-heading"><div><p class="eyebrow">EN VIVO</p><h3>Ranking actual</h3></div><button type="button" class="ghost-button compact" data-staff-refresh>Actualizar</button></div>${ranking.map((row,i)=>`<div class="staff-rank-row"><span>${i+1}°</span><strong>${escapeHTML(getTeam(row.id).name)}</strong><b>${Number(row.total||0).toLocaleString("es-AR")}</b></div>`).join("")}</section>`;
+  }
+
+  function staffTeamOptions(selected="") {
+    return Object.keys(DATA.teams).map(id=>`<option value="${id}" ${id===selected?"selected":""}>${escapeHTML(getTeam(id).name)}</option>`).join("");
+  }
+
+  function staffRecentHtml(role) {
+    const rows = Array.isArray(staffRemoteState?.recent) ? staffRemoteState.recent.filter(item=>!role || item.role===role).slice(0,8) : [];
+    if (!rows.length) return `<section class="section-card staff-recent"><p class="eyebrow">ÚLTIMOS MOVIMIENTOS</p><p class="staff-muted">Todavía no hay movimientos registrados desde este centro.</p></section>`;
+    return `<section class="section-card staff-recent"><p class="eyebrow">ÚLTIMOS MOVIMIENTOS</p><h3>Actividad reciente</h3>${rows.map(item=>{const detail=item.detail || (item.teamId ? getTeam(item.teamId).name : "");return `<div class="staff-recent-row"><div><strong>${escapeHTML(item.label || item.activity || "Movimiento")}</strong><small>${escapeHTML(detail)}</small></div><b class="${Number(item.points||0)<0?"negative":""}">${Number(item.points||0)>=0?"+":""}${Number(item.points||0).toLocaleString("es-AR")}</b></div>`;}).join("")}</section>`;
+  }
+
+  function staffDashboardCards() {
+    const completed = staffRemoteState?.completed || {};
+    const auction = staffRemoteState?.auction || {};
+    const envelopes = Array.isArray(auction.envelopes) ? auction.envelopes : [];
+    const doneEnvelopes = envelopes.filter(x=>x.status==="claimed").length;
+    const cards = [
+      ["entrada","Entrada a pista",completed["entrada-pista"]?"Registrado":"Pendiente"],
+      ["baile","Rey y reina",completed["rey-reina-baile"]?"Registrado":"Pendiente"],
+      ["busqueda","Juego 1 · Búsqueda",completed["juego1-busqueda"]?"Registrado":"Pendiente"],
+      ["subasta","Juego 2 · Subasta",`${doneEnvelopes}/6 sobres`]
+    ];
+    return `<section class="staff-dashboard-grid">${cards.map(([section,title,status])=>`<button type="button" class="section-card staff-dashboard-card" data-staff-section="${section}"><small>${escapeHTML(status)}</small><strong>${escapeHTML(title)}</strong><span>Gestionar →</span></button>`).join("")}</section>`;
+  }
+
+  function staffPodiumSection({activity,title,subtitle,points}) {
+    const completed = Boolean(staffRemoteState?.completed?.[activity]);
+    return `<section class="section-card staff-form"><p class="eyebrow">${escapeHTML(title)}</p><h3>${escapeHTML(subtitle)}</h3>${completed?`<div class="staff-warning ok">Este resultado ya fue registrado. Para evitar puntos duplicados, el servidor no acepta una segunda carga.</div>`:""}<div class="staff-podium-grid"><label><span>1° · ${points[0]} pts</span><select id="staffPodium1">${staffTeamOptions()}</select></label><label><span>2° · ${points[1]} pts</span><select id="staffPodium2">${staffTeamOptions()}</select></label><label><span>3° · ${points[2]} pts</span><select id="staffPodium3">${staffTeamOptions()}</select></label></div><button type="button" class="staff-primary" data-staff-save-podium="${activity}" ${completed?"disabled":""}>CONFIRMAR PODIO</button></section>`;
+  }
+
+  function staffDanceSection() {
+    const completed = Boolean(staffRemoteState?.completed?.["rey-reina-baile"]);
+    return `<section class="section-card staff-form"><p class="eyebrow">MEJOR PERFORMANCE BAILANDO</p><h3>Rey y reina del baile</h3><p class="staff-muted">Cada ganador suma 500 puntos a su equipo. Si ambos pertenecen al mismo equipo, ese equipo suma 1.000.</p>${completed?`<div class="staff-warning ok">Rey y reina ya fueron registrados.</div>`:""}<div class="staff-dual-grid"><label><span>Rey del baile · +500</span><select id="staffKingTeam">${staffTeamOptions()}</select></label><label><span>Reina del baile · +500</span><select id="staffQueenTeam">${staffTeamOptions()}</select></label></div><button type="button" class="staff-primary" data-staff-save-dance ${completed?"disabled":""}>CONFIRMAR REY Y REINA</button></section>`;
+  }
+
+  function staffAuctionSection() {
+    const auction = staffRemoteState?.auction || {envelopes:[],teamRisk:{},prizesUsed:[]};
+    const envelopes = Array.from({length:6},(_,i)=>auction.envelopes?.find(x=>Number(x.envelope)===i+1) || {envelope:i+1,status:"open"});
+    const selected = envelopes.find(x=>Number(x.envelope)===Number(staffSelectedEnvelope)) || envelopes[0];
+    const availablePrizes = [1000,700,500,300,100,0].filter(v=>!auction.prizesUsed?.includes(v) || Number(selected.prize)===v);
+    const riskRows = Object.keys(DATA.teams).map(id=>{const used=Number(auction.teamRisk?.[id]||0);return `<div><strong>${escapeHTML(getTeam(id).name)}</strong><span>${used}/500</span><small>quedan ${Math.max(0,500-used)}</small></div>`}).join("");
+    return `<section class="section-card staff-form"><p class="eyebrow">JUEGO 2 · SUBASTA</p><h3>6 sobres misteriosos</h3><p class="staff-muted">Solo se descuenta la oferta ganadora. Cada equipo puede arriesgar hasta 500 puntos en total y puede ganar más de un sobre mientras conserve presupuesto.</p><div class="staff-auction-envelopes">${envelopes.map(env=>`<button type="button" data-staff-envelope="${env.envelope}" class="${Number(env.envelope)===Number(staffSelectedEnvelope)?"active":""} ${env.status==="claimed"?"claimed":""}"><b>Sobre ${env.envelope}</b><small>${env.status==="claimed"?`${escapeHTML(getTeam(env.teamId).name)} · ${env.bid} → ${env.prize}`:"Pendiente"}</small></button>`).join("")}</div><div class="staff-risk-grid">${riskRows}</div>${selected.status==="claimed"?`<div class="staff-auction-result"><small>SOBRE ${selected.envelope} REGISTRADO</small><strong>${escapeHTML(getTeam(selected.teamId).name)}</strong><p>Oferta ${selected.bid} · Premio ${selected.prize} · Neto ${Number(selected.net)>=0?"+":""}${selected.net}</p></div>`:`<div class="staff-auction-entry"><label>Equipo ganador<select id="staffAuctionTeam">${staffTeamOptions()}</select></label><label>Oferta ganadora<select id="staffAuctionBid">${[50,100,150,200,250,300,350,400,450,500].map(v=>`<option value="${v}">${v} puntos</option>`).join("")}</select></label><label>Premio revelado<select id="staffAuctionPrize">${availablePrizes.map(v=>`<option value="${v}">${v} puntos</option>`).join("")}</select></label><div class="staff-conversion"><small>IMPACTO NETO</small><strong id="staffAuctionNet">+950 pts</strong></div><button type="button" class="staff-primary" data-staff-save-auction>REGISTRAR SOBRE ${selected.envelope}</button></div>`}</section>`;
+  }
+
+  function renderDanielaStaff() {
+    const tabs = [["resumen","Resumen"],["entrada","Entrada"],["baile","Baile"],["busqueda","Juego 1"],["subasta","Subasta"]];
+    let content = staffDashboardCards();
+    if (staffSelectedSection === "entrada") content = staffPodiumSection({activity:"entrada-pista",title:"ENTRADA A PISTA",subtitle:"Podio de equipos",points:[600,350,200]});
+    if (staffSelectedSection === "baile") content = staffDanceSection();
+    if (staffSelectedSection === "busqueda") content = staffPodiumSection({activity:"juego1-busqueda",title:"JUEGO 1 · BÚSQUEDA",subtitle:"Podio final",points:[800,500,300]});
+    if (staffSelectedSection === "subasta") content = staffAuctionSection();
+    return `<div class="staff-console-v32646"><section class="staff-console-head"><div><p class="eyebrow">CONTROL DE FIESTA</p><h2>Daniela</h2><p>Todos los juegos y puntajes en un solo lugar.</p></div><button type="button" class="staff-head-logout" data-staff-logout>Salir</button></section><nav class="staff-tabs">${tabs.map(([id,label])=>`<button type="button" data-staff-section="${id}" class="${staffSelectedSection===id?"active":""}">${label}</button>`).join("")}</nav>${staffRemoteLoading?`<div class="staff-loading">Actualizando estado…</div>`:""}${content}${staffRankingHtml()}${staffRecentHtml("daniela")}</div>`;
+  }
+
+  function renderEugeniaStaff() {
+    return `<div class="staff-console-v32646"><section class="staff-console-head"><div><p class="eyebrow">CENTRO DE CANJE</p><h2>Eugenia · Kermesse</h2><p>Registrá los tickets por equipo. La conversión es automática.</p></div><button type="button" class="staff-head-logout" data-staff-logout>Salir</button></section><section class="section-card staff-form"><label for="staffTeam"><span>Equipo</span></label><select id="staffTeam">${staffTeamOptions()}</select><label for="staffTickets"><span>Tickets a acreditar</span></label><div class="staff-ticket-stepper"><button type="button" data-ticket-delta="-1">−</button><input id="staffTickets" type="number" min="0" max="999" inputmode="numeric" value="0"><button type="button" data-ticket-delta="1">+</button></div><div class="staff-quick-grid"><button type="button" data-ticket-add="1">+1</button><button type="button" data-ticket-add="5">+5</button><button type="button" data-ticket-add="10">+10</button><button type="button" data-ticket-add="20">+20</button></div><div class="staff-conversion"><small>1 TICKET = 20 PUNTOS</small><strong id="staffTicketPreview">0 pts</strong></div><button id="staffSaveTickets" class="staff-primary" type="button">CONFIRMAR CANJE</button></section>${staffRankingHtml()}${staffRecentHtml("eugenia")}</div>`;
   }
 
   function renderStaff() {
     const role = staffRole();
-    if (!role || !staffSession?.sessionToken) return `<section class="section-card"><h3>Sesión vencida</h3><p>Volvé a ingresar desde el inicio.</p></section>`;
-    const isEuge = role === "eugenia";
-    const teamOptions = Object.keys(DATA.teams).map(id=>`<option value="${id}">${escapeHTML(getTeam(id).name)}</option>`).join("");
-    const euge = `<section class="section-card staff-form"><p class="eyebrow">CANJE DE KERMESSE</p><label for="staffTeam">Equipo</label><select id="staffTeam">${teamOptions}</select><label for="staffTickets">Tickets recibidos</label><div class="staff-ticket-stepper"><button type="button" data-ticket-delta="-1">−</button><input id="staffTickets" type="number" min="0" max="999" inputmode="numeric" value="0"><button type="button" data-ticket-delta="1">+</button></div><div class="staff-activity-grid"><button type="button" data-ticket-add="5">+5</button><button type="button" data-ticket-add="10">+10</button><button type="button" data-ticket-add="20">+20</button><button type="button" data-ticket-clear>Limpiar</button></div><div class="staff-conversion"><small>1 TICKET = 10 PUNTOS</small><strong id="staffTicketPreview">0 pts</strong></div><button id="staffSaveTickets" class="staff-primary" type="button">CONFIRMAR CANJE</button></section>`;
-    const dani = `<section class="section-card staff-form"><p class="eyebrow">CARGA DE PUNTOS</p><label>Actividad</label><div class="staff-activity-grid" id="staffActivityGrid"><button class="active" data-staff-activity="juego-mesa-1">Juego mesa 1</button><button data-staff-activity="juego-mesa-2">Juego mesa 2</button><button data-staff-activity="baile">Performance baile</button><button data-staff-activity="banda">Performance banda</button><button data-staff-activity="ramo">Ramo</button><button data-staff-activity="whisky">Whisky</button><button data-staff-activity="espiritu">Espíritu de equipo</button></div><label for="staffTeam">Equipo</label><select id="staffTeam">${teamOptions}</select><div id="staffDynamicFields"></div><div class="staff-conversion"><small>PUNTOS A CARGAR</small><strong id="staffPointsPreview">500 pts</strong></div><button id="staffSaveDaniela" class="staff-primary" type="button">CONFIRMAR PUNTOS</button></section>`;
-    return `<div class="staff-console-v32628"><section class="staff-console-head"><p class="eyebrow">CONTROL DE FIESTA</p><h2>${isEuge ? "Kermesse · Eugenia" : "Operación · Daniela"}</h2><p>${isEuge ? "Registrá tickets por equipo. La conversión es automática y el ranking se actualiza al guardar." : "Cargá resultados y seguí el ranking para los anuncios durante la fiesta."}</p><span class="staff-live-chip">● Ranking en vivo</span></section>${isEuge ? euge : dani}${staffRankingHtml()}<button type="button" class="ghost-button" style="width:100%;margin-top:10px" data-staff-refresh>Actualizar ranking</button></div>`;
+    if (!role || !staffSession?.sessionToken) return `<section class="section-card"><h3>Sesión vencida</h3><p>Volvé a abrir tu link e ingresá la contraseña.</p></section>`;
+    if (!staffRemoteState && !staffRemoteLoading) window.setTimeout(()=>void loadStaffRemoteState(true),0);
+    return role === "eugenia" ? renderEugeniaStaff() : renderDanielaStaff();
   }
 
-  function staffDanielaPoints() {
-    const activity = staffSelectedActivity;
-    if (["juego-mesa-1","juego-mesa-2"].includes(activity)) return Number($("#staffPosition")?.value || 500);
-    if (["ramo","whisky"].includes(activity)) return 250;
-    if (activity === "espiritu") return 700;
-    return Number($("#staffPerformancePoints")?.value || 100);
+  async function staffApi(action, extra={}) {
+    if (!staffSession?.sessionToken) throw new Error("La sesión venció. Volvé a ingresar.");
+    const payload = {
+      sessionToken: staffSession.sessionToken,
+      role: staffSession.role,
+      appVersion: CURRENT_APP_VERSION,
+      pageUrl: window.location.href,
+      userAgent: navigator.userAgent,
+      requestId: extra.requestId || newRequestId(action),
+      timestamp: new Date().toISOString(),
+      ...extra
+    };
+    const response = await jsonp(action, { payload:JSON.stringify(payload) }, {timeoutMs:12000});
+    return response?.data || {};
   }
 
-  function renderStaffDynamicFields() {
-    const host = $("#staffDynamicFields"); if (!host) return;
-    if (["juego-mesa-1","juego-mesa-2"].includes(staffSelectedActivity)) host.innerHTML=`<label for="staffPosition">Posición</label><select id="staffPosition"><option value="500">1° · 500 puntos</option><option value="250">2° · 250 puntos</option><option value="100">3° · 100 puntos</option></select>`;
-    else if (["baile","banda"].includes(staffSelectedActivity)) host.innerHTML=`<label for="staffPerformancePoints">Reconocimiento</label><select id="staffPerformancePoints"><option value="50">Mención · 50</option><option value="100" selected>Buena · 100</option><option value="150">Muy buena · 150</option><option value="200">Excelente · 200</option></select>`;
-    else host.innerHTML="";
-    const preview=$("#staffPointsPreview"); if (preview) preview.textContent=`${staffDanielaPoints()} pts`;
-    host.querySelectorAll("select").forEach(el=>el.addEventListener("change",()=>{ const p=$("#staffPointsPreview"); if(p)p.textContent=`${staffDanielaPoints()} pts`; }));
+  async function loadStaffRemoteState(render=false) {
+    if (!staffSession?.sessionToken || staffRemoteLoading) return staffRemoteState;
+    staffRemoteLoading = true;
+    if (render && currentRoute === "staff") renderCurrentRoute();
+    try {
+      const data = await staffApi("staffGetState");
+      staffRemoteState = data || {};
+      return staffRemoteState;
+    } catch (error) {
+      console.warn("staffGetState", error);
+      if (/sesión|session|acceso/i.test(String(error?.message||""))) {
+        staffSession = null;
+        sessionStorage.removeItem(STAFF_SESSION_KEY);
+      }
+      toast(error?.message || "No se pudo actualizar el centro de control.");
+      return staffRemoteState;
+    } finally {
+      staffRemoteLoading = false;
+      if (render && currentRoute === "staff") renderCurrentRoute();
+    }
   }
 
-  function staffActivityLabel(id) { return ({"juego-mesa-1":"Juego de mesa 1","juego-mesa-2":"Juego de mesa 2",baile:"Performance en baile",banda:"Performance con la banda",ramo:"Ramo",whisky:"Whisky",espiritu:"Espíritu de equipo",kermesse:"Kermesse · tickets"})[id] || id; }
+  function applyStaffScoreRecords(records) {
+    (Array.isArray(records)?records:[]).forEach(record=>{
+      if (!record?.requestId) return;
+      state.scoreEntries.push(record);
+      const rows = Array.isArray(state.serverRanking) ? state.serverRanking : [];
+      const row = rows.find(x=>x.id===record.teamId);
+      if (row) row.total = Number(row.total||0) + Number(record.points||0);
+      else rows.push({id:record.teamId,total:Number(record.points||0)});
+      state.serverRanking = rows;
+    });
+    state.scoreEntries = dedupeScores(state.scoreEntries);
+    saveState();
+  }
 
   function showStaffPointsFlash(points, teamId, extra="") {
-    const el=document.createElement("div"); el.className="staff-save-flash"; el.innerHTML=`<div><small>REGISTRADO</small><strong>+${Number(points).toLocaleString("es-AR")}</strong><span>${escapeHTML(getTeam(teamId).name)}${extra ? `<br><small>${escapeHTML(extra)}</small>`:""}</span></div>`; document.body.appendChild(el); setTimeout(()=>el.remove(),1450);
+    const node=document.createElement("div"); node.className="staff-save-flash"; node.innerHTML=`<div><small>REGISTRADO</small><strong>${Number(points)>=0?"+":""}${Number(points).toLocaleString("es-AR")}</strong><span>${escapeHTML(getTeam(teamId).name)}${extra ? `<br><small>${escapeHTML(extra)}</small>`:""}</span></div>`; document.body.appendChild(node); setTimeout(()=>node.remove(),1350);
   }
 
-  async function staffSaveScore({teamId, points, activity, tickets=0}) {
-    if (!staffSession?.sessionToken) { toast("La sesión venció. Volvé a ingresar."); return false; }
-    const payload={ sessionToken:staffSession.sessionToken, role:staffSession.role, teamId, points:Number(points), activity, tickets:Number(tickets||0), appVersion:CURRENT_APP_VERSION, requestId:newRequestId("staffSaveScore"), timestamp:new Date().toISOString() };
+  async function staffCommit(action, payload, flash=null) {
     try {
-      const response=await jsonp("staffSaveScore", { payload:JSON.stringify(payload) }, {timeoutMs:10000});
-      const record=response?.data?.record || {gameId:`staff-${activity}`,teamId,points:Number(points),comment:`${staffActivityLabel(activity)} · ${staffSession.role}`,timestamp:payload.timestamp,requestId:payload.requestId};
-      state.scoreEntries.push(record); state.scoreEntries=dedupeScores(state.scoreEntries);
-      const sr=Array.isArray(state.serverRanking)?state.serverRanking:[]; const row=sr.find(r=>r.id===teamId); if(row) row.total=Number(row.total||0)+Number(points); else sr.push({id:teamId,total:Number(points)}); state.serverRanking=sr; saveState();
+      const data = await staffApi(action,payload);
+      applyStaffScoreRecords(data.scoreEntries || []);
+      if (data.staffState) staffRemoteState = data.staffState;
+      else await loadStaffRemoteState(false);
+      if (flash) showStaffPointsFlash(flash.points,flash.teamId,flash.extra||"");
+      void syncFromSheets(false);
       return true;
-    } catch(error) { console.warn("staffSaveScore",error); toast(error?.message || "No se pudo guardar."); return false; }
+    } catch(error) {
+      console.warn(action,error);
+      toast(error?.message || "No se pudo guardar.");
+      return false;
+    }
   }
 
   function bindStaffEvents() {
     if (!isStaffMode()) return;
+    $$('[data-staff-section]').forEach(button=>button.addEventListener("click",()=>{
+      staffSelectedSection = button.dataset.staffSection || "resumen";
+      renderCurrentRoute();
+    }));
+    $('[data-staff-logout]')?.addEventListener("click",()=>$("#logoutButton")?.click());
+    $$('[data-staff-refresh]').forEach(button=>button.addEventListener("click",async()=>{
+      button.disabled=true; const old=button.textContent; button.textContent="Actualizando…";
+      await Promise.all([syncFromSheets(false),loadStaffRemoteState(false)]);
+      if (button.isConnected){button.disabled=false;button.textContent=old;}
+      renderCurrentRoute();
+    }));
+
     if (staffRole()==="eugenia") {
-      const tickets=$("#staffTickets"), preview=$("#staffTicketPreview"); const update=()=>{const n=Math.max(0,Number(tickets?.value||0)); if(preview)preview.textContent=`${n*10} pts`;};
+      const tickets=$("#staffTickets"), preview=$("#staffTicketPreview");
+      const update=()=>{const n=Math.max(0,Math.floor(Number(tickets?.value||0)));if(tickets)tickets.value=n;if(preview)preview.textContent=`${n*20} pts`;};
       $$('[data-ticket-delta]').forEach(b=>b.addEventListener("click",()=>{tickets.value=Math.max(0,Number(tickets.value||0)+Number(b.dataset.ticketDelta));update();}));
       $$('[data-ticket-add]').forEach(b=>b.addEventListener("click",()=>{tickets.value=Math.max(0,Number(tickets.value||0)+Number(b.dataset.ticketAdd));update();}));
-      $('[data-ticket-clear]')?.addEventListener("click",()=>{tickets.value=0;update();}); tickets?.addEventListener("input",update); update();
-      $("#staffSaveTickets")?.addEventListener("click",async e=>{const teamId=$("#staffTeam")?.value; const n=Math.max(0,Number(tickets.value||0)); if(!teamId||!n){toast("Elegí un equipo e ingresá tickets.");return;} const btn=e.currentTarget;btn.disabled=true;btn.textContent="Guardando…";const ok=await staffSaveScore({teamId,points:n*10,activity:"kermesse",tickets:n});if(ok){showStaffPointsFlash(n*10,teamId,`${n} tickets`);tickets.value=0;setTimeout(()=>renderCurrentRoute(),1450);}else{btn.disabled=false;btn.textContent="CONFIRMAR CANJE";}});
-    } else {
-      $$('[data-staff-activity]').forEach(b=>b.addEventListener("click",()=>{staffSelectedActivity=b.dataset.staffActivity;$$('[data-staff-activity]').forEach(x=>x.classList.toggle("active",x===b));renderStaffDynamicFields();})); renderStaffDynamicFields();
-      $("#staffSaveDaniela")?.addEventListener("click",async e=>{const teamId=$("#staffTeam")?.value;const points=staffDanielaPoints();if(!teamId||!points)return;const btn=e.currentTarget;btn.disabled=true;btn.textContent="Guardando…";const ok=await staffSaveScore({teamId,points,activity:staffSelectedActivity});if(ok){showStaffPointsFlash(points,teamId,staffActivityLabel(staffSelectedActivity));setTimeout(()=>renderCurrentRoute(),1450);}else{btn.disabled=false;btn.textContent="CONFIRMAR PUNTOS";}});
+      tickets?.addEventListener("input",update); update();
+      $("#staffSaveTickets")?.addEventListener("click",async e=>{
+        const teamId=$("#staffTeam")?.value; const n=Math.max(0,Math.floor(Number(tickets?.value||0)));
+        if(!teamId||!n){toast("Elegí un equipo e ingresá tickets.");return;}
+        if(!confirm(`¿Acreditar ${n} ticket${n===1?"":"s"} = ${n*20} puntos a ${getTeam(teamId).name}?`)) return;
+        const btn=e.currentTarget;btn.disabled=true;btn.textContent="Guardando…";
+        const ok=await staffCommit("staffKermesseRedeem",{teamId,tickets:n},{teamId,points:n*20,extra:`${n} ticket${n===1?"":"s"}`});
+        if(ok){tickets.value=0;setTimeout(()=>renderCurrentRoute(),700)}else{btn.disabled=false;btn.textContent="CONFIRMAR CANJE";}
+      });
+      return;
     }
-    $('[data-staff-refresh]')?.addEventListener("click",async e=>{const b=e.currentTarget;b.disabled=true;b.textContent="Actualizando…";await syncFromSheets(false);if(b.isConnected){b.disabled=false;b.textContent="Actualizar ranking";}toast("Ranking actualizado.");});
+
+    $$('[data-staff-save-podium]').forEach(button=>button.addEventListener("click",async()=>{
+      const activity=button.dataset.staffSavePodium;
+      const teams=[$("#staffPodium1")?.value,$("#staffPodium2")?.value,$("#staffPodium3")?.value];
+      if(new Set(teams).size!==3){toast("El podio debe tener tres equipos distintos.");return;}
+      const labels=teams.map((id,i)=>`${i+1}° ${getTeam(id).name}`).join(" · ");
+      if(!confirm(`¿Confirmar ${labels}?`)) return;
+      button.disabled=true;button.textContent="Guardando…";
+      const ok=await staffCommit("staffSavePodium",{activity,teams});
+      if(ok){toast("Podio registrado.");setTimeout(()=>renderCurrentRoute(),400)}else{button.disabled=false;button.textContent="CONFIRMAR PODIO";}
+    }));
+
+    $('[data-staff-save-dance]')?.addEventListener("click",async e=>{
+      const kingTeamId=$("#staffKingTeam")?.value, queenTeamId=$("#staffQueenTeam")?.value;
+      if(!kingTeamId||!queenTeamId)return;
+      if(!confirm(`¿Rey: ${getTeam(kingTeamId).name} (+500) · Reina: ${getTeam(queenTeamId).name} (+500)?`)) return;
+      const btn=e.currentTarget;btn.disabled=true;btn.textContent="Guardando…";
+      const ok=await staffCommit("staffSaveDanceRoyalty",{kingTeamId,queenTeamId});
+      if(ok){toast("Rey y reina registrados.");setTimeout(()=>renderCurrentRoute(),400)}else{btn.disabled=false;btn.textContent="CONFIRMAR REY Y REINA";}
+    });
+
+    const updateAuctionNet=()=>{const bid=Number($("#staffAuctionBid")?.value||0),prize=Number($("#staffAuctionPrize")?.value||0);const n=prize-bid;const node=$("#staffAuctionNet");if(node)node.textContent=`${n>=0?"+":""}${n} pts`;};
+    $("#staffAuctionBid")?.addEventListener("change",updateAuctionNet); $("#staffAuctionPrize")?.addEventListener("change",updateAuctionNet); updateAuctionNet();
+    $$('[data-staff-envelope]').forEach(button=>button.addEventListener("click",()=>{staffSelectedEnvelope=Number(button.dataset.staffEnvelope||1);renderCurrentRoute();}));
+    $('[data-staff-save-auction]')?.addEventListener("click",async e=>{
+      const teamId=$("#staffAuctionTeam")?.value,bid=Number($("#staffAuctionBid")?.value||0),prize=Number($("#staffAuctionPrize")?.value||0),envelope=Number(staffSelectedEnvelope||1);
+      const used=Number(staffRemoteState?.auction?.teamRisk?.[teamId]||0);
+      if(used+bid>500){toast(`${getTeam(teamId).name} solo tiene ${Math.max(0,500-used)} puntos disponibles para arriesgar.`);return;}
+      if(!confirm(`Sobre ${envelope}: ${getTeam(teamId).name} ofrece ${bid} y el premio revelado es ${prize}. Neto ${prize-bid>=0?"+":""}${prize-bid}. ¿Confirmar?`)) return;
+      const btn=e.currentTarget;btn.disabled=true;btn.textContent="Guardando…";
+      const ok=await staffCommit("staffAuctionCommit",{envelope,teamId,bid,prize},{teamId,points:prize-bid,extra:`Sobre ${envelope} · neto`});
+      if(ok){setTimeout(()=>renderCurrentRoute(),500)}else{btn.disabled=false;btn.textContent=`REGISTRAR SOBRE ${envelope}`;}
+    });
   }
 
   function renderCurrentRoute(options = {}) {
@@ -3297,6 +3824,7 @@
       invitados: renderGuests,
       social: renderSocial,
       regalos: renderGifts,
+      codigos: renderSecretCodes,
       admin: renderAdmin,
       staff: renderStaff
     };
@@ -3329,6 +3857,8 @@
     markNotificationsForRoute(currentRoute);
     updateNotificationUi();
     bindViewEvents(currentRoute);
+    if (currentRoute === "codigos") bindSecretCodeEvents();
+    if (currentRoute === "admin" && adminSubsection === "codes") bindAdminSecretEvents();
     return true;
   }
 
@@ -3982,6 +4512,7 @@
         String(Math.max(1, visibleItems))
       );
     }
+    updateCodesMenuVisibility();
   }
 
   function renderLockedSection(route) {
@@ -12004,6 +12535,10 @@
       `;
     }
 
+    if (adminSubsection === "codes") {
+      return `${adminHeader}${renderAdminCodes()}`;
+    }
+
     if (adminSubsection === "settings") {
       return `
         ${adminHeader}
@@ -12612,6 +13147,19 @@
             <small>Mini sección</small>
             <strong>Fotos</strong>
             <em>Resumen de cargas y acceso al álbum privado</em>
+          </span>
+          <b aria-hidden="true">›</b>
+        </button>
+
+        <button
+          type="button"
+          class="admin-subsection-launcher admin-subsection-launcher-codes"
+          data-admin-subsection="codes">
+          <span class="admin-subsection-launcher-icon">✦</span>
+          <span>
+            <small>Mini sección</small>
+            <strong>CÓDIGOS</strong>
+            <em>Secretos, canjes, premios y modo prueba</em>
           </span>
           <b aria-hidden="true">›</b>
         </button>

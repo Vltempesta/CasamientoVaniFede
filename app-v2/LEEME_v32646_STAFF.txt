@@ -1,0 +1,26 @@
+VANI & FEDE · FRONTEND v32646
+
+Base: v32645 CÓDIGOS.
+No elimina ninguna función previa.
+
+NOVEDADES
+- Link exclusivo Daniela:
+  https://vltempesta.github.io/CasamientoVaniFede/app-v2/?staff=daniela
+- Link exclusivo Eugenia:
+  https://vltempesta.github.io/CasamientoVaniFede/app-v2/?staff=eugenia
+- Los links abren acceso de Staff, no el login normal de invitados.
+- Las contraseñas NO están en app.js ni en index.html.
+- Daniela: Entrada 600/350/200; Rey/Reina +500 c/u; Búsqueda 800/500/300; Subasta 6 sobres.
+- Subasta: premios 1000/700/500/300/100/0, ofertas en pasos de 50, máximo 500 arriesgados por equipo.
+- Eugenia: 1 ticket = 20 puntos.
+- Ranking visible y refrescable dentro de ambos centros.
+- Movimientos registrados en backend con auditoría e idempotencia.
+
+ARCHIVOS A REEMPLAZAR EN GITHUB AL PUBLICAR
+- index.html
+- app.js
+- styles.css
+- sw.js
+- version.json
+
+No publicar todavía si el backend StaffAccess_v32646.gs no fue desplegado.
