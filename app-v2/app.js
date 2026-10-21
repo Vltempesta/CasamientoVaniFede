@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32647";
+  const CURRENT_APP_VERSION = "32649";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
@@ -1310,6 +1310,258 @@
       script.onerror = () => cleanup(() => reject(new Error("No se pudo cargar la respuesta remota")));
       script.src = url.toString();
       document.body.appendChild(script);
+    });
+  }
+
+  const CASE_BLACK_AUTHORIZED_GUESTS = new Set(["micaela-llopis", "deborah-trenti"]);
+  let caseBlackAccess = {
+    known:false, open:false, testMode:false, openAt:"", serverNow:"",
+    solved:false, code:"", resolutionText:"", attemptsUsed:0, attemptsRemaining:2, canSubmit:false
+  };
+  let caseBlackStatusInFlight = null;
+  let caseBlackResolveInFlight = false;
+  let lastCaseBlackStatusAt = 0;
+
+  function caseBlackEligibleGuest(guest = currentGuest) {
+    if (!guest || isStaffMode(guest)) return false;
+    return true;
+  }
+
+  function caseBlackAuthorizedGuest(guest = currentGuest) {
+    if (!guest || isStaffMode(guest)) return false;
+    if (isAdminTestMode(guest)) return true;
+    return CASE_BLACK_AUTHORIZED_GUESTS.has(String(guest.id || ""));
+  }
+
+  function caseBlackModuleOpen() {
+    return Boolean(caseBlackAccess.known && caseBlackAccess.open);
+  }
+
+  function updateCaseBlackMenuVisibility() {
+    const button = $("#caseBlackMenuButton");
+    if (!button) return;
+    const visible = Boolean(currentGuest) && caseBlackModuleOpen() && caseBlackEligibleGuest();
+    button.classList.toggle("hidden", !visible);
+    button.hidden = !visible;
+    button.setAttribute("aria-hidden", String(!visible));
+    button.tabIndex = visible ? 0 : -1;
+  }
+
+  async function refreshCaseBlackStatus(options = {}) {
+    if (!isConfigured()) return false;
+    const force = Boolean(options.force);
+    const now = Date.now();
+    if (!force && now - lastCaseBlackStatusAt < 30000) return caseBlackAccess.open;
+    if (caseBlackStatusInFlight) return caseBlackStatusInFlight;
+    lastCaseBlackStatusAt = now;
+    caseBlackStatusInFlight = (async () => {
+      try {
+        const response = await jsonp("caseBlackStatus", { guestId:String(currentGuest?.id || "") }, { timeoutMs:8000 });
+        const info = response?.data || {};
+        caseBlackAccess = {
+          known:true,
+          open:Boolean(info.open),
+          testMode:Boolean(info.testMode),
+          openAt:String(info.openAt || ""),
+          serverNow:String(info.serverNow || ""),
+          solved:Boolean(info.solved),
+          code:String(info.code || ""),
+          resolutionText:String(info.resolutionText || ""),
+          attemptsUsed:Number(info.attemptsUsed || 0),
+          attemptsRemaining:Number(info.attemptsRemaining ?? 2),
+          canSubmit:Boolean(info.canSubmit)
+        };
+        updateCaseBlackMenuVisibility();
+        if ((!caseBlackAccess.open || !caseBlackEligibleGuest()) && currentRoute === "caso-black") {
+          currentRoute = "inicio";
+          renderCurrentRoute();
+        } else if (options.render !== false) {
+          updateSectionNavigationState();
+        }
+        return caseBlackAccess.open;
+      } catch (error) {
+        console.warn("No se pudo consultar CASO BLACK", error);
+        caseBlackAccess.known = false;
+        updateCaseBlackMenuVisibility();
+        return false;
+      } finally {
+        caseBlackStatusInFlight = null;
+      }
+    })();
+    return caseBlackStatusInFlight;
+  }
+
+  function renderCaseBlack() {
+    if (!caseBlackModuleOpen() || !caseBlackEligibleGuest()) return renderHomeSafe_();
+    const authorized = Boolean(caseBlackAccess.canSubmit || caseBlackAuthorizedGuest());
+    const exhausted = !caseBlackAccess.testMode && Number(caseBlackAccess.attemptsRemaining || 0) <= 0;
+    const attemptLabel = caseBlackAccess.testMode
+      ? "MODO PRUEBA · los intentos no afectan el caso real"
+      : `Intentos oficiales disponibles: ${Math.max(0, Number(caseBlackAccess.attemptsRemaining || 0))} de 2`;
+
+    return `
+      <section class="case-black-v32649">
+        <header class="section-head case-black-head">
+          <p class="eyebrow">EXPEDIENTE REABIERTO</p>
+          <h2>CASO BLACK</h2>
+          <p><strong>La investigación está en curso.</strong> Reconstruyan los tres elementos del caso antes de enviar una resolución.</p>
+        </header>
+
+        <section class="section-card case-black-card">
+          <div class="case-black-seal" aria-hidden="true"><span>CASO</span><b>BLACK</b></div>
+          <div class="case-black-copy">
+            <p class="eyebrow">RESOLUCIÓN OFICIAL</p>
+            ${caseBlackAccess.testMode ? `<div class="case-black-test">MODO PRUEBA</div>` : ""}
+            <h3>Una sola reconstrucción puede cerrar el expediente.</h3>
+            <p>Autor, método y motivo deben coincidir simultáneamente con las evidencias. La app nunca indicará qué parte está equivocada.</p>
+          </div>
+
+          ${caseBlackAccess.solved ? `
+            <div class="case-black-success" role="status">
+              <small>CASO BLACK RESUELTO</small>
+              <h3>Han reconstruido correctamente lo ocurrido aquella noche.</h3>
+              <p>${escapeHTML(caseBlackAccess.resolutionText || "La reconstrucción final fue validada por el expediente.")}</p>
+              <p>La Mansión Black cumplirá ahora su parte del trato.</p>
+              <div class="case-black-code-label">CÓDIGO DEL COFRE</div>
+              <strong class="case-black-code">${escapeHTML(caseBlackAccess.code)}</strong>
+              <p>Ábranlo.</p>
+              <p><b>En su interior encontrarán la verdad sobre los anillos.</b></p>
+            </div>
+          ` : `
+            <div class="case-black-attempts">${escapeHTML(attemptLabel)}</div>
+            ${authorized && !exhausted ? `
+              <button id="caseBlackOpenResolution" class="case-black-entry-button" type="button">INGRESAR RESOLUCIÓN</button>
+              <div id="caseBlackResolutionPanel" class="hidden">
+                <form id="caseBlackForm" class="case-black-form" autocomplete="off">
+                  <label><span>01 · AUTOR</span>
+                    <select id="caseBlackAuthor" required>
+                      <option value="">Elegir sospechoso…</option>
+                      <option>Señora White</option>
+                      <option>Señorita Scarlett</option>
+                      <option>Coronel Mustard</option>
+                      <option>Profesor Plum</option>
+                      <option>Reverendo Green</option>
+                      <option>Señorita Pickford</option>
+                    </select>
+                  </label>
+                  <label><span>02 · MÉTODO</span>
+                    <select id="caseBlackMethod" required>
+                      <option value="">Elegir método…</option>
+                      <option>Comida contaminada</option>
+                      <option>Bebida compartida</option>
+                      <option>Medicación manipulada</option>
+                      <option>Aplicación directa</option>
+                      <option>Botella de licor contaminada</option>
+                      <option>Copa individual adulterada</option>
+                    </select>
+                  </label>
+                  <label><span>03 · MOTIVO</span>
+                    <select id="caseBlackMotive" required>
+                      <option value="">Elegir motivo…</option>
+                      <option>Herencia</option>
+                      <option>Deudas</option>
+                      <option>Celos</option>
+                      <option>Despido</option>
+                      <option>Chantaje</option>
+                      <option>Fraude artístico</option>
+                    </select>
+                  </label>
+                  <button id="caseBlackSubmit" type="submit">ENVIAR RESOLUCIÓN</button>
+                </form>
+                <div id="caseBlackFeedback" class="case-black-feedback hidden" role="status" aria-live="polite"></div>
+              </div>
+            ` : exhausted ? `
+              <div class="case-black-submit-locked">
+                <strong>LOS DOS INTENTOS OFICIALES FUERON UTILIZADOS.</strong>
+                <p>Si necesitan una nueva oportunidad por un problema operativo, avisen a Fede o Vani.</p>
+              </div>
+            ` : `
+              <button class="case-black-entry-button is-disabled" type="button" disabled>INGRESAR RESOLUCIÓN</button>
+              <div class="case-black-submit-locked">
+                <strong>RESOLUCIÓN CONTROLADA</strong>
+                <p>La resolución oficial solo puede ser enviada por <b>Micaela Llopis</b> o <b>Deborah Trenti</b>.</p>
+              </div>
+            `}
+          `}
+        </section>
+      </section>`;
+  }
+
+  async function submitCaseBlack() {
+    if (caseBlackResolveInFlight || !currentGuest) return;
+    if (!caseBlackAuthorizedGuest() && !caseBlackAccess.canSubmit) {
+      toast("La resolución oficial solo puede enviarla Micaela o Deborah.");
+      return;
+    }
+    const author = String($("#caseBlackAuthor")?.value || "");
+    const method = String($("#caseBlackMethod")?.value || "");
+    const motive = String($("#caseBlackMotive")?.value || "");
+    if (!author || !method || !motive) { toast("Completá autor, método y motivo."); return; }
+    caseBlackResolveInFlight = true;
+    const button = $("#caseBlackSubmit");
+    if (button) { button.disabled = true; button.textContent = "REVISANDO EXPEDIENTE…"; }
+    try {
+      const payload = {
+        guestId: currentGuest.id,
+        teamId: currentGuest.team,
+        author, method, motive,
+        appVersion: CURRENT_APP_VERSION,
+        requestId: newRequestId("caseBlack"),
+        submittedAt: new Date().toISOString()
+      };
+      const response = await jsonp("caseBlackResolve", { payload:JSON.stringify(payload) }, { timeoutMs:10000 });
+      const info = response?.data || {};
+      if (info.correct || info.result === "solved") {
+        caseBlackAccess.solved = true;
+        caseBlackAccess.code = String(info.code || "");
+        caseBlackAccess.resolutionText = String(info.resolutionText || "");
+        caseBlackAccess.attemptsUsed = Number(info.attemptsUsed || caseBlackAccess.attemptsUsed || 0);
+        caseBlackAccess.attemptsRemaining = Number(info.attemptsRemaining ?? caseBlackAccess.attemptsRemaining ?? 0);
+        renderCurrentRoute();
+        window.setTimeout(() => $(".case-black-success")?.scrollIntoView({behavior:"smooth",block:"center"}), 50);
+      } else if (info.result === "locked") {
+        toast("El expediente todavía no está habilitado.");
+        void refreshCaseBlackStatus({force:true,render:true});
+      } else if (info.result === "unauthorized") {
+        toast("La resolución oficial solo puede enviarla Micaela o Deborah.");
+      } else if (info.result === "exhausted") {
+        caseBlackAccess.attemptsUsed = Number(info.attemptsUsed || 2);
+        caseBlackAccess.attemptsRemaining = 0;
+        renderCurrentRoute();
+      } else {
+        caseBlackAccess.attemptsUsed = Number(info.attemptsUsed || caseBlackAccess.attemptsUsed || 0);
+        caseBlackAccess.attemptsRemaining = Number(info.attemptsRemaining ?? caseBlackAccess.attemptsRemaining ?? 0);
+        const host = $("#caseBlackFeedback");
+        if (host) {
+          host.className = "case-black-feedback is-wrong";
+          host.innerHTML = `<strong>LA RECONSTRUCCIÓN NO CIERRA</strong><p>Alguna de sus conclusiones no coincide con las evidencias.</p><p>Vuelvan a revisar los tres expedientes y, sobre todo, compartan entre ustedes lo que descubrieron.</p><p><b>El Caso Black todavía no está resuelto.</b></p><small>Intentos oficiales disponibles: ${Math.max(0, Number(caseBlackAccess.attemptsRemaining || 0))} de 2</small>`;
+        }
+        if (Number(caseBlackAccess.attemptsRemaining || 0) <= 0) {
+          if (button) button.disabled = true;
+        }
+      }
+    } catch (error) {
+      console.warn("caseBlackResolve", error);
+      toast("No pudimos revisar la resolución. Probá nuevamente.");
+    } finally {
+      caseBlackResolveInFlight = false;
+      if (button?.isConnected && Number(caseBlackAccess.attemptsRemaining || 0) > 0) {
+        button.disabled = false;
+        button.textContent = "ENVIAR RESOLUCIÓN";
+      }
+    }
+  }
+
+  function bindCaseBlackEvents() {
+    $("#caseBlackOpenResolution")?.addEventListener("click", () => {
+      const panel = $("#caseBlackResolutionPanel");
+      panel?.classList.remove("hidden");
+      $("#caseBlackOpenResolution")?.classList.add("hidden");
+      window.setTimeout(() => panel?.scrollIntoView({behavior:"smooth",block:"start"}), 50);
+    });
+    $("#caseBlackForm")?.addEventListener("submit", event => {
+      event.preventDefault();
+      void submitCaseBlack();
     });
   }
 
@@ -2813,6 +3065,7 @@
     configureNavigation();
     applyPhotosAvailabilityUi();
     void refreshSecretStatus({ force:true, render:false });
+    void refreshCaseBlackStatus({ force:true, render:false });
     Promise.resolve(initialSyncPromise).finally(() => void preloadTeamLogos());
     window.setTimeout(() => { if (!teamLogosReady) void preloadTeamLogos(); }, 1400);
     configureInstallExperience();
@@ -2895,7 +3148,9 @@
 
     applyPhotosAvailabilityUi();
     updateCodesMenuVisibility();
+    updateCaseBlackMenuVisibility();
     window.setTimeout(() => void refreshSecretStatus({ force:true, render:true }), 0);
+    window.setTimeout(() => void refreshCaseBlackStatus({ force:true, render:true }), 0);
 
     window.setTimeout(() => {
       syncUnlockState({
@@ -3350,6 +3605,11 @@
       route = "inicio";
       void refreshSecretStatus({ force:true, render:true });
     }
+    if (route === "caso-black" && (!caseBlackModuleOpen() || !caseBlackEligibleGuest())) {
+      toast("CASO BLACK todavía no está habilitado.");
+      route = "inicio";
+      void refreshCaseBlackStatus({ force:true, render:true });
+    }
 
     // v32645: Equipo/Perfiles, Social y Ranking muestran el caché al instante,
     // pero disparan un getData completo silencioso. Así la actividad de terceros
@@ -3407,7 +3667,7 @@
     const activeBottomRoute =
       ["trivia", "ruleta", "guerra"].includes(route)
         ? "puntos"
-        : ["equipo", "invitados", "asistencia", "ubicacion", "social", "regalos", "reglas", "admin", "codigos"].includes(route)
+        : ["equipo", "invitados", "asistencia", "ubicacion", "social", "regalos", "reglas", "admin", "codigos", "caso-black"].includes(route)
           ? ""
           : route;
 
@@ -3845,6 +4105,7 @@
       social: renderSocial,
       regalos: renderGifts,
       codigos: renderSecretCodes,
+      "caso-black": renderCaseBlack,
       admin: renderAdmin,
       staff: renderStaff
     };
@@ -3878,6 +4139,7 @@
     updateNotificationUi();
     bindViewEvents(currentRoute);
     if (currentRoute === "codigos") bindSecretCodeEvents();
+    if (currentRoute === "caso-black") bindCaseBlackEvents();
     if (currentRoute === "admin" && adminSubsection === "codes") bindAdminSecretEvents();
     return true;
   }
@@ -4533,6 +4795,7 @@
       );
     }
     updateCodesMenuVisibility();
+    updateCaseBlackMenuVisibility();
   }
 
   function renderLockedSection(route) {

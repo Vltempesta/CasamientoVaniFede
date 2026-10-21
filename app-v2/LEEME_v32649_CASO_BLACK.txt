@@ -1,0 +1,11 @@
+Vani & Fede · v32649 · CASO BLACK controlado
+
+Cambios sobre v32648:
+- CASO BLACK visible para todos los invitados desde 24/10 17:00.
+- Solo Micaela Llopis y Deborah Trenti pueden enviar la resolución oficial.
+- Selectores: AUTOR / MÉTODO / MOTIVO.
+- Solución backend: Señorita Pickford / Copa individual adulterada / Fraude artístico.
+- 2 intentos oficiales compartidos.
+- Código de cofre: 214, solo revelado al resolver.
+- Sin puntos ni cambios de ranking.
+- Se conserva Matías Pisano en lugar de Juan Pesce y todo lo previo de v32648.
