@@ -1,5 +1,5 @@
 const CACHE_NAME =
-  "vani-fede-static-v32646";
+  "vani-fede-static-v32647";
 const TEAM_LOGO_CACHE_NAME =
   "vani-fede-team-logos-v1";
 
@@ -14,14 +14,14 @@ const TEAM_LOGO_PATHS = [
 
 const APP_SHELL = [
   "./index.html",
-  "./styles.css?v=32646",
-  "./ui-v2.css?v=32646",
-  "./photos.js?v=32646",
-  "./app.js?v=32646",
-  "./config.js?v=32646",
-  "./data.js?v=32646",
-  "./manifest.webmanifest?v=32646",
-  "./assets/branding/vyf-seal.png?v=32646",
+  "./styles.css?v=32647",
+  "./ui-v2.css?v=32647",
+  "./photos.js?v=32647",
+  "./app.js?v=32647",
+  "./config.js?v=32647",
+  "./data.js?v=32647",
+  "./manifest.webmanifest?v=32647",
+  "./assets/branding/vyf-seal.png?v=32647",
   "./icons/icon-32.png",
   "./icons/icon-48.png",
   "./icons/icon-96.png",
@@ -281,7 +281,7 @@ self.addEventListener(
       return;
     }
 
-    // v32646: usuarios recurrentes ven el shell cacheado de inmediato.
+    // v32647: usuarios recurrentes ven el shell cacheado de inmediato.
     // En navegación actualizamos index.html en segundo plano.
     if (request.mode === "navigate") {
       event.respondWith(
@@ -290,7 +290,7 @@ self.addEventListener(
       return;
     }
 
-    // Recursos versionados: cache-first real. El ?v=32646 invalida de forma
+    // Recursos versionados: cache-first real. El ?v=32647 invalida de forma
     // explícita cuando publicamos una versión nueva.
     event.respondWith(
       cacheFirstStatic(request).catch(() => Response.error())

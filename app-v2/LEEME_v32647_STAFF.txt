@@ -1,0 +1,20 @@
+Vani & Fede · v32647
+
+CAMBIO ÚNICO FUNCIONAL SOBRE v32646
+- Daniela incorpora la sección “Ramo/Whisky”.
+- Ramo: +250 puntos, una sola vez.
+- Whisky: +250 puntos, una sola vez.
+- Cada premio se acredita al equipo seleccionado y queda registrado en PUNTAJES + STAFF_AUDIT.
+- El servidor impide duplicar Ramo o Whisky.
+- No se modifican los valores de ninguna actividad existente.
+
+FRONTEND A REEMPLAZAR EN GITHUB
+index.html
+app.js
+styles.css
+sw.js
+version.json
+
+BACKEND
+Reemplazar el contenido del archivo StaffAccess actual por StaffAccess_v32647.gs y desplegar una nueva versión de la Web App manteniendo la misma URL.
+No hace falta volver a ejecutar setup ni tocar SecretCodes.

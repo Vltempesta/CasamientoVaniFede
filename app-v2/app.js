@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32646";
+  const CURRENT_APP_VERSION = "32647";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
@@ -3617,6 +3617,7 @@
       ["entrada","Entrada a pista",completed["entrada-pista"]?"Registrado":"Pendiente"],
       ["baile","Rey y reina",completed["rey-reina-baile"]?"Registrado":"Pendiente"],
       ["busqueda","Juego 1 · Búsqueda",completed["juego1-busqueda"]?"Registrado":"Pendiente"],
+      ["especiales","Ramo y whisky",`${completed["ramo"]?"Ramo ✓":"Ramo pendiente"} · ${completed["whisky"]?"Whisky ✓":"Whisky pendiente"}`],
       ["subasta","Juego 2 · Subasta",`${doneEnvelopes}/6 sobres`]
     ];
     return `<section class="staff-dashboard-grid">${cards.map(([section,title,status])=>`<button type="button" class="section-card staff-dashboard-card" data-staff-section="${section}"><small>${escapeHTML(status)}</small><strong>${escapeHTML(title)}</strong><span>Gestionar →</span></button>`).join("")}</section>`;
@@ -3632,6 +3633,13 @@
     return `<section class="section-card staff-form"><p class="eyebrow">MEJOR PERFORMANCE BAILANDO</p><h3>Rey y reina del baile</h3><p class="staff-muted">Cada ganador suma 500 puntos a su equipo. Si ambos pertenecen al mismo equipo, ese equipo suma 1.000.</p>${completed?`<div class="staff-warning ok">Rey y reina ya fueron registrados.</div>`:""}<div class="staff-dual-grid"><label><span>Rey del baile · +500</span><select id="staffKingTeam">${staffTeamOptions()}</select></label><label><span>Reina del baile · +500</span><select id="staffQueenTeam">${staffTeamOptions()}</select></label></div><button type="button" class="staff-primary" data-staff-save-dance ${completed?"disabled":""}>CONFIRMAR REY Y REINA</button></section>`;
   }
 
+  function staffSpecialWinnersSection() {
+    const completed = staffRemoteState?.completed || {};
+    const ramoDone = Boolean(completed["ramo"]);
+    const whiskyDone = Boolean(completed["whisky"]);
+    return `<section class="section-card staff-form"><p class="eyebrow">RAMO Y WHISKY</p><h3>Ganadores especiales</h3><p class="staff-muted">Cada premio suma 250 puntos al equipo de la persona que lo agarró.</p><div class="staff-dual-grid"><div><label><span>💐 Ramo · +250</span><select id="staffRamoTeam" ${ramoDone?"disabled":""}>${staffTeamOptions()}</select></label><button type="button" class="staff-primary" data-staff-save-special="ramo" ${ramoDone?"disabled":""}>${ramoDone?"RAMO REGISTRADO":"ACREDITAR RAMO · +250"}</button></div><div><label><span>🥃 Whisky · +250</span><select id="staffWhiskyTeam" ${whiskyDone?"disabled":""}>${staffTeamOptions()}</select></label><button type="button" class="staff-primary" data-staff-save-special="whisky" ${whiskyDone?"disabled":""}>${whiskyDone?"WHISKY REGISTRADO":"ACREDITAR WHISKY · +250"}</button></div></div>${ramoDone&&whiskyDone?`<div class="staff-warning ok">Ramo y whisky ya fueron registrados. El servidor no acepta una segunda carga.</div>`:""}</section>`;
+  }
+
   function staffAuctionSection() {
     const auction = staffRemoteState?.auction || {envelopes:[],teamRisk:{},prizesUsed:[]};
     const envelopes = Array.from({length:6},(_,i)=>auction.envelopes?.find(x=>Number(x.envelope)===i+1) || {envelope:i+1,status:"open"});
@@ -3642,11 +3650,12 @@
   }
 
   function renderDanielaStaff() {
-    const tabs = [["resumen","Resumen"],["entrada","Entrada"],["baile","Baile"],["busqueda","Juego 1"],["subasta","Subasta"]];
+    const tabs = [["resumen","Resumen"],["entrada","Entrada"],["baile","Baile"],["busqueda","Juego 1"],["especiales","Ramo/Whisky"],["subasta","Subasta"]];
     let content = staffDashboardCards();
     if (staffSelectedSection === "entrada") content = staffPodiumSection({activity:"entrada-pista",title:"ENTRADA A PISTA",subtitle:"Podio de equipos",points:[600,350,200]});
     if (staffSelectedSection === "baile") content = staffDanceSection();
     if (staffSelectedSection === "busqueda") content = staffPodiumSection({activity:"juego1-busqueda",title:"JUEGO 1 · BÚSQUEDA",subtitle:"Podio final",points:[800,500,300]});
+    if (staffSelectedSection === "especiales") content = staffSpecialWinnersSection();
     if (staffSelectedSection === "subasta") content = staffAuctionSection();
     return `<div class="staff-console-v32646"><section class="staff-console-head"><div><p class="eyebrow">CONTROL DE FIESTA</p><h2>Daniela</h2><p>Todos los juegos y puntajes en un solo lugar.</p></div><button type="button" class="staff-head-logout" data-staff-logout>Salir</button></section><nav class="staff-tabs">${tabs.map(([id,label])=>`<button type="button" data-staff-section="${id}" class="${staffSelectedSection===id?"active":""}">${label}</button>`).join("")}</nav>${staffRemoteLoading?`<div class="staff-loading">Actualizando estado…</div>`:""}${content}${staffRankingHtml()}${staffRecentHtml("daniela")}</div>`;
   }
@@ -3784,6 +3793,17 @@
       const ok=await staffCommit("staffSaveDanceRoyalty",{kingTeamId,queenTeamId});
       if(ok){toast("Rey y reina registrados.");setTimeout(()=>renderCurrentRoute(),400)}else{btn.disabled=false;btn.textContent="CONFIRMAR REY Y REINA";}
     });
+
+    $$('[data-staff-save-special]').forEach(button=>button.addEventListener("click",async()=>{
+      const kind=String(button.dataset.staffSaveSpecial||"");
+      const teamId=kind==="ramo" ? $("#staffRamoTeam")?.value : $("#staffWhiskyTeam")?.value;
+      if(!teamId)return;
+      const label=kind==="ramo" ? "Ramo" : "Whisky";
+      if(!confirm(`¿Acreditar ${label} · +250 puntos a ${getTeam(teamId).name}?`)) return;
+      button.disabled=true;button.textContent="Guardando…";
+      const ok=await staffCommit("staffSaveSpecialWinner",{kind,teamId},{teamId,points:250,extra:label});
+      if(ok){toast(`${label} registrado.`);setTimeout(()=>renderCurrentRoute(),400)}else{button.disabled=false;button.textContent=`ACREDITAR ${label.toUpperCase()} · +250`;}
+    }));
 
     const updateAuctionNet=()=>{const bid=Number($("#staffAuctionBid")?.value||0),prize=Number($("#staffAuctionPrize")?.value||0);const n=prize-bid;const node=$("#staffAuctionNet");if(node)node.textContent=`${n>=0?"+":""}${n} pts`;};
     $("#staffAuctionBid")?.addEventListener("change",updateAuctionNet); $("#staffAuctionPrize")?.addEventListener("change",updateAuctionNet); updateAuctionNet();
