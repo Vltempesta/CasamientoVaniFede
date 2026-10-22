@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32649";
+  const CURRENT_APP_VERSION = "32650";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
@@ -1400,7 +1400,7 @@
       : `Intentos oficiales disponibles: ${Math.max(0, Number(caseBlackAccess.attemptsRemaining || 0))} de 2`;
 
     return `
-      <section class="case-black-v32649">
+      <section class="case-black-v32650">
         <header class="section-head case-black-head">
           <p class="eyebrow">EXPEDIENTE REABIERTO</p>
           <h2>CASO BLACK</h2>

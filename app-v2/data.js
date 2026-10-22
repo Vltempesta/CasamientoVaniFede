@@ -1098,19 +1098,19 @@ window.WEDDING_APP_DATA = {
     },
     {
       "id": "pichi-paladino",
-      "firstName": "Pichi",
-      "lastName": "Paladino",
+      "firstName": "Agustina",
+      "lastName": "Santa Coloma",
       "email": "",
-      "alias": "Pichi",
-      "relation": "Tío",
+      "alias": "Agustina",
+      "relation": "Invitada",
       "team": "luz",
       "role": "invitado",
       "tags": [
         "luz",
         "familia-materna-fede"
       ],
-      "roleVisible": "Tío",
-      "displayRelation": "Tío"
+      "roleVisible": "Invitada",
+      "displayRelation": "Invitada"
     },
     {
       "id": "melina-santi",

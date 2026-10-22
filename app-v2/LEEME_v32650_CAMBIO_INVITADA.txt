@@ -1,0 +1,14 @@
+Vani & Fede · v32650
+
+CAMBIO DE INVITADA
+- Sale: Pichi Paladino
+- Entra: Agustina Santa Coloma
+- Equipo: Luz
+- Se conserva internamente el guestId pichi-paladino para mantener historial y puntos del equipo.
+- Relación visible: Invitada.
+- Traslado heredado del registro anterior: combi · Wilde.
+
+CASO BLACK
+- Se mantiene exactamente la lógica de v32649, sin cambios.
+
+No se modificaron puntajes.
