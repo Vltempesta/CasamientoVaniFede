@@ -1146,6 +1146,22 @@ window.WEDDING_APP_DATA = {
       "displayRelation": "Cuñado"
     },
     {
+      "id": "macarena-escuer",
+      "firstName": "Macarena",
+      "lastName": "Escuer",
+      "email": "",
+      "alias": "Maca",
+      "relation": "Invitada",
+      "team": "luz",
+      "role": "invitado",
+      "tags": [
+        "luz",
+        "familia-materna-fede"
+      ],
+      "roleVisible": "Invitada",
+      "displayRelation": "Invitada"
+    },
+    {
       "id": "maggie",
       "firstName": "Maggie",
       "lastName": "",

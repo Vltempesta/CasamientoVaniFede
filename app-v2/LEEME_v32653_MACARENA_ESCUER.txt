@@ -1,0 +1,12 @@
+Vani & Fede · v32653
+
+Cambios:
+- CASO BLACK LONGCHAMPS y CASO BLACK CABA como expedientes independientes.
+- Se habilitan el 24/10/2026 a las 17:00 (o antes con VF_CASE_BLACK_TEST_MODE=true).
+- LONGCHAMPS: Deborah Trenti puede enviar la resolución.
+- CABA: Micaela Llopis puede enviar la resolución.
+- Cada viaje tiene 2 intentos oficiales propios.
+- Solución validada solo en backend.
+- El código del cofre se entrega únicamente desde el backend al resolver correctamente.
+- No modifica PUNTAJES ni ranking.
+- Se mantiene el reemplazo Agustina Santa Coloma por Pichi Paladino de v32650.
