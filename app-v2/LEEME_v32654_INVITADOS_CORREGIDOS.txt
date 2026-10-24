@@ -1,0 +1,24 @@
+VANI & FEDE · FRONTEND v32654
+
+Corrección integral de invitados sobre v32653.
+
+Restaurado / verificado:
+- Martín Kohring conserva guestId leandro-kovalevski.
+- Leandro Kovalevski conserva guestId alex.
+- Felipe Salazar conserva guestId felipe-uribe.
+- Felipe Molinare en Viento.
+- Matías Climente y Lautaro Duarte en Bosque.
+- Cecilia Pedrozo en Luz.
+- Leandro Larrosa en Agua.
+- Gonzalo Greco en Bosque.
+- Matías Pisano reemplaza a Juan Pesce (mismo guestId).
+- Agustina Santa Coloma reemplaza a Pichi Paladino (mismo guestId).
+- Macarena Escuer permanece en Luz.
+- Se restauraron las correcciones ortográficas de nombres/apellidos aprobadas en v32488.
+- Francisco Ghisletti y Pablo Vizoso conservan sus IDs históricos.
+- Francisco Baioni y Valentino Viera siguen eliminados, como se indicó.
+
+No modifica puntajes ni IDs históricos.
+CASO BLACK LONGCHAMPS/CABA se mantiene sin cambios funcionales.
+
+Subir/reemplazar solamente los archivos incluidos en este ZIP.

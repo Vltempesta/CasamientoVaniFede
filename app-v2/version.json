@@ -1,5 +1,5 @@
 {
-  "version": "32653",
+  "version": "32654",
   "releasedAt": "2026-10-24",
-  "notes": "v32653: CASO BLACK separado en LONGCHAMPS y CABA, con 2 intentos independientes por viaje, permisos controlados y apertura automática a las 17:00. Se mantiene Agustina Santa Coloma en Luz."
+  "notes": "v32654: restaura altas, reemplazos y correcciones de nombres aprobadas; mantiene CASO BLACK LONGCHAMPS/CABA y todos los cambios funcionales de v32653."
 }
