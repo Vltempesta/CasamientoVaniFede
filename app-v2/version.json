@@ -1,5 +1,5 @@
 {
-  "version": "32651",
+  "version": "32652",
   "releasedAt": "2026-10-24",
-  "notes": "v32651: CASO BLACK separado en LONGCHAMPS y CABA, con 2 intentos independientes por viaje. Deborah Trenti resuelve Longchamps y Micaela Llopis resuelve CABA. Código de cofre 214. Se mantiene Agustina Santa Coloma en Luz."
+  "notes": "v32652: CASO BLACK separado en LONGCHAMPS y CABA, con 2 intentos independientes por viaje, permisos controlados y apertura automática a las 17:00. Se mantiene Agustina Santa Coloma en Luz."
 }

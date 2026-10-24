@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32651";
+  const CURRENT_APP_VERSION = "32652";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
@@ -1460,7 +1460,7 @@
       : `Intentos oficiales disponibles: ${Math.max(0, Number(access.attemptsRemaining || 0))} de 2`;
 
     return `
-      <section class="case-black-v32651">
+      <section class="case-black-v32652">
         <header class="section-head case-black-head">
           <p class="eyebrow">EXPEDIENTE REABIERTO</p>
           <h2>CASO BLACK ${escapeHTML(def.label)}</h2>
@@ -2241,6 +2241,7 @@
           void syncUnlockState({ render: true });
         }
         void refreshSecretStatus({ render:true });
+        void refreshCaseBlackStatus({ render:true });
       }
     }, UNLOCK_SYNC_INTERVAL_MS);
   }
@@ -2255,6 +2256,7 @@
     // Las vistas compartidas necesitan una garantía fuerte de frescura:
     // muestran el caché de inmediato y actualizan getData detrás.
     void refreshSecretStatus({ force:true, render:true });
+    void refreshCaseBlackStatus({ force:true, render:true });
     if (sharedActivityRoute()) {
       void refreshSharedActivitySilently(true);
       return;
