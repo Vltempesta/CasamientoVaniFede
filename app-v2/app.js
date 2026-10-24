@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32650";
+  const CURRENT_APP_VERSION = "32651";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
@@ -1313,52 +1313,97 @@
     });
   }
 
-  const CASE_BLACK_AUTHORIZED_GUESTS = new Set(["micaela-llopis", "deborah-trenti"]);
-  let caseBlackAccess = {
-    known:false, open:false, testMode:false, openAt:"", serverNow:"",
-    solved:false, code:"", resolutionText:"", attemptsUsed:0, attemptsRemaining:2, canSubmit:false
+  const CASE_BLACK_DEFINITIONS = {
+    longchamps: {
+      id:"longchamps",
+      route:"caso-black-longchamps",
+      label:"LONGCHAMPS",
+      authorizedId:"deborah-trenti",
+      authorizedName:"Deborah Trenti"
+    },
+    caba: {
+      id:"caba",
+      route:"caso-black-caba",
+      label:"CABA",
+      authorizedId:"micaela-llopis",
+      authorizedName:"Micaela Llopis"
+    }
   };
-  let caseBlackStatusInFlight = null;
-  let caseBlackResolveInFlight = false;
-  let lastCaseBlackStatusAt = 0;
+
+  function emptyCaseBlackAccess() {
+    return {
+      known:false, open:false, testMode:false, openAt:"", serverNow:"",
+      solved:false, code:"", resolutionText:"", attemptsUsed:0, attemptsRemaining:2,
+      canSubmit:false, authorizedGuestName:""
+    };
+  }
+
+  const caseBlackAccess = {
+    longchamps: emptyCaseBlackAccess(),
+    caba: emptyCaseBlackAccess()
+  };
+  const caseBlackStatusInFlight = { longchamps:null, caba:null };
+  const caseBlackResolveInFlight = { longchamps:false, caba:false };
+  const lastCaseBlackStatusAt = { longchamps:0, caba:0 };
+
+  function caseBlackDefinition(caseId) {
+    return CASE_BLACK_DEFINITIONS[String(caseId || "").toLowerCase()] || null;
+  }
+
+  function caseBlackIdFromRoute(route = currentRoute) {
+    const entry = Object.values(CASE_BLACK_DEFINITIONS).find(item => item.route === route);
+    return entry?.id || "";
+  }
+
+  function isCaseBlackRoute(route = currentRoute) {
+    return Boolean(caseBlackIdFromRoute(route));
+  }
 
   function caseBlackEligibleGuest(guest = currentGuest) {
     if (!guest || isStaffMode(guest)) return false;
     return true;
   }
 
-  function caseBlackAuthorizedGuest(guest = currentGuest) {
-    if (!guest || isStaffMode(guest)) return false;
+  function caseBlackAuthorizedGuest(caseId, guest = currentGuest) {
+    const def = caseBlackDefinition(caseId);
+    if (!def || !guest || isStaffMode(guest)) return false;
     if (isAdminTestMode(guest)) return true;
-    return CASE_BLACK_AUTHORIZED_GUESTS.has(String(guest.id || ""));
+    return String(guest.id || "") === def.authorizedId;
   }
 
-  function caseBlackModuleOpen() {
-    return Boolean(caseBlackAccess.known && caseBlackAccess.open);
+  function caseBlackModuleOpen(caseId) {
+    const access = caseBlackAccess[caseId];
+    return Boolean(access?.known && access?.open);
   }
 
   function updateCaseBlackMenuVisibility() {
-    const button = $("#caseBlackMenuButton");
-    if (!button) return;
-    const visible = Boolean(currentGuest) && caseBlackModuleOpen() && caseBlackEligibleGuest();
-    button.classList.toggle("hidden", !visible);
-    button.hidden = !visible;
-    button.setAttribute("aria-hidden", String(!visible));
-    button.tabIndex = visible ? 0 : -1;
+    Object.values(CASE_BLACK_DEFINITIONS).forEach(def => {
+      const button = $(`#caseBlackMenuButton-${def.id}`);
+      if (!button) return;
+      const visible = Boolean(currentGuest) && caseBlackModuleOpen(def.id) && caseBlackEligibleGuest();
+      button.classList.toggle("hidden", !visible);
+      button.hidden = !visible;
+      button.setAttribute("aria-hidden", String(!visible));
+      button.tabIndex = visible ? 0 : -1;
+    });
   }
 
-  async function refreshCaseBlackStatus(options = {}) {
-    if (!isConfigured()) return false;
+  async function refreshOneCaseBlackStatus(caseId, options = {}) {
+    const def = caseBlackDefinition(caseId);
+    if (!def || !isConfigured()) return false;
     const force = Boolean(options.force);
     const now = Date.now();
-    if (!force && now - lastCaseBlackStatusAt < 30000) return caseBlackAccess.open;
-    if (caseBlackStatusInFlight) return caseBlackStatusInFlight;
-    lastCaseBlackStatusAt = now;
-    caseBlackStatusInFlight = (async () => {
+    if (!force && now - lastCaseBlackStatusAt[caseId] < 30000) return caseBlackAccess[caseId].open;
+    if (caseBlackStatusInFlight[caseId]) return caseBlackStatusInFlight[caseId];
+    lastCaseBlackStatusAt[caseId] = now;
+    caseBlackStatusInFlight[caseId] = (async () => {
       try {
-        const response = await jsonp("caseBlackStatus", { guestId:String(currentGuest?.id || "") }, { timeoutMs:8000 });
+        const response = await jsonp("caseBlackStatus", {
+          guestId:String(currentGuest?.id || ""),
+          caseId:def.id
+        }, { timeoutMs:8000 });
         const info = response?.data || {};
-        caseBlackAccess = {
+        caseBlackAccess[caseId] = {
           known:true,
           open:Boolean(info.open),
           testMode:Boolean(info.testMode),
@@ -1369,61 +1414,76 @@
           resolutionText:String(info.resolutionText || ""),
           attemptsUsed:Number(info.attemptsUsed || 0),
           attemptsRemaining:Number(info.attemptsRemaining ?? 2),
-          canSubmit:Boolean(info.canSubmit)
+          canSubmit:Boolean(info.canSubmit),
+          authorizedGuestName:String(info.authorizedGuestName || def.authorizedName)
         };
         updateCaseBlackMenuVisibility();
-        if ((!caseBlackAccess.open || !caseBlackEligibleGuest()) && currentRoute === "caso-black") {
+        if ((!caseBlackAccess[caseId].open || !caseBlackEligibleGuest()) && currentRoute === def.route) {
           currentRoute = "inicio";
           renderCurrentRoute();
         } else if (options.render !== false) {
           updateSectionNavigationState();
+          if (currentRoute === def.route) renderCurrentRoute();
         }
-        return caseBlackAccess.open;
+        return caseBlackAccess[caseId].open;
       } catch (error) {
-        console.warn("No se pudo consultar CASO BLACK", error);
-        caseBlackAccess.known = false;
+        console.warn(`No se pudo consultar CASO BLACK ${def.label}`, error);
+        caseBlackAccess[caseId].known = false;
         updateCaseBlackMenuVisibility();
         return false;
       } finally {
-        caseBlackStatusInFlight = null;
+        caseBlackStatusInFlight[caseId] = null;
       }
     })();
-    return caseBlackStatusInFlight;
+    return caseBlackStatusInFlight[caseId];
   }
 
-  function renderCaseBlack() {
-    if (!caseBlackModuleOpen() || !caseBlackEligibleGuest()) return renderHomeSafe_();
-    const authorized = Boolean(caseBlackAccess.canSubmit || caseBlackAuthorizedGuest());
-    const exhausted = !caseBlackAccess.testMode && Number(caseBlackAccess.attemptsRemaining || 0) <= 0;
-    const attemptLabel = caseBlackAccess.testMode
+  async function refreshCaseBlackStatus(options = {}) {
+    const requestedCaseId = String(options.caseId || "").toLowerCase();
+    if (requestedCaseId && caseBlackDefinition(requestedCaseId)) {
+      return refreshOneCaseBlackStatus(requestedCaseId, options);
+    }
+    const results = await Promise.all(
+      Object.keys(CASE_BLACK_DEFINITIONS).map(caseId => refreshOneCaseBlackStatus(caseId, options))
+    );
+    return results.some(Boolean);
+  }
+
+  function renderCaseBlack(caseId) {
+    const def = caseBlackDefinition(caseId);
+    const access = caseBlackAccess[caseId];
+    if (!def || !access || !caseBlackModuleOpen(caseId) || !caseBlackEligibleGuest()) return renderHomeSafe_();
+    const authorized = Boolean(access.canSubmit || caseBlackAuthorizedGuest(caseId));
+    const exhausted = !access.testMode && Number(access.attemptsRemaining || 0) <= 0;
+    const attemptLabel = access.testMode
       ? "MODO PRUEBA · los intentos no afectan el caso real"
-      : `Intentos oficiales disponibles: ${Math.max(0, Number(caseBlackAccess.attemptsRemaining || 0))} de 2`;
+      : `Intentos oficiales disponibles: ${Math.max(0, Number(access.attemptsRemaining || 0))} de 2`;
 
     return `
-      <section class="case-black-v32650">
+      <section class="case-black-v32651">
         <header class="section-head case-black-head">
           <p class="eyebrow">EXPEDIENTE REABIERTO</p>
-          <h2>CASO BLACK</h2>
+          <h2>CASO BLACK ${escapeHTML(def.label)}</h2>
           <p><strong>La investigación está en curso.</strong> Reconstruyan los tres elementos del caso antes de enviar una resolución.</p>
         </header>
 
         <section class="section-card case-black-card">
           <div class="case-black-seal" aria-hidden="true"><span>CASO</span><b>BLACK</b></div>
           <div class="case-black-copy">
-            <p class="eyebrow">RESOLUCIÓN OFICIAL</p>
-            ${caseBlackAccess.testMode ? `<div class="case-black-test">MODO PRUEBA</div>` : ""}
-            <h3>Una sola reconstrucción puede cerrar el expediente.</h3>
+            <p class="eyebrow">${escapeHTML(def.label)} · RESOLUCIÓN OFICIAL</p>
+            ${access.testMode ? `<div class="case-black-test">MODO PRUEBA</div>` : ""}
+            <h3>Una sola reconstrucción puede cerrar este expediente.</h3>
             <p>Autor, método y motivo deben coincidir simultáneamente con las evidencias. La app nunca indicará qué parte está equivocada.</p>
           </div>
 
-          ${caseBlackAccess.solved ? `
+          ${access.solved ? `
             <div class="case-black-success" role="status">
-              <small>CASO BLACK RESUELTO</small>
+              <small>CASO BLACK ${escapeHTML(def.label)} RESUELTO</small>
               <h3>Han reconstruido correctamente lo ocurrido aquella noche.</h3>
-              <p>${escapeHTML(caseBlackAccess.resolutionText || "La reconstrucción final fue validada por el expediente.")}</p>
+              <p>${escapeHTML(access.resolutionText || "La reconstrucción final fue validada por el expediente.")}</p>
               <p>La Mansión Black cumplirá ahora su parte del trato.</p>
               <div class="case-black-code-label">CÓDIGO DEL COFRE</div>
-              <strong class="case-black-code">${escapeHTML(caseBlackAccess.code)}</strong>
+              <strong class="case-black-code">${escapeHTML(access.code)}</strong>
               <p>Ábranlo.</p>
               <p><b>En su interior encontrarán la verdad sobre los anillos.</b></p>
             </div>
@@ -1479,7 +1539,7 @@
               <button class="case-black-entry-button is-disabled" type="button" disabled>INGRESAR RESOLUCIÓN</button>
               <div class="case-black-submit-locked">
                 <strong>RESOLUCIÓN CONTROLADA</strong>
-                <p>La resolución oficial solo puede ser enviada por <b>Micaela Llopis</b> o <b>Deborah Trenti</b>.</p>
+                <p>La resolución oficial de ${escapeHTML(def.label)} solo puede ser enviada por <b>${escapeHTML(access.authorizedGuestName || def.authorizedName)}</b>.</p>
               </div>
             `}
           `}
@@ -1487,72 +1547,76 @@
       </section>`;
   }
 
-  async function submitCaseBlack() {
-    if (caseBlackResolveInFlight || !currentGuest) return;
-    if (!caseBlackAuthorizedGuest() && !caseBlackAccess.canSubmit) {
-      toast("La resolución oficial solo puede enviarla Micaela o Deborah.");
+  async function submitCaseBlack(caseId) {
+    const def = caseBlackDefinition(caseId);
+    const access = caseBlackAccess[caseId];
+    if (!def || !access || caseBlackResolveInFlight[caseId] || !currentGuest) return;
+    if (!caseBlackAuthorizedGuest(caseId) && !access.canSubmit) {
+      toast(`La resolución de ${def.label} solo puede enviarla ${def.authorizedName}.`);
       return;
     }
     const author = String($("#caseBlackAuthor")?.value || "");
     const method = String($("#caseBlackMethod")?.value || "");
     const motive = String($("#caseBlackMotive")?.value || "");
     if (!author || !method || !motive) { toast("Completá autor, método y motivo."); return; }
-    caseBlackResolveInFlight = true;
+    caseBlackResolveInFlight[caseId] = true;
     const button = $("#caseBlackSubmit");
     if (button) { button.disabled = true; button.textContent = "REVISANDO EXPEDIENTE…"; }
     try {
       const payload = {
-        guestId: currentGuest.id,
-        teamId: currentGuest.team,
+        caseId:def.id,
+        guestId:currentGuest.id,
+        teamId:currentGuest.team,
         author, method, motive,
-        appVersion: CURRENT_APP_VERSION,
-        requestId: newRequestId("caseBlack"),
-        submittedAt: new Date().toISOString()
+        appVersion:CURRENT_APP_VERSION,
+        requestId:newRequestId(`caseBlack-${def.id}`),
+        submittedAt:new Date().toISOString()
       };
       const response = await jsonp("caseBlackResolve", { payload:JSON.stringify(payload) }, { timeoutMs:10000 });
       const info = response?.data || {};
       if (info.correct || info.result === "solved") {
-        caseBlackAccess.solved = true;
-        caseBlackAccess.code = String(info.code || "");
-        caseBlackAccess.resolutionText = String(info.resolutionText || "");
-        caseBlackAccess.attemptsUsed = Number(info.attemptsUsed || caseBlackAccess.attemptsUsed || 0);
-        caseBlackAccess.attemptsRemaining = Number(info.attemptsRemaining ?? caseBlackAccess.attemptsRemaining ?? 0);
+        access.solved = true;
+        access.code = String(info.code || "");
+        access.resolutionText = String(info.resolutionText || "");
+        access.attemptsUsed = Number(info.attemptsUsed || access.attemptsUsed || 0);
+        access.attemptsRemaining = Number(info.attemptsRemaining ?? access.attemptsRemaining ?? 0);
         renderCurrentRoute();
         window.setTimeout(() => $(".case-black-success")?.scrollIntoView({behavior:"smooth",block:"center"}), 50);
       } else if (info.result === "locked") {
         toast("El expediente todavía no está habilitado.");
-        void refreshCaseBlackStatus({force:true,render:true});
+        void refreshCaseBlackStatus({caseId:def.id,force:true,render:true});
       } else if (info.result === "unauthorized") {
-        toast("La resolución oficial solo puede enviarla Micaela o Deborah.");
+        toast(`La resolución de ${def.label} solo puede enviarla ${def.authorizedName}.`);
       } else if (info.result === "exhausted") {
-        caseBlackAccess.attemptsUsed = Number(info.attemptsUsed || 2);
-        caseBlackAccess.attemptsRemaining = 0;
+        access.attemptsUsed = Number(info.attemptsUsed || 2);
+        access.attemptsRemaining = 0;
         renderCurrentRoute();
       } else {
-        caseBlackAccess.attemptsUsed = Number(info.attemptsUsed || caseBlackAccess.attemptsUsed || 0);
-        caseBlackAccess.attemptsRemaining = Number(info.attemptsRemaining ?? caseBlackAccess.attemptsRemaining ?? 0);
+        access.attemptsUsed = Number(info.attemptsUsed || access.attemptsUsed || 0);
+        access.attemptsRemaining = Number(info.attemptsRemaining ?? access.attemptsRemaining ?? 0);
         const host = $("#caseBlackFeedback");
         if (host) {
           host.className = "case-black-feedback is-wrong";
-          host.innerHTML = `<strong>LA RECONSTRUCCIÓN NO CIERRA</strong><p>Alguna de sus conclusiones no coincide con las evidencias.</p><p>Vuelvan a revisar los tres expedientes y, sobre todo, compartan entre ustedes lo que descubrieron.</p><p><b>El Caso Black todavía no está resuelto.</b></p><small>Intentos oficiales disponibles: ${Math.max(0, Number(caseBlackAccess.attemptsRemaining || 0))} de 2</small>`;
+          host.innerHTML = `<strong>LA RECONSTRUCCIÓN NO CIERRA</strong><p>Alguna de sus conclusiones no coincide con las evidencias.</p><p>Vuelvan a revisar los tres expedientes y, sobre todo, compartan entre ustedes lo que descubrieron.</p><p><b>El Caso Black ${escapeHTML(def.label)} todavía no está resuelto.</b></p>${access.testMode ? `<small>MODO PRUEBA · podés seguir intentando</small>` : `<small>Intentos oficiales disponibles: ${Math.max(0, Number(access.attemptsRemaining || 0))} de 2</small>`}`;
         }
-        if (Number(caseBlackAccess.attemptsRemaining || 0) <= 0) {
+        if (!access.testMode && Number(access.attemptsRemaining || 0) <= 0) {
           if (button) button.disabled = true;
         }
       }
     } catch (error) {
-      console.warn("caseBlackResolve", error);
+      console.warn(`caseBlackResolve ${def.label}`, error);
       toast("No pudimos revisar la resolución. Probá nuevamente.");
     } finally {
-      caseBlackResolveInFlight = false;
-      if (button?.isConnected && Number(caseBlackAccess.attemptsRemaining || 0) > 0) {
+      caseBlackResolveInFlight[caseId] = false;
+      if (button?.isConnected && (access.testMode || Number(access.attemptsRemaining || 0) > 0)) {
         button.disabled = false;
         button.textContent = "ENVIAR RESOLUCIÓN";
       }
     }
   }
 
-  function bindCaseBlackEvents() {
+  function bindCaseBlackEvents(caseId = caseBlackIdFromRoute()) {
+    if (!caseBlackDefinition(caseId)) return;
     $("#caseBlackOpenResolution")?.addEventListener("click", () => {
       const panel = $("#caseBlackResolutionPanel");
       panel?.classList.remove("hidden");
@@ -1561,7 +1625,7 @@
     });
     $("#caseBlackForm")?.addEventListener("submit", event => {
       event.preventDefault();
-      void submitCaseBlack();
+      void submitCaseBlack(caseId);
     });
   }
 
@@ -3605,10 +3669,13 @@
       route = "inicio";
       void refreshSecretStatus({ force:true, render:true });
     }
-    if (route === "caso-black" && (!caseBlackModuleOpen() || !caseBlackEligibleGuest())) {
-      toast("CASO BLACK todavía no está habilitado.");
-      route = "inicio";
-      void refreshCaseBlackStatus({ force:true, render:true });
+    if (isCaseBlackRoute(route)) {
+      const caseId = caseBlackIdFromRoute(route);
+      if (!caseBlackModuleOpen(caseId) || !caseBlackEligibleGuest()) {
+        toast("CASO BLACK todavía no está habilitado.");
+        route = "inicio";
+        void refreshCaseBlackStatus({ caseId, force:true, render:true });
+      }
     }
 
     // v32645: Equipo/Perfiles, Social y Ranking muestran el caché al instante,
@@ -3667,7 +3734,7 @@
     const activeBottomRoute =
       ["trivia", "ruleta", "guerra"].includes(route)
         ? "puntos"
-        : ["equipo", "invitados", "asistencia", "ubicacion", "social", "regalos", "reglas", "admin", "codigos", "caso-black"].includes(route)
+        : ["equipo", "invitados", "asistencia", "ubicacion", "social", "regalos", "reglas", "admin", "codigos", "caso-black-longchamps", "caso-black-caba"].includes(route)
           ? ""
           : route;
 
@@ -4105,7 +4172,8 @@
       social: renderSocial,
       regalos: renderGifts,
       codigos: renderSecretCodes,
-      "caso-black": renderCaseBlack,
+      "caso-black-longchamps": () => renderCaseBlack("longchamps"),
+      "caso-black-caba": () => renderCaseBlack("caba"),
       admin: renderAdmin,
       staff: renderStaff
     };
@@ -4139,7 +4207,7 @@
     updateNotificationUi();
     bindViewEvents(currentRoute);
     if (currentRoute === "codigos") bindSecretCodeEvents();
-    if (currentRoute === "caso-black") bindCaseBlackEvents();
+    if (isCaseBlackRoute(currentRoute)) bindCaseBlackEvents(caseBlackIdFromRoute(currentRoute));
     if (currentRoute === "admin" && adminSubsection === "codes") bindAdminSecretEvents();
     return true;
   }

@@ -1,5 +1,5 @@
 {
-  "version": "32650",
-  "releasedAt": "2026-10-21",
-  "notes": "v32650: reemplazo Pichi Paladino → Agustina Santa Coloma en Equipo Luz, conservando el guestId interno para mantener historial y puntos. CASO BLACK v32649 se mantiene sin cambios."
+  "version": "32651",
+  "releasedAt": "2026-10-24",
+  "notes": "v32651: CASO BLACK separado en LONGCHAMPS y CABA, con 2 intentos independientes por viaje. Deborah Trenti resuelve Longchamps y Micaela Llopis resuelve CABA. Código de cofre 214. Se mantiene Agustina Santa Coloma en Luz."
 }
