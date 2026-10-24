@@ -1,0 +1,9 @@
+Vani & Fede · frontend v32655
+
+Cambios:
+- Admin fuerza una sincronización remota al desbloquearse.
+- Versión/cache actualizados a 32655.
+- Conserva la lista de invitados corregida de v32654.
+- No cambia puntos ni reglas de juegos.
+
+Subir/reemplazar SOLO los archivos incluidos en este ZIP. No borrar config.js, photos.js, ui-v2.css, assets ni icons del repositorio.

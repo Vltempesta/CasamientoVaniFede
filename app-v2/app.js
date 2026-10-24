@@ -1,7 +1,7 @@
 (() => {
   const DATA = window.WEDDING_APP_DATA;
   const CONFIG = window.WEDDING_APP_CONFIG || {};
-  const CURRENT_APP_VERSION = "32654";
+  const CURRENT_APP_VERSION = "32655";
   const VERSION_CHECK_URL = "./version.json";
   const STORAGE_KEY = "vf_convocatoria_real_v2";
   const REMOTE_SNAPSHOT_KEY = "vf_remote_snapshot_v1";
@@ -1460,7 +1460,7 @@
       : `Intentos oficiales disponibles: ${Math.max(0, Number(access.attemptsRemaining || 0))} de 2`;
 
     return `
-      <section class="case-black-v32654">
+      <section class="case-black-v32655">
         <header class="section-head case-black-head">
           <p class="eyebrow">EXPEDIENTE REABIERTO</p>
           <h2>CASO BLACK ${escapeHTML(def.label)}</h2>
@@ -15406,7 +15406,7 @@
     );
 
 
-    $("#adminLoginForm")?.addEventListener("submit", event => {
+    $("#adminLoginForm")?.addEventListener("submit", async event => {
       event.preventDefault();
       const form = event.currentTarget;
       const password = String(new FormData(form).get("password") || "");
@@ -15428,6 +15428,7 @@
       state.adminUnlocked = true;
       adminSubsection = "dashboard";
       toast("Centro de mando desbloqueado.");
+      await syncFromSheets(false);
       renderCurrentRoute();
     });
 

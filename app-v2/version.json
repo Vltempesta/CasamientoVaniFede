@@ -1,5 +1,5 @@
 {
-  "version": "32654",
+  "version": "32655",
   "releasedAt": "2026-10-24",
-  "notes": "v32654: restaura altas, reemplazos y correcciones de nombres aprobadas; mantiene CASO BLACK LONGCHAMPS/CABA y todos los cambios funcionales de v32653."
+  "notes": "v32655: corrige RSVP operativo por fecha real (Admin/traslados) y fuerza refresco al ingresar a Admin; mantiene todos los cambios de invitados y CASO BLACK."
 }
